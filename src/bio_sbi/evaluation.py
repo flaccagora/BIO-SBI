@@ -96,22 +96,49 @@ def calibration(
         seed: Seed for posterior sampling.
 
     Returns:
-        ``(metrics, ranks)`` where ``ranks`` has shape ``(N_valid, d)``.
+        ``(metrics, ranks)`` where ``ranks`` has shape ``(N_used, d)``. For NPE, cases
+        whose time-capped rejection sampling returned too few draws (posterior mass
+        outside the prior) are excluded and counted in ``excluded_leakage``.
     """
-    from sbi.diagnostics import run_sbc
-
     valid = np.all(np.isfinite(x), axis=1)
-    theta_t = torch.as_tensor(theta[valid], dtype=torch.float32, device=fitted.device)
-    x_t = fitted.condition(x[valid])
-    seed_torch(seed_for(seed, "sbc"))
-    ranks, _ = run_sbc(
-        theta_t,
-        x_t,
-        fitted.posterior,
-        num_posterior_samples=posterior_samples,
-        show_progress_bar=False,
-    )
-    ranks = ranks.cpu().numpy()
+    excluded = 0
+    if fitted._is_direct():
+        # NPE: per-case sampling through FittedPosterior.sample, whose rejection sampling
+        # is time-capped. sbi's run_sbc uses uncapped batched rejection sampling, which
+        # never returns if the flow puts ~all its mass outside the prior for one case.
+        # Cases returning fewer than `posterior_samples` draws are excluded (counted).
+        rows = []
+        for i, (t, xi) in enumerate(zip(theta[valid], x[valid], strict=True)):
+            draws = fitted.sample(xi, posterior_samples, seed=seed_for(seed, "sbc", i))
+            if len(draws) < posterior_samples:
+                excluded += 1
+                continue
+            rows.append((draws < t[None, :]).sum(axis=0))  # sbi's "marginals" rank
+        ranks = np.asarray(rows, dtype=float).reshape(-1, theta.shape[1])
+    else:
+        from sbi.diagnostics import run_sbc
+
+        theta_t = torch.as_tensor(theta[valid], dtype=torch.float32, device=fitted.device)
+        seed_torch(seed_for(seed, "sbc"))
+        ranks, _ = run_sbc(
+            theta_t,
+            fitted.condition(x[valid]),
+            fitted.posterior,
+            num_posterior_samples=posterior_samples,
+            show_progress_bar=False,
+        )
+        ranks = ranks.cpu().numpy()
+    if len(ranks) == 0:  # every case excluded: calibration cannot be assessed
+        nan = float("nan")
+        return {
+            "cases": 0,
+            "invalid_cases": int((~valid).sum()),
+            "excluded_leakage": int(excluded),
+            "posterior_samples": int(posterior_samples),
+            "ks_pvalue": dict.fromkeys(names, nan),
+            "coverage": {f"{lvl:.2f}": dict.fromkeys(names, nan) for lvl in CREDIBLE_LEVELS},
+            "mean_abs_coverage_error": nan,
+        }, ranks
     # Coverage of central intervals follows from ranks: u = rank / L is uniform if calibrated.
     u = (ranks + 0.5) / posterior_samples
     coverage = {
@@ -124,8 +151,9 @@ def calibration(
 
     ks = {n: float(kstest(u[:, i], "uniform").pvalue) for i, n in enumerate(names)}
     metrics = {
-        "cases": int(valid.sum()),
+        "cases": int(len(ranks)),
         "invalid_cases": int((~valid).sum()),
+        "excluded_leakage": int(excluded),
         "posterior_samples": int(posterior_samples),
         "ks_pvalue": ks,
         "coverage": coverage,

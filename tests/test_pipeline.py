@@ -239,3 +239,24 @@ def test_npe_sampling_is_bounded_when_posterior_leaves_the_prior(tmp_path):
     assert time.perf_counter() - start < 30
     assert len(draws) <= 100_000
     assert 0.0 <= fitted.support_mass(x, n=2000) <= 1.0
+
+
+def test_npe_sbc_is_bounded_and_counts_leakage(tmp_path):
+    """SBC must not hang when the posterior leaks outside the prior for some cases."""
+    import time
+
+    from bio_sbi.evaluation import calibration
+    from bio_sbi.inference import FittedPosterior
+
+    run_experiment(config("budget.sbc_cases=0", "budget.ppc_samples=0"), tmp_path)
+    fitted = FittedPosterior.load(tmp_path / "posterior.pt")
+    fitted.max_sampling_time = 0.5
+    comp = build_components(config())
+    theta = comp.simulator.prior().sample((4,)).numpy()
+    x, _ = comp.generator.simulate_theta(theta, "sbc-test")
+    x[:2] *= 1e4  # two cases far outside the training data
+    start = time.perf_counter()
+    metrics, ranks = calibration(fitted, theta, x, comp.simulator.theta_names, 20)
+    assert time.perf_counter() - start < 60
+    assert metrics["cases"] + metrics["excluded_leakage"] + metrics["invalid_cases"] == 4
+    assert ranks.shape == (metrics["cases"], comp.simulator.theta_dim)
