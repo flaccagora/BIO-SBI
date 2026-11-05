@@ -1,8 +1,9 @@
-# Ideal assay: every endpoint cell detected and correctly typed; only clones with
-# at least one detected cell are recorded.
+# Ideal assay: every endpoint cell detected and labelled with its own type; only clones
+# with at least one detected cell are recorded.
 _target_: bio_sbi.observation.ObservationModel
-capture: [1.0, 1.0]
-confusion: [[1.0, 0.0], [0.0, 1.0]]
+labels: null                   # measured labels; null = the simulator's types
+capture: null                  # null = 1 for every type
+confusion: null                # null = identity by name
 selection: detected
 exact_detection: true          # exact conditional sampler when the simulator has one
 max_attempts_per_clone: 1000

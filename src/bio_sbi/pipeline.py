@@ -1,13 +1,20 @@
 """Run one reproducible synthetic experiment from a Hydra config.
 
-Stages (each a small function so they can be reused from notebooks):
+Two models are built from one config:
 
-1. :func:`build_components` - instantiate simulator, observation model, design,
-   summary and inference method from config;
-2. :func:`reference_parameters` - pick the generating parameters of the reference
-   ("pseudo-observed") dataset;
-3. :func:`run_experiment` - simulate the reference dataset, train the posterior,
-   evaluate recovery and calibration, and write all artefacts to the run directory.
+* the **inference model** (``simulator``, ``law``, ``observation``): what we *assume*;
+  used for training simulations, the prior and calibration;
+* the **data model** (``data.simulator``, ``data.law``, ``data.observation``): what
+  *generates* the reference dataset. It mirrors the inference model by default and
+  can be changed independently (different types, transitions, founders, fixed values
+  or assay) to test the consequences of a wrong assumption.
+
+Stages (small functions, reusable from notebooks):
+
+1. :func:`build_components` / :func:`build_data_generator` - instantiate both models;
+2. :func:`reference_parameters` - generating parameters of the reference dataset;
+3. :func:`run_experiment` - simulate the reference data, train, evaluate recovery,
+   calibration and posterior-predictive fit, and save all artefacts.
 """
 
 from __future__ import annotations
@@ -24,60 +31,97 @@ from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 
 from . import plots
-from .evaluation import calibration, recovery_table
+from .evaluation import calibration, posterior_predictive_check, recovery_table
 from .inference import FittedPosterior, InferenceMethod
 from .provenance import write_manifest
 from .rng import seed_for, seed_torch
 from .simulate import DataGenerator
 from .simulators import BranchingSimulator
+from .simulators.law import flatten
 
 LOG = logging.getLogger(__name__)
 
 
 @dataclass
 class Components:
-    """Everything instantiated from one config."""
+    """Inference-model components instantiated from one config."""
 
     simulator: BranchingSimulator
     generator: DataGenerator
     method: InferenceMethod
 
 
-def build_components(cfg: DictConfig) -> Components:
-    """Instantiate all pipeline components from a composed config."""
-    simulator = instantiate(cfg.simulator.model, _convert_="all")
-    generator = DataGenerator(
+def _generator(cfg: DictConfig, section: DictConfig) -> DataGenerator:
+    """Build a data generator from a ``{simulator, observation}`` config section."""
+    simulator = instantiate(section.simulator.model, _convert_="all")
+    observation = instantiate(section.observation, _convert_="all", types=list(simulator.types))
+    return DataGenerator(
         simulator=simulator,
-        observation=instantiate(cfg.observation, _convert_="all"),
+        observation=observation,
         design=instantiate(cfg.design, _convert_="all"),
         summary=instantiate(cfg.summary, _convert_="all"),
         seed=int(cfg.seed),
         workers=int(cfg.workers),
     )
+
+
+def build_components(cfg: DictConfig) -> Components:
+    """Instantiate the inference model, its data generator and the sbi method."""
+    generator = _generator(cfg, cfg)
     method = instantiate(cfg.inference.method, _convert_="all", device=cfg.device, seed=cfg.seed)
-    return Components(simulator, generator, method)
+    return Components(generator.simulator, generator, method)
+
+
+def build_data_generator(cfg: DictConfig, model: DataGenerator) -> DataGenerator:
+    """Instantiate the data-generating model and check it is comparable with ``model``.
+
+    Data and inference model must share the time unit and the measured labels; the
+    number of *true* types, transitions, founders and parameters may differ.
+    """
+    data = _generator(cfg, cfg.data)
+    if data.simulator.time_unit != model.simulator.time_unit:
+        raise ValueError(
+            f"Data model counts time in {data.simulator.time_unit}, inference model in "
+            f"{model.simulator.time_unit}: horizons would mean different things"
+        )
+    if tuple(data.observation.labels) != tuple(model.observation.labels):
+        raise ValueError(
+            f"Data labels {data.observation.labels} differ from inference labels "
+            f"{model.observation.labels}; map true types to labels with data.observation"
+        )
+    return data
+
+
+def is_well_specified(cfg: DictConfig) -> bool:
+    """Return True when the data model config equals the inference model config."""
+    keys = ("simulator", "law", "observation")
+    return all(OmegaConf.to_container(cfg.data[k], resolve=True) ==
+               OmegaConf.to_container(cfg[k], resolve=True) for k in keys)  # fmt: skip
 
 
 def reference_parameters(cfg: DictConfig, simulator: BranchingSimulator) -> np.ndarray:
-    """Physical parameters of the reference dataset.
+    """Physical parameters of the reference dataset under the data model ``simulator``.
 
-    ``truth.source=reference`` merges ``law.reference``, ``simulator.reference`` and
-    ``truth.values`` (later wins); ``truth.source=prior`` draws one prior sample.
+    ``truth.source=reference`` merges ``data.law.reference``, ``data.simulator.reference``
+    (entries for types the law lacks are ignored) and ``truth.values``, later winning;
+    fixed values of the data law fill in automatically. ``truth.source=prior`` draws
+    one sample from the data model's prior.
     """
     if cfg.truth.source == "prior":
         seed_torch(seed_for(cfg.seed, "truth"))
-        theta = simulator.prior().sample((1,)).numpy()[0]
-        return simulator.decode(theta)
+        return simulator.decode(simulator.prior().sample((1,)).numpy()[0])
     if cfg.truth.source != "reference":
         raise ValueError("truth.source must be 'reference' or 'prior'")
-    values: dict = {}
-    for section in (
-        cfg.law.get("reference"),
-        cfg.simulator.get("reference"),
-        cfg.truth.get("values"),
-    ):
-        if section is not None:
-            values.update(OmegaConf.to_container(section))
+
+    def section(node) -> dict:
+        return flatten(OmegaConf.to_container(node, resolve=True)) if node is not None else {}
+
+    sim_ref = section(cfg.data.simulator.get("reference"))
+    values = {
+        **section(cfg.data.law.get("reference")),
+        **{k: v for k, v in sim_ref.items() if k in simulator.parameter_names},
+        **section(cfg.truth.get("values")),
+    }
     return simulator.physical_from_mapping(values)
 
 
@@ -97,23 +141,30 @@ def run_experiment(cfg: DictConfig, out: str | Path) -> dict:
     write_manifest(out)
     comp = build_components(cfg)
     sim, gen = comp.simulator, comp.generator
+    data_gen = build_data_generator(cfg, gen)
     prior = sim.prior()
+    well_specified = is_well_specified(cfg)
 
-    # 1. Reference ("observed") dataset with known truth.
-    truth = reference_parameters(cfg, sim)
-    reference = gen.dataset(truth, "reference")
+    # 1. Reference ("observed") dataset from the data model.
+    truth = reference_parameters(cfg, data_gen.simulator)
+    reference = data_gen.dataset(truth, "reference")
     if reference is None:
         raise RuntimeError("Reference parameters exceed simulation limits; adjust truth/limits")
     x_obs = gen.summarize(reference)
     np.savez_compressed(
         out / "reference.npz",
         truth=truth,
+        truth_names=np.array(data_gen.simulator.parameter_names),
+        labels=np.array(gen.observation.labels),
         x=x_obs,
         **{f"counts_h{c.horizon:g}": c.counts for c in reference},
     )
     LOG.info("Reference clones: %s", {c.horizon: c.counts.sum(0).tolist() for c in reference})
+    if not well_specified:
+        LOG.info("Misspecified: data %s/%s, inference %s/%s", cfg.data.simulator.name,
+                 cfg.data.law.name, cfg.simulator.name, cfg.law.name)  # fmt: skip
 
-    # 2. Train.
+    # 2. Train on the inference model.
     kept: list[tuple[np.ndarray, np.ndarray]] = []
 
     def simulate(theta: np.ndarray, r: int) -> np.ndarray:
@@ -134,7 +185,7 @@ def run_experiment(cfg: DictConfig, out: str | Path) -> dict:
             x=np.concatenate([x for _, x in kept]),
         )
 
-    # 3. Recovery at the reference truth.
+    # 3. Recovery at the reference truth (parameters matched by name).
     t_sample = time.perf_counter()
     samples_theta = fitted.sample(
         x_obs, int(cfg.budget.posterior_samples), seed_for(cfg.seed, "ref")
@@ -143,34 +194,62 @@ def run_experiment(cfg: DictConfig, out: str | Path) -> dict:
     samples = sim.decode(samples_theta)
     seed_torch(seed_for(cfg.seed, "prior-reference"))
     prior_samples = sim.decode(prior.sample((4096,)).numpy())
-    rows = recovery_table(samples, truth, prior_samples, sim.parameter_names)
+    truth_by_name = dict(zip(data_gen.simulator.parameter_names, truth, strict=True))
+    matched = np.array([truth_by_name.get(n, np.nan) for n in sim.parameter_names])
+    free = set(sim.space.free_names)
+    rows = [
+        {**row, "inferred": row["parameter"] in free}
+        for row in recovery_table(samples, matched, prior_samples, sim.parameter_names)
+    ]
     pd.DataFrame(rows).to_csv(out / "recovery.csv", index=False)
     pd.DataFrame(samples, columns=sim.parameter_names).to_csv(
         out / "posterior_samples.csv.gz", index=False
     )
+    shown = [i for i, n in enumerate(sim.parameter_names) if n in free]
     plots.posterior_marginals(
-        samples, prior_samples, truth, sim.parameter_names, out / "figures" / "posterior.png"
-    )
+        samples[:, shown], prior_samples[:, shown], matched[shown],
+        [sim.parameter_names[i] for i in shown], out / "figures" / "posterior.png",
+    )  # fmt: skip
+    scored = [r for r in rows if r["inferred"] and np.isfinite(r["truth"])]
+    interior = [r for r in scored if not r["at_boundary"]]  # boundary truths: no coverage
 
     metrics: dict = {
         "simulator": cfg.simulator.name,
         "law": cfg.law.name,
+        "data_simulator": cfg.data.simulator.name,
+        "data_law": cfg.data.law.name,
+        "well_specified": well_specified,
         "inference": cfg.inference.name,
         "rounds": comp.method.rounds,
         "simulations": int(cfg.budget.simulations),
         "design": {"horizons": list(gen.design.horizons), "clones": list(gen.design.clones)},
+        "n_free_parameters": int(sim.theta_dim),
         "x_dim": int(fitted.feature_mask.sum()),
         "training": fitted.history,
         "sampling_seconds": sample_seconds,
         "recovery": {
-            "mean_abs_error": float(np.mean([r["abs_error"] for r in rows])),
-            "mean_contraction": float(np.nanmean([r["contraction"] for r in rows])),
-            "coverage90": float(np.mean([r["covered"] for r in rows])),
+            "scored_parameters": len(scored),
+            "mean_abs_error": float(np.mean([r["abs_error"] for r in scored]))
+            if scored
+            else float("nan"),
+            "mean_contraction": float(
+                np.nanmean([r["contraction"] for r in rows if r["inferred"]])
+            ),
+            "coverage90": float(np.mean([r["covered"] for r in interior]))
+            if interior
+            else float("nan"),
             "per_parameter": rows,
         },
     }
 
-    # 4. Calibration (amortised posteriors only).
+    # 4. Posterior predictive check: does the fitted inference model reproduce x_obs?
+    n_ppc = int(cfg.budget.get("ppc_samples", 0))
+    if n_ppc > 0:
+        ppc, x_pred = posterior_predictive_check(gen, samples_theta[:n_ppc], x_obs, fitted)
+        metrics["ppc"] = ppc
+        np.savez_compressed(out / "ppc.npz", x_pred=x_pred, x_obs=x_obs)
+
+    # 5. Calibration of the inference model (amortised posteriors only).
     cases = int(cfg.budget.sbc_cases)
     if cases > 0 and fitted.amortized:
         seed_torch(seed_for(cfg.seed, "sbc-theta"))
@@ -190,17 +269,16 @@ def run_experiment(cfg: DictConfig, out: str | Path) -> dict:
     metrics["total_seconds"] = time.perf_counter() - t0
     _write_json(out / "metrics.json", metrics)
     LOG.info(
-        "Done in %.1fs: MAE=%.4f contraction=%.3f -> %s",
-        metrics["total_seconds"],
-        metrics["recovery"]["mean_abs_error"],
+        "Done in %.1fs: MAE=%.4f contraction=%.3f PPC outside95=%s -> %s",
+        metrics["total_seconds"], metrics["recovery"]["mean_abs_error"],
         metrics["recovery"]["mean_contraction"],
-        out,
-    )
+        metrics.get("ppc", {}).get("fraction_outside_95", "n/a"), out,
+    )  # fmt: skip
     return metrics
 
 
 def load_run(run_dir: str | Path) -> tuple[DictConfig, Components, FittedPosterior]:
-    """Reload a finished run: its config, components and trained posterior."""
+    """Reload a finished run: its config, inference components and trained posterior."""
     run_dir = Path(run_dir)
     cfg = OmegaConf.load(run_dir / ".hydra" / "config.yaml")
     return cfg, build_components(cfg), FittedPosterior.load(run_dir / "posterior.pt")
@@ -212,7 +290,7 @@ def infer_measured(run_dir: str | Path, data: str | Path, out: str | Path, n: in
     Args:
         run_dir: Directory of a finished amortised run.
         data: CSV with one row per clone: a ``horizon`` column plus one count column
-            per cell type (named as in the law, e.g. ``A``, ``B``).
+            per measured label (e.g. ``A``, ``B``).
         out: Output directory.
         n: Number of posterior samples.
 
@@ -225,10 +303,14 @@ def infer_measured(run_dir: str | Path, data: str | Path, out: str | Path, n: in
     if not fitted.amortized:
         raise ValueError("Measured inference needs an amortised (rounds=1) posterior")
     sim, gen = comp.simulator, comp.generator
+    labels = list(gen.observation.labels)
     table = pd.read_csv(data)
-    missing = {"horizon", *sim.types} - set(table.columns)
+    missing = {"horizon", *labels} - set(table.columns)
     if missing:
         raise ValueError(f"CSV is missing columns {sorted(missing)}")
+    extra = set(table["horizon"]) - set(gen.design.horizons)
+    if extra:
+        raise ValueError(f"Horizons {sorted(extra)} were not part of the trained design")
     cohorts = []
     for horizon, size in gen.design.cohorts:
         rows = table[np.isclose(table["horizon"], horizon)]
@@ -236,19 +318,18 @@ def infer_measured(run_dir: str | Path, data: str | Path, out: str | Path, n: in
             raise ValueError(f"No clones at horizon {horizon:g}; trained design: {gen.design}")
         if len(rows) != size:
             LOG.warning("Horizon %g: %d clones measured, %d trained", horizon, len(rows), size)
-        cohorts.append(Cohort(horizon, rows[list(sim.types)].to_numpy(dtype=np.int64)))
-    extra = set(table["horizon"]) - set(gen.design.horizons)
-    if extra:
-        raise ValueError(f"Horizons {sorted(extra)} were not part of the trained design")
+        cohorts.append(Cohort(horizon, rows[labels].to_numpy(dtype=np.int64)))
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
     samples = sim.decode(fitted.sample(gen.summarize(cohorts), n, seed_for(cfg.seed, "measured")))
     frame = pd.DataFrame(samples, columns=sim.parameter_names)
     frame.to_csv(out / "posterior_samples.csv.gz", index=False)
     frame.describe(percentiles=[0.05, 0.5, 0.95]).T.to_csv(out / "posterior_summary.csv")
+    free = [i for i, name in enumerate(sim.parameter_names) if name in set(sim.space.free_names)]
     seed_torch(seed_for(cfg.seed, "prior-reference"))
     prior_samples = sim.decode(sim.prior().sample((4096,)).numpy())
     plots.posterior_marginals(
-        samples, prior_samples, None, sim.parameter_names, out / "posterior.png"
-    )
+        samples[:, free], prior_samples[:, free], None,
+        [sim.parameter_names[i] for i in free], out / "posterior.png",
+    )  # fmt: skip
     return out

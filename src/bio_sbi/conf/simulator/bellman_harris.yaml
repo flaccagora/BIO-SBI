@@ -3,21 +3,16 @@
 # shape = 1 gives exponential (Markov) lifetimes; large shapes approach synchronous divisions.
 name: bellman_harris
 horizons: [80, 160, 240]       # default design endpoints (hours)
-reference:                     # reference values of the extra (lifetime) parameters
-  A.mean_lifetime: 20.0
-  B.mean_lifetime: 30.0
+reference:                     # truth for the lifetime parameters (one per law type)
+  A: {mean_lifetime: 20.0}
+  B: {mean_lifetime: 30.0}
+  C: {mean_lifetime: 25.0}     # used only by laws that have a type C
 model:
   _target_: bio_sbi.simulators.BellmanHarris
-  types: ${law.types}
-  outcomes: ${law.outcomes}
-  concentration: ${law.concentration}
-  founder: ${law.founder}
+  law: ${...law}
+  fixed: {}                    # e.g. {A: {mean_lifetime: 20.0}} to stop inferring it
   time_unit: hours
-  lifetime_shape:              # fixed Gamma shape per type (CV = 1/sqrt(shape))
-    A: 8.0
-    B: 8.0
-  lifetime_mean_bounds:        # log-uniform prior on each type's mean lifetime (hours)
-    A: [10.0, 40.0]
-    B: [10.0, 80.0]
+  lifetime_shape: 8.0          # Gamma shape, one value or {type: value}; CV = 1/sqrt(shape)
+  lifetime_mean_bounds: [10.0, 80.0]   # log-uniform prior, one pair or {type: [low, high]}
   max_cells: 50000
   max_events: 5000000

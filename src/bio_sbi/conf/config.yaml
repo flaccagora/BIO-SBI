@@ -1,12 +1,20 @@
 # Root config. Every group below can be swapped from the command line, e.g.
 #   bio-sbi simulator=bellman_harris inference=nle observation=noisy budget=smoke
+#
+# `simulator`, `law` and `observation` define the INFERENCE model. The reference
+# ("observed") data come from `data.*`, which mirror the inference choices unless
+# overridden to study model misspecification, e.g.
+#   bio-sbi law@data.law=three_type observation@data.observation=three_as_two
 defaults:
   - simulator: galton_watson   # generative model: galton_watson | bellman_harris
-  - law: reversible_ab         # type graph + Dirichlet prior: reversible_ab | hierarchy_ab | minimal_ab
+  - law: two_type              # types, transitions, founders, fixed values, prior
   - observation: perfect       # measurement model: perfect | noisy | all_clones
   - summary: moments           # summary statistic: moments | means
   - inference: npe             # sbi method: npe | nle | nre
   - budget: dev                # compute budget: smoke | dev | full
+  - simulator@data.simulator: ${simulator}       # data-generating model (default: same)
+  - law@data.law: ${law}
+  - observation@data.observation: ${observation}
   - _self_
 
 seed: 0              # root seed; every stochastic stage derives a keyed stream from it
@@ -21,10 +29,11 @@ design:
   horizons: ${simulator.horizons}
   clones: 32         # int, or one int per horizon
 
-# Generating parameters of the reference ("pseudo-observed") dataset.
+# Generating parameters of the reference ("pseudo-observed") dataset (data model).
 truth:
-  source: reference  # reference: law.reference + simulator.reference (+ values); prior: one prior draw
-  values: null       # e.g. {A.death: 0.1}; overrides on top of the reference
+  source: reference  # reference: data.law.reference + data.simulator.reference (+ values)
+                     # prior: one draw from the data model's prior
+  values: null       # nested overrides, e.g. 'truth.values={A: {death: 0.1, div_AA: 0.48}}'
 
 hydra:
   job:

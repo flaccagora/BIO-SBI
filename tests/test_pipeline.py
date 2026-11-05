@@ -30,7 +30,10 @@ def config(*overrides):
 
 
 @pytest.mark.parametrize("simulator", ["galton_watson", "bellman_harris"])
-@pytest.mark.parametrize("law", ["reversible_ab", "hierarchy_ab", "minimal_ab"])
+@pytest.mark.parametrize(
+    "law",
+    ["two_type", "reversible_ab", "hierarchy_ab", "minimal_ab", "three_type", "multi_founder"],
+)
 @pytest.mark.parametrize("observation", ["perfect", "noisy", "all_clones"])
 def test_all_components_compose(simulator, law, observation):
     comp = build_components(
@@ -76,7 +79,8 @@ def test_run_experiment(tmp_path, method):
     assert len(pd.read_csv(measured / "posterior_samples.csv.gz")) == 20
 
     runs, params = collect(tmp_path)
-    assert len(runs) == 1 and len(params) == 9
+    assert len(runs) == 1 and len(params) == len(metrics["recovery"]["per_parameter"])
+    assert metrics["well_specified"] and metrics["ppc"]["features"] > 0
 
 
 @pytest.mark.slow
@@ -91,4 +95,53 @@ def test_sequential_npe_and_bellman_harris(tmp_path):
 def test_seed_reproducibility(tmp_path):
     a = run_experiment(config("budget.sbc_cases=0"), tmp_path / "a")
     b = run_experiment(config("budget.sbc_cases=0"), tmp_path / "b")
-    assert a["recovery"]["per_parameter"] == b["recovery"]["per_parameter"]
+    dump = lambda m: json.dumps(m["recovery"]["per_parameter"])  # noqa: E731 (NaN-safe)
+    assert dump(a) == dump(b)
+
+
+@pytest.mark.parametrize("simulator", ["galton_watson", "bellman_harris"])
+def test_three_type_data_two_type_model(tmp_path, simulator):
+    cfg = config(
+        f"simulator={simulator}",
+        "law@data.law=three_type",
+        "observation@data.observation=three_as_two",
+        "budget.sbc_cases=0",
+    )
+    metrics = run_experiment(cfg, tmp_path)
+    assert not metrics["well_specified"] and metrics["data_law"] == "three_type"
+    rows = {r["parameter"]: r for r in metrics["recovery"]["per_parameter"]}
+    assert rows["A.div_AA"]["truth"] == pytest.approx(0.5)  # matched by name
+    assert rows["A.to_B"]["truth"] == 0.0  # exists in both laws, zero in the data
+    assert "fraction_outside_95" in metrics["ppc"]
+
+
+def test_two_type_data_three_type_model(tmp_path):
+    cfg = config(
+        "law=three_type",
+        "observation=three_as_two",
+        "law@data.law=two_type",
+        "observation@data.observation=perfect",
+        "budget.sbc_cases=0",
+    )
+    metrics = run_experiment(cfg, tmp_path)
+    rows = {r["parameter"]: r for r in metrics["recovery"]["per_parameter"]}
+    assert np.isnan(rows["A.to_C"]["truth"]) and rows["A.to_C"]["covered"] is None
+    assert metrics["recovery"]["scored_parameters"] < metrics["n_free_parameters"] + 3
+
+
+def test_incompatible_data_models_rejected():
+    from bio_sbi.pipeline import build_data_generator
+
+    cfg = config("law@data.law=three_type")  # no label mapping for C
+    with pytest.raises(ValueError, match="labels"):
+        build_data_generator(cfg, build_components(cfg).generator)
+    cfg = config("simulator@data.simulator=bellman_harris")
+    with pytest.raises(ValueError, match="time"):
+        build_data_generator(cfg, build_components(cfg).generator)
+
+
+def test_fixed_override_from_command_line():
+    cfg = config("+law.fixed.A.persist=0.0", "truth.values={A: {persist: 0.0, div_AA: 0.58}}")
+    comp = build_components(cfg)
+    assert "A.persist" not in comp.simulator.space.free_names
+    assert comp.simulator.theta_dim == 9

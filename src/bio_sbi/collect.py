@@ -35,7 +35,11 @@ def collect(root: str | Path) -> tuple[pd.DataFrame, pd.DataFrame]:
             **{f"override.{k}": v for k, v in _overrides(run).items()},
             "simulator": m["simulator"],
             "law": m["law"],
+            "data_simulator": m.get("data_simulator", m["simulator"]),
+            "data_law": m.get("data_law", m["law"]),
+            "well_specified": m.get("well_specified", True),
             "inference": m["inference"],
+            "n_free_parameters": m.get("n_free_parameters"),
             "rounds": m["rounds"],
             "simulations": m["simulations"],
             "horizons": " ".join(f"{h:g}" for h in m["design"]["horizons"]),
@@ -47,6 +51,10 @@ def collect(root: str | Path) -> tuple[pd.DataFrame, pd.DataFrame]:
             "simulation_seconds": sum(r["simulation_seconds"] for r in m["training"]),
             "total_seconds": m["total_seconds"],
         }
+        ppc = m.get("ppc")
+        if ppc:
+            row["ppc_fraction_outside_95"] = ppc["fraction_outside_95"]
+            row["ppc_mean_abs_z"] = ppc["mean_abs_z"]
         cal = m.get("calibration")
         if isinstance(cal, dict):
             row["sbc_cases"] = cal["cases"]

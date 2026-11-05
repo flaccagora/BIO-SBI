@@ -7,3 +7,4 @@ sbc_cases: 10
 sbc_samples: 50
 mcmc_chains: 10
 mcmc_warmup: 10
+ppc_samples: 20      # posterior-predictive datasets (0 disables the check)

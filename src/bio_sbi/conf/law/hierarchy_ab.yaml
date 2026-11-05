@@ -1,23 +1,14 @@
-# Strict hierarchy: A is a progenitor, B is terminal (no switching in either direction).
+# Strict hierarchy: A is a progenitor, B is terminal (no switching, B never divides).
 name: hierarchy_ab
 types: [A, B]
-founder: [1.0, 0.0]
-outcomes:
-  A:
-    death: [0, 0]
-    persist: [1, 0]
-    asymmetric: [1, 1]
-    self_renew: [2, 0]
-    sym_diff: [0, 2]
-  B:
-    death: [0, 0]
-    persist: [0, 1]
-concentration: null
+outcomes: all
+max_daughters: 2
+founder_sizes: [1]
+fixed:
+  founder: {A: 1.0}
+  A: {to_B: 0.0}
+  B: {to_A: 0.0, div_AA: 0.0, div_AB: 0.0, div_BB: 0.0}
+concentration: {}
 reference:
-  A.death: 0.05
-  A.persist: 0.05
-  A.asymmetric: 0.15
-  A.self_renew: 0.50
-  A.sym_diff: 0.25
-  B.death: 0.20
-  B.persist: 0.80
+  A: {death: 0.05, persist: 0.05, div_AB: 0.15, div_AA: 0.50, div_BB: 0.25}
+  B: {death: 0.20, persist: 0.80}

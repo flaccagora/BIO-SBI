@@ -1,7 +1,8 @@
 # Every seeded clone is recorded, including extinct/undetected ones.
 _target_: bio_sbi.observation.ObservationModel
-capture: [1.0, 1.0]
-confusion: [[1.0, 0.0], [0.0, 1.0]]
+labels: null
+capture: null
+confusion: null
 selection: all
 exact_detection: false
 max_attempts_per_clone: 1

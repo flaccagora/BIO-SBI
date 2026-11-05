@@ -46,8 +46,8 @@ class DataGenerator:
     workers: int = 1
 
     def __post_init__(self) -> None:
-        if self.observation.n_types != len(self.simulator.types):
-            raise ValueError("Observation model and simulator have different numbers of types")
+        if tuple(self.observation.types) != tuple(self.simulator.types):
+            raise ValueError("Observation model was built for different cell types")
         for h in self.design.horizons:
             self.simulator.validate_horizon(h)
 
@@ -98,7 +98,7 @@ class DataGenerator:
     def x_dim(self) -> int:
         """Dimension of the summary vector (computed once from a dummy dataset)."""
         if not hasattr(self, "_x_dim"):
-            k = len(self.simulator.types)
+            k = self.observation.n_labels
             dummy = [Cohort(h, np.ones((n, k), dtype=np.int64)) for h, n in self.design.cohorts]
             self._x_dim = len(self.summary(dummy))
         return self._x_dim

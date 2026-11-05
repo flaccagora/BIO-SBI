@@ -6,3 +6,4 @@ sbc_cases: 1000
 sbc_samples: 500
 mcmc_chains: 50
 mcmc_warmup: 200
+ppc_samples: 500

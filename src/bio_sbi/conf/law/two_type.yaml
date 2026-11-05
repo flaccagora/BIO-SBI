@@ -1,0 +1,15 @@
+# Two types, every transition enabled (default). With `outcomes: all` each type has:
+#   death, persist, to_<other>, div_AA, div_AB, div_BB      (6 outcomes per type)
+# Parameters are "<row>.<entry>": A.div_AA, B.to_A, founder.A, founder_size.1, ...
+name: two_type
+types: [A, B]
+outcomes: all            # or an explicit {type: {name: [n_A, n_B]}} table
+max_daughters: 2         # largest division arity enumerated by `outcomes: all`
+founder_sizes: [1]       # possible numbers of seeded cells per clone (row founder_size)
+fixed:                   # not inferred; data from this law also use these values.
+  founder:               # Free entries of a row share 1 - sum(fixed) (Dirichlet prior).
+    A: 1.0               # every clone starts from A cells (founder.B is then 0)
+concentration: {}        # Dirichlet alpha per free parameter, e.g. {A: {death: 3}}; default 1
+reference:               # ground truth when this law generates the reference data
+  A: {death: 0.03, persist: 0.03, to_B: 0.05, div_AB: 0.05, div_AA: 0.55, div_BB: 0.29}
+  B: {death: 0.10, persist: 0.10, to_A: 0.80}   # omitted entries (B divisions) are 0

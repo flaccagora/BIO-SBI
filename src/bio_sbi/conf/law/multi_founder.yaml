@@ -1,0 +1,15 @@
+# Two types, all transitions, with imperfect single-cell seeding: a clone starts from
+# 1, 2 or 3 cells (founder_size row) of mixed type (founder row), both inferred.
+name: multi_founder
+types: [A, B]
+outcomes: all
+max_daughters: 2
+founder_sizes: [1, 2, 3]
+fixed: {}
+concentration:
+  founder_size: {"1": 8.0}   # prior belief: single-cell seeding is the common case
+reference:
+  A: {death: 0.03, persist: 0.03, to_B: 0.05, div_AB: 0.05, div_AA: 0.55, div_BB: 0.29}
+  B: {death: 0.10, persist: 0.10, to_A: 0.80}
+  founder: {A: 0.7, B: 0.3}
+  founder_size: {"1": 0.85, "2": 0.12, "3": 0.03}

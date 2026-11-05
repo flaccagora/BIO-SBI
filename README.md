@@ -1,26 +1,31 @@
 # BIO-SBI
 
-Simulation-based inference (SBI) for **two-type cell branching processes**: generate
+Simulation-based inference (SBI) for **multi-type cell branching processes**: generate
 synthetic clonal data under a chosen biological model and assay, fit a neural
 posterior with [`sbi`](https://sbi-dev.github.io/sbi/), and measure how well the
 parameters can be recovered. The goal is to **plan real experiments** (which endpoints,
-how many clones, how much assay noise can be tolerated) before running them, and then
-to fit the measured data with the same pipeline.
+how many clones, how much assay noise can be tolerated) before running them, to
+**test what happens when a modelling assumption is wrong** (hidden cell types,
+transitions fixed to the wrong value, multi-cell seeding), and then to fit the
+measured data with the same pipeline.
 
 Every part of the pipeline is a swappable [Hydra](https://hydra.cc) config group:
 
 | Group | Options | What it controls |
 |---|---|---|
 | `simulator` | `galton_watson`, `bellman_harris` | Generative model (time is generations or hours) |
-| `law` | `reversible_ab`, `hierarchy_ab`, `minimal_ab` | Cell types, allowed fates, Dirichlet prior |
-| `observation` | `perfect`, `noisy`, `all_clones` | Capture, type confusion, clone selection |
+| `law` | `two_type` (all transitions), `reversible_ab`, `hierarchy_ab`, `minimal_ab`, `three_type`, `multi_founder` | Cell types, transitions, founders, fixed values, prior |
+| `observation` | `perfect`, `noisy`, `all_clones`, `three_as_two` | Capture, type→label confusion, clone selection |
 | `summary` | `moments`, `means` | Summary statistics fed to the network |
 | `inference` | `npe`, `nle`, `nre` | sbi method family |
 | `budget` | `smoke`, `dev`, `full` | Simulations, epochs, posterior/SBC sample sizes |
 | `experiment` | `compare_methods`, `design_sweep`, `noise_sensitivity` | Ready-made multirun sweeps |
 
-Each run saves its fully resolved config, so you can reproduce it from the run
-directory alone.
+`simulator`, `law` and `observation` describe the **inference model** (what you assume).
+The reference data come from a separate **data model**, `data.simulator`, `data.law`
+and `data.observation`. It mirrors the inference model unless you override it (see
+[Testing assumptions](#testing-assumptions-misspecification)). Each run saves its fully
+resolved config, so you can reproduce it from the run directory alone.
 
 ---
 
@@ -52,8 +57,9 @@ The results go to `outputs/<simulator>-<law>-<method>/<timestamp>/`:
 | `reference.npz` | True parameters, simulated reference counts per horizon, summary `x` |
 | `posterior.pt` | Trained posterior (`FittedPosterior`, reload with `FittedPosterior.load`) |
 | `posterior_samples.csv.gz` | Posterior samples at the reference data (physical units) |
-| `recovery.csv` | Per parameter: truth, mean, 90% CI, z-score, **contraction** |
+| `recovery.csv` | Per parameter: truth, mean, 90% CI, z-score, **contraction**, inferred/fixed, `at_boundary` (truth 0 or 1: no coverage score) |
 | `metrics.json` | Everything above plus SBC calibration and timings |
+| `ppc.npz` | Posterior-predictive summaries (misspecification check) |
 | `sbc.npz`, `figures/sbc.png` | SBC ranks and rank histograms |
 | `figures/posterior.png` | Prior vs posterior marginals with the true value |
 | `tensorboard/` | sbi training curves (`uv run tensorboard --logdir outputs`) |
@@ -103,33 +109,111 @@ discrete and continuous time under the same biological hypothesis.
   (`lifetime_mean_bounds`), and `lifetime_shape` is fixed. `shape: 1` gives the Markov
   (exponential) process.
 
-### Laws (type graphs and priors)
+### Laws: types, transitions, founders, fixed values
 
-A law lists, for each type, its outcomes and their daughters `[n_A, n_B]`:
+With `outcomes: all` (the default) **every transition is enabled**. For types `A, B`,
+each type has these outcomes:
+
+| Outcome | Daughters of an A cell | Parameter |
+|---|---|---|
+| `death` | none | `A.death` |
+| `persist` | A (no division) | `A.persist` |
+| `to_B` | B (single-cell switch) | `A.to_B` |
+| `div_AA`, `div_AB`, `div_BB` | two cells | `A.div_AA`, ... |
+
+B has the same outcomes (`B.to_A`, `B.div_AB`, ...), and `three_type` adds C (10
+outcomes per type). A clone starts from **N founder cells**, with
+`P(N = n) = founder_size.<n>` over `founder_sizes`, and each founder independently has
+type `k` with probability `founder.<k>`. All of these are ordinary parameters.
 
 ```yaml
-# conf/law/reversible_ab.yaml (abridged)
-outcomes:
-  A: {death: [0,0], persist: [1,0], switch: [0,1], asymmetric: [1,1], self_renew: [2,0], sym_diff: [0,2]}
-  B: {death: [0,0], persist: [0,1], switch: [1,0]}
-concentration: null      # Dirichlet alphas per type; null = uniform simplex
-reference: {A.death: 0.03, ...}   # truth for the reference dataset
-founder: [1.0, 0.0]      # founder-type probabilities at seeding
+# conf/law/two_type.yaml (abridged)
+types: [A, B]
+outcomes: all            # or an explicit {type: {name: [n_A, n_B]}} table
+founder_sizes: [1]       # e.g. [1, 2, 3] when single-cell seeding can fail
+fixed:                   # not inferred, and used when this law generates data
+  founder: {A: 1.0}
+concentration: {}        # Dirichlet alphas, e.g. {founder_size: {"1": 8.0}}
+reference:               # ground truth when this law generates the reference data
+  A: {death: 0.03, persist: 0.03, to_B: 0.05, div_AB: 0.05, div_AA: 0.55, div_BB: 0.29}
+  B: {death: 0.10, persist: 0.10, to_A: 0.80}   # omitted entries are 0
 ```
 
-* To fix an outcome's probability to zero, delete that outcome. To make the prior
-  informative, raise its `concentration`.
-* The parameters are named `"<type>.<outcome>"`, and Bellman-Harris adds
-  `"<type>.mean_lifetime"`.
-* `truth.values` overrides single reference values, e.g.
-  `'truth.values={A.death: 0.2, A.self_renew: 0.38}'` (the rows must still sum to one).
-  `truth.source=prior` draws the truth from the prior instead.
+* **Fix any parameter** to a value (0 disables a transition) and it is no longer
+  inferred. The free entries of a row share the leftover mass `1 - sum(fixed)` under a
+  Dirichlet prior. From the command line, use the nested form: `+` adds a key and
+  `++` replaces a whole mapping.
+
+  ```bash
+  uv run bio-sbi +law.fixed.B.div_AA=0 +law.fixed.B.div_AB=0 +law.fixed.B.div_BB=0
+  uv run bio-sbi +law.fixed.A.persist=0.03    # fix to the ground-truth value
+  uv run bio-sbi '++law.fixed.founder={A: 0.7, B: 0.3}'
+  ```
+
+> **Command-line edits to `law.*`, `simulator.*` and `observation.*` change only the
+> inference model.** The data model selects the same YAML *option* but keeps its own
+> values, so `+law.fixed.A.persist=0.2` means "data have the true value, the model
+> assumes 0.2". To change both, override both, e.g.
+> `law.founder_sizes=[1,2] data.law.founder_sizes=[1,2]`, or write a new law file.
+> `metrics.json` records `well_specified: true` only when both sides are identical.
+
+  `reversible_ab`, `hierarchy_ab` and `minimal_ab` are just `two_type` with some
+  transitions fixed to 0.
+* **Multi-cell founders**: `law=multi_founder` seeds 1 to 3 cells of mixed type and
+  infers both the size and the type distribution. You can also set
+  `'law.founder_sizes=[1,2]'` together with `+law.fixed.founder_size.2=0.1` to fix the
+  doublet rate.
+* `truth.values` overrides single reference values (rows must still sum to one), e.g.
+  `'truth.values={A: {death: 0.2, div_AA: 0.38}}'`. `truth.source=prior` draws the
+  truth from the prior instead.
+* Bellman-Harris adds `<type>.mean_lifetime`, which you can fix with
+  `+simulator.model.fixed.B.mean_lifetime=30`.
 
 ### Observation model
 
-`capture` (per-type detection probability), `confusion` (row-stochastic labelling
-matrix) and `selection` (`detected` keeps only clones with at least one detected cell;
-`all` keeps every seeded clone). The error rates are treated as known.
+* `capture`: detection probability per *true* type (one value, a list or
+  `{type: p}`).
+* `confusion`: the probability that a true type receives a measured label. It is
+  rectangular when there are more true types than markers, e.g. `{C: {B: 1}}` reads
+  a hidden C as B (`observation=three_as_two`). A single number is a symmetric
+  mislabelling rate.
+* `selection`: `detected` keeps only clones with at least one detected cell; `all`
+  keeps every seeded clone.
+
+The error rates are treated as known.
+
+### Testing assumptions (misspecification)
+
+The data model is configured separately from the inference model through
+packaged groups (`<group>@data.<group>=<option>`) or `data.*` keys:
+
+```bash
+# Data contain a hidden third type (C, read as B); inference assumes two types
+uv run bio-sbi law@data.law=three_type observation@data.observation=three_as_two
+
+# Data have all transitions; inference assumes a strict hierarchy
+uv run bio-sbi law=hierarchy_ab
+
+# Data come from 1-3 founder cells; inference assumes single-cell seeding
+uv run bio-sbi law@data.law=multi_founder
+
+# Inference fixes a transition to a wrong value
+uv run bio-sbi +law.fixed.A.persist=0.2
+
+# Continuous-time data with a two-type BH inference model, three types in the data
+uv run bio-sbi simulator=bellman_harris law@data.law=three_type \
+  observation@data.observation=three_as_two
+```
+
+Data and inference models must use the same time unit and produce the same
+measured labels; the number of true types, the transitions and the parameters may
+differ. In `recovery.csv`, the truth is matched **by parameter name**; a parameter the
+data model does not have gets `truth = NaN`. Look at the parameters' meaning before
+reading their errors: under a hidden-type misspecification, "B" in the inference model
+absorbs B and C. `metrics.json` records `well_specified` and the
+**posterior-predictive check** (`ppc`), which reports the fraction of summary features
+the fitted model cannot reproduce (`fraction_outside_95`). That check works even when
+the parameters are not comparable.
 
 ### Inference methods
 
@@ -161,7 +245,7 @@ is not amortised, so SBC is skipped. The keys under `inference.method.network`,
 
 Train an amortised run whose design matches the experiment (same horizons, roughly
 the same number of clones per horizon, same assay settings), then condition it on a
-CSV with one row per clone:
+CSV with one row per clone and one column per measured label:
 
 ```csv
 horizon,A,B
@@ -171,7 +255,8 @@ horizon,A,B
 ```
 
 ```bash
-uv run bio-sbi budget=full design.horizons=[12] design.clones=100 'law.founder=[0.7,0.3]'
+uv run bio-sbi budget=full design.horizons=[12] design.clones=100 \
+  '++law.fixed.founder={A: 0.7, B: 0.3}'
 uv run bio-sbi-infer outputs/<run> my_counts.csv --out results/sample1
 ```
 
@@ -202,7 +287,7 @@ class and a YAML file; no registry needs editing.
 | simulator | `bio_sbi.simulators.BranchingSimulator` | `simulate()` (+ optional `simulate_detected`, `scalar_parameters`) | `conf/simulator/<name>.yaml` with `name`, `horizons`, `reference`, `model._target_` |
 | inference method | `bio_sbi.inference.InferenceMethod` | `make_trainer()` (+ optional `append`, `build_posterior`) | `conf/inference/<name>.yaml` with `name`, `method._target_` |
 | summary | `bio_sbi.summaries.Summary` | `__call__(cohorts) -> np.ndarray` | `conf/summary/<name>.yaml` |
-| law | — | YAML only | `conf/law/<name>.yaml` |
+| law | — | YAML only (`outcomes: all` or an explicit table) | `conf/law/<name>.yaml` |
 
 From Python:
 
@@ -221,14 +306,15 @@ x, cohorts = comp.generator.simulate_theta(theta, stage="explore")
 
 ```text
 src/bio_sbi/
-  simulators/     law.py (type graph, priors) · base.py · galton_watson.py · bellman_harris.py
+  simulators/     law.py (outcomes, founders, ParameterSpace: fixed/free, priors)
+                  base.py · galton_watson.py · bellman_harris.py
   inference/      base.py (training loop, FittedPosterior) · methods.py (NPE, NLE, NRE)
-  observation.py  capture / confusion / selection
+  observation.py  capture / type->label confusion / selection
   design.py       horizons x clones
   summaries.py    CohortMoments, CohortMeans
   simulate.py     DataGenerator: theta -> datasets -> x (threaded, keyed seeds)
-  evaluation.py   recovery table, SBC + coverage
-  pipeline.py     run_experiment, load_run, infer_measured
+  evaluation.py   recovery table, posterior-predictive check, SBC + coverage
+  pipeline.py     data vs inference model, run_experiment, load_run, infer_measured
   cli.py          bio-sbi (Hydra) and bio-sbi-infer entry points
   collect.py      bio-sbi-collect
   conf/           Hydra config groups (see the table at the top)

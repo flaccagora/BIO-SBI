@@ -6,6 +6,10 @@ Two complementary checks are produced:
   credible interval, z-score and *contraction* (``1 - posterior var / prior var``) for
   each physical parameter. Contraction near 0 means the data do not inform the
   parameter under this design: the key signal for experiment planning.
+* **Posterior predictive check** (:func:`posterior_predictive_check`) - simulate the
+  inference model at posterior draws and ask whether the observed summaries look
+  typical. This is the main diagnostic of *model misspecification*: it works even when
+  the data and inference models have different parameters.
 * **Calibration across the prior** (:func:`calibration`) - simulation-based
   calibration (SBC) ranks via :func:`sbi.diagnostics.run_sbc`, KS uniformity p-values,
   and empirical coverage of central credible intervals. Only meaningful for amortised
@@ -36,7 +40,8 @@ def recovery_table(
 
     Args:
         samples: ``(S, D)`` posterior samples (physical).
-        truth: ``(D,)`` generating parameters.
+        truth: ``(D,)`` generating parameters; NaN where the data model has no such
+            parameter (misspecified runs), which leaves error/coverage undefined.
         prior_samples: ``(S', D)`` prior samples (physical), for contraction.
         names: Parameter names.
         level: Credible level for the reported central interval.
@@ -58,7 +63,10 @@ def recovery_table(
                 "posterior_std": float(std[i]),
                 f"ci{int(level * 100)}_low": float(lo[i]),
                 f"ci{int(level * 100)}_high": float(hi[i]),
-                "covered": bool(lo[i] <= truth[i] <= hi[i]),
+                "covered": bool(lo[i] <= truth[i] <= hi[i]) if np.isfinite(truth[i]) else None,
+                # A truth of exactly 0 (e.g. a disabled transition) can never lie inside a
+                # central interval of a [0, 1] posterior; such rows are not scored for coverage.
+                "at_boundary": bool(np.isfinite(truth[i]) and truth[i] in (0.0, 1.0)),
                 "abs_error": float(abs(mean[i] - truth[i])),
                 "z_score": float((mean[i] - truth[i]) / std[i]) if std[i] > 0 else float("nan"),
                 "contraction": float(1 - std[i] ** 2 / prior_var[i])
@@ -126,3 +134,41 @@ def calibration(
         ),
     }
     return metrics, ranks
+
+
+def posterior_predictive_check(
+    generator, samples_theta: np.ndarray, x_obs: np.ndarray, fitted: FittedPosterior
+) -> tuple[dict, np.ndarray]:
+    """Compare observed summaries with summaries simulated at posterior draws.
+
+    For every summary feature used in training, the observed value's two-sided
+    predictive tail probability ``p = 2 min(F, 1 - F)`` is computed from the predictive
+    sample. Under a correct model these are roughly uniform; many small values flag
+    a model that cannot reproduce the data, whatever the parameter values.
+
+    Args:
+        generator: Inference-model :class:`~bio_sbi.simulate.DataGenerator`.
+        samples_theta: ``(S, d)`` posterior draws.
+        x_obs: Observed summary vector.
+        fitted: Posterior (provides the feature mask).
+
+    Returns:
+        ``(metrics, x_pred)`` with ``x_pred`` the ``(S, x_dim)`` predictive summaries.
+    """
+    x_pred, _ = generator.simulate_theta(samples_theta, "ppc")
+    valid = np.all(np.isfinite(x_pred), axis=1)
+    mask = fitted.feature_mask
+    pred, obs = x_pred[valid][:, mask], np.asarray(x_obs)[mask]
+    below = (pred < obs).mean(0) + 0.5 * (pred == obs).mean(0)
+    tail = 2 * np.minimum(below, 1 - below)
+    std = pred.std(0)
+    z = np.where(std > 0, (obs - pred.mean(0)) / np.where(std > 0, std, 1), 0.0)
+    metrics = {
+        "samples": int(valid.sum()),
+        "features": int(mask.sum()),
+        "fraction_outside_95": float(np.mean(tail < 0.05)),
+        "fraction_outside_99": float(np.mean(tail < 0.01)),
+        "mean_abs_z": float(np.mean(np.abs(z))),
+        "max_abs_z": float(np.max(np.abs(z))),
+    }
+    return metrics, x_pred

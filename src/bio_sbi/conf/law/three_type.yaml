@@ -1,0 +1,15 @@
+# Three types with a hidden intermediate C: A (stem) -> C (transit) -> B (terminal).
+# Typical use: generate data with it while inferring a two-type law, reading C through
+# the B marker:  law@data.law=three_type observation@data.observation=three_as_two
+name: three_type
+types: [A, B, C]
+outcomes: all            # 10 outcomes per type
+max_daughters: 2
+founder_sizes: [1]
+fixed:
+  founder: {A: 1.0}
+concentration: {}
+reference:
+  A: {death: 0.03, persist: 0.02, to_C: 0.05, div_AA: 0.50, div_AC: 0.30, div_CC: 0.10}
+  B: {death: 0.10, persist: 0.90}
+  C: {death: 0.05, persist: 0.10, to_B: 0.40, div_BC: 0.20, div_CC: 0.25}

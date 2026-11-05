@@ -7,8 +7,10 @@ import yaml
 CONF = Path(__file__).resolve().parents[1] / "src" / "bio_sbi" / "conf"
 
 
-def load_law(name="reversible_ab"):
-    return yaml.safe_load((CONF / "law" / f"{name}.yaml").read_text())
+def load_law(name="two_type", **overrides):
+    spec = yaml.safe_load((CONF / "law" / f"{name}.yaml").read_text())
+    spec.update(overrides)
+    return spec
 
 
 @pytest.fixture
@@ -20,7 +22,7 @@ def law():
 def gw(law):
     from bio_sbi.simulators import GaltonWatson
 
-    return GaltonWatson(law["types"], law["outcomes"], law["founder"])
+    return GaltonWatson(law)
 
 
 @pytest.fixture

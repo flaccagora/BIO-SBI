@@ -1,0 +1,12 @@
+# Two markers reading three true types: the hidden type C is measured as B.
+# Use on the data side:  observation@data.observation=three_as_two
+_target_: bio_sbi.observation.ObservationModel
+labels: [A, B]
+capture: null
+confusion:
+  A: {A: 1.0}
+  B: {B: 1.0}
+  C: {B: 1.0}
+selection: detected
+exact_detection: true
+max_attempts_per_clone: 1000
