@@ -64,6 +64,7 @@ def main() -> None:
     rows = []
     for path in sorted(root.rglob("metrics.json")):
         row = run_row(path.parent)
+        row["sweep"] = path.parent.parent.name  # e.g. two_type, two_type_flat_to_A
         row["seed"] = int(path.parent.name.split("seed=")[1].split(",")[0])
         rows.append(row)
     runs = pd.DataFrame(rows)
@@ -71,17 +72,13 @@ def main() -> None:
     cols = ["to_A_mean", "to_A_std", "to_A_err", "div_AA_mean", "div_AA_std",
             "corr_toA_divAA", "to_A_contraction", "mean_abs_error", "mean_contraction",
             "coverage90", "sbc_cov_err", "sbc_min_ks_p", "ppc_outside95"]  # fmt: skip
-    agg = (
-        runs.groupby(["design", "law", "rounds", "simulations"])[cols].agg(["mean", "std"]).round(3)
-    )
+    agg = runs.groupby(["sweep", "rounds", "simulations"])[cols].agg(["mean", "std"]).round(3)
     agg.to_csv(root / "b_row_summary.csv")
     pd.set_option("display.width", 250)
     pd.set_option("display.max_columns", 40)
-    print(
-        runs.groupby(["design", "law", "rounds", "simulations"])[cols].mean().round(3).to_string()
-    )
+    print(runs.groupby(["sweep", "rounds", "simulations"])[cols].mean().round(3).to_string())
     print("\nper seed, B.to_A posterior mean (truth 0.80):")
-    print(runs.pivot_table(index=["design", "law", "rounds", "simulations"], columns="seed", values="to_A_mean")
+    print(runs.pivot_table(index=["sweep", "rounds", "simulations"], columns="seed", values="to_A_mean")
           .round(2).to_string())  # fmt: skip
 
 

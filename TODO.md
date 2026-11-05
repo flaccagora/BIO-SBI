@@ -104,12 +104,14 @@ Remaining:
       Seed 0: `B.to_A` = 0.19 ± 0.14, same as amortised. Caveat: later rounds sample
       from the round-0 posterior, which is already prior-like for `B.to_A`, so SNPE
       alone cannot settle coverage vs identifiability.
-- [ ] `two_type` with an informative prior on B (`law.concentration`) or with
-      `truth.source=prior`, to separate "prior tail" from "non-identifiable".
-      **Running** as `+experiment=b_row_flat_prior` (`B.to_A` prior uniform on [0, 1]:
-      concentration 1 for `to_A`, 0.2 for the other B outcomes) →
-      `results/b_row/two_type_flat_to_A/`.
-- [ ] Finish `results/b_row/info.md` with the 50k results and a conclusion.
+- [x] `two_type` with a flat prior on `B.to_A` (`+experiment=b_row_flat_prior`,
+      `results/b_row/two_type_flat_to_A/`): `B.to_A` 0.21 → 0.53 ± 0.21, truth covered in
+      4/5 seeds, corr(`to_A`, `div_AA`) = −0.67. **Both** effects: the uniform-Dirichlet
+      prior tail caused most of the miss, and the 3 × 32-clone data only weakly separate
+      switching from division. SBC fails for B's *other* coordinates under this sparse
+      prior (`B.to_A` itself is calibrated).
+- [x] `results/b_row/info.md` finished (amortised, flat prior, conclusions);
+      sequential NPE section to be completed (2/5 seeds).
 
 ---
 
