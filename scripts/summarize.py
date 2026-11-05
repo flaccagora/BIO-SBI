@@ -38,7 +38,8 @@ SEED_KEYS = ("seed", "data_seed")
 #: Overrides never used for automatic grouping (averaged over or not result-relevant).
 IGNORED_KEYS = (*SEED_KEYS, "workers", "torch_threads", "device", "save_training_data")
 RUN_METRICS = (
-    "mean_abs_error",
+    "mae_probabilities",
+    "rel_error_scalars",
     "mean_contraction",
     "coverage90_reference",
     "sbc_mean_abs_coverage_error",
@@ -57,6 +58,30 @@ def load(root: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
     for frame in (runs, params):
         frame["sweep"] = frame["run"].map(lambda r: Path(r).parent.relative_to(root).as_posix())
     return runs, params
+
+
+def is_probability(parameter: str, truth: float) -> bool:
+    """Heuristic: outcome/founder probabilities lie in [0, 1]; lifetimes etc. do not."""
+    return not parameter.endswith("mean_lifetime") and (pd.isna(truth) or 0 <= truth <= 1)
+
+
+def add_unit_aware_errors(runs: pd.DataFrame, params: pd.DataFrame) -> pd.DataFrame:
+    """Per-run MAE over probabilities and mean relative error over scalar parameters.
+
+    Recomputed from the parameter rows, so results written before metrics.json separated
+    the two (when ``mean_abs_error`` mixed probabilities with lifetimes in hours) are
+    summarised consistently.
+    """
+    scored = params[params["inferred"].astype(bool) & params["truth"].notna()].copy()
+    scored["prob"] = [
+        is_probability(p, t) for p, t in zip(scored.parameter, scored.truth, strict=True)
+    ]
+    prob = scored[scored.prob].groupby("run")["abs_error"].mean()
+    scal = scored[~scored.prob & (scored.truth != 0)]
+    rel = (scal.abs_error / scal.truth.abs()).groupby(scal.run).mean()
+    return runs.assign(
+        mae_probabilities=runs["run"].map(prob), rel_error_scalars=runs["run"].map(rel)
+    )
 
 
 def group_keys(runs: pd.DataFrame, requested: list[str] | None) -> list[str]:
@@ -142,6 +167,7 @@ def main(argv: list[str] | None = None) -> tuple[pd.DataFrame, pd.DataFrame]:
     args = parser.parse_args(argv)
     root = Path(args.root)
     runs, params = load(root)
+    runs = add_unit_aware_errors(runs, params)
     keys = group_keys(runs, args.group_by)
     groups = summarize_groups(runs, keys)
     table = summarize_parameters(params, keys, args.params)

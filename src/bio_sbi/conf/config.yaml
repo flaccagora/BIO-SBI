@@ -49,4 +49,4 @@ hydra:
     dir: outputs/${simulator.name}-${law.name}-${inference.name}/${now:%Y-%m-%d_%H-%M-%S}
   sweep:
     dir: multirun/${now:%Y-%m-%d_%H-%M-%S}
-    subdir: ${hydra.job.num}_${hydra.job.override_dirname}
+    subdir: ${hydra.job.num}_${short:${hydra.job.override_dirname}}   # long overrides -> prefix + hash

@@ -235,7 +235,12 @@ def run_experiment(cfg: DictConfig, out: str | Path) -> dict:
             [sim.parameter_names[i] for i in shown], out / "figures" / "posterior.png",
         )  # fmt: skip
     scored = [r for r in rows if r["inferred"] and np.isfinite(r["truth"])]
-    interior = [r for r in scored if not r["at_boundary"]]  # boundary truths: no coverage
+    interior = [r for r in scored if not r["at_boundary"]]
+    scalar_names = {s.name for s in sim.space.scalars}
+    prob_scored = [r for r in scored if r["parameter"] not in scalar_names]
+    scalar_scored = [
+        r for r in scored if r["parameter"] in scalar_names and r["truth"]
+    ]  # boundary truths: no coverage
 
     metrics: dict = {
         "simulator": cfg.simulator.name,
@@ -262,7 +267,17 @@ def run_experiment(cfg: DictConfig, out: str | Path) -> dict:
         "posterior_support_mass": support_mass,
         "recovery": {
             "scored_parameters": len(scored),
-            "mean_abs_error": float(np.mean([r["abs_error"] for r in scored]))
+            # Probabilities and scalars (e.g. lifetimes in hours) have different units:
+            # `mean_abs_error` averages probabilities only; scalars get a relative error.
+            "mean_abs_error": float(np.mean([r["abs_error"] for r in prob_scored]))
+            if prob_scored
+            else float("nan"),
+            "mean_rel_error_scalars": float(
+                np.mean([r["abs_error"] / abs(r["truth"]) for r in scalar_scored])
+            )
+            if scalar_scored
+            else None,
+            "mean_abs_error_all": float(np.mean([r["abs_error"] for r in scored]))
             if scored
             else float("nan"),
             "mean_contraction": float(

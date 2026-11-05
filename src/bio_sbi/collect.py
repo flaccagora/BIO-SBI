@@ -48,6 +48,7 @@ def collect(root: str | Path) -> tuple[pd.DataFrame, pd.DataFrame]:
             "horizons": " ".join(f"{h:g}" for h in m["design"]["horizons"]),
             "clones": " ".join(str(c) for c in m["design"]["clones"]),
             "mean_abs_error": m["recovery"]["mean_abs_error"],
+            "mean_rel_error_scalars": m["recovery"].get("mean_rel_error_scalars"),
             "mean_contraction": m["recovery"]["mean_contraction"],
             "coverage90_reference": m["recovery"]["coverage90"],
             "training_seconds": sum(r["training_seconds"] for r in m["training"]),
