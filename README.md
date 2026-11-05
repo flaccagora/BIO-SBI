@@ -287,6 +287,26 @@ This writes `posterior_samples.csv.gz`, `posterior_summary.csv` and `posterior.p
 Horizons must match the trained design; a different clone count only produces a
 warning. Before trusting a real-data fit, check calibration (SBC) for that design.
 
+## Hardware: CPU vs GPU
+
+`device=cpu` (default) or `device=cuda`. The environment uses torch's CUDA 12.6 build,
+which runs on NVIDIA drivers >= 560. Simulation always runs on the CPU (Numba);
+`device` only moves network training and posterior sampling. Posteriors trained on a
+GPU load on CPU-only machines.
+
+On the development workstation (RTX A1000, `results/gpu_bench/info.md`):
+- amortised NPE was **2–2.4× slower** on the GPU (small networks, per-step overhead);
+- sequential NPE was **~21% faster**;
+- NLE/NRE sample by MCMC with many tiny network calls and should stay on the CPU;
+- training batch 512 instead of 128 saved only ~5% wall time on CPU.
+
+Speed measurements must run alone: `scripts/run_device_benchmark.sh` waits until no
+other `bio-sbi`/`pytest` process runs, runs one job at a time and flags contention.
+
+> **Do not edit `src/bio_sbi/conf/` while a multirun is still queuing jobs.** Hydra
+> re-reads the config files for every job, so later jobs of a running sweep would pick
+> up the change (and fail or silently differ).
+
 ## Reproducibility
 
 * **Seeds**: every stochastic stage uses a keyed random stream derived from a root
