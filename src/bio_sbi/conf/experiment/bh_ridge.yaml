@@ -1,0 +1,30 @@
+# @package _global_
+# Bellman-Harris lifetime / self-renewal ridge. In well-specified BH runs (reversible_ab,
+# uniform Dirichlet prior) A.div_AA (truth 0.55) is estimated ~0.3 and A.mean_lifetime
+# (truth 20 h) ~16 h at every design (results/e4, results/e3b). Two arms, run separately:
+#   (i)  lifetimes fixed to the truth: is A.div_AA then recovered?
+#        bio-sbi -m +experiment=bh_ridge +simulator.model.fixed.A.mean_lifetime=20 \
+#            +simulator.model.fixed.B.mean_lifetime=30 hydra.sweep.dir=results/bh_ridge/lifetimes_fixed
+#   (ii) flat prior on A.div_AA (concentration 1, other A outcomes 0.2 -> Beta(1, 1)):
+#        bio-sbi -m +experiment=bh_ridge '+law.concentration.A={death:0.2,persist:0.2,to_B:0.2,div_AB:0.2,div_BB:0.2}' \
+#            hydra.sweep.dir=results/bh_ridge/flat_div_AA
+# Control (same truth, design, budget, seeds): e3b lifetime_shape=8 / e3a_free B=30.
+defaults:
+  - override /simulator: bellman_harris
+  - override /law: reversible_ab
+  - override /design: real_like
+  - override /budget: dev
+info:
+  title: "BH ridge: lifetime vs self-renewal"
+  question: |
+    Is the well-specified BH bias (A.div_AA ~0.3 vs 0.55, A.mean_lifetime ~16 vs 20 h)
+    caused by a lifetime/self-renewal ridge plus a prior with little mass at the truth?
+    Arm (i) removes the ridge by fixing lifetimes to the truth; arm (ii) keeps the ridge
+    but makes the A.div_AA prior uniform. Compare with the well-specified controls.
+  notes: |
+    Inference-model changes only (data model and truth unchanged). Concentration 0.2 on
+    A's other outcomes makes the prior favour sparse A rows; check SBC for those.
+hydra:
+  sweeper:
+    params:
+      seed: 0,1,2,3,4
