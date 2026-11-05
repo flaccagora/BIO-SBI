@@ -54,7 +54,9 @@ def save_hydra_config(cfg, out):
 @pytest.mark.slow
 @pytest.mark.parametrize("method", ["npe", "nle", "nre"])
 def test_run_experiment(tmp_path, method):
-    cfg = config(f"inference={method}")
+    mcmc = [] if method == "npe" else ["budget.sbc_cases=2", "budget.ppc_samples=5",
+                                       "budget.mcmc_chains=2"]  # fmt: skip
+    cfg = config(f"inference={method}", *mcmc)
     out = tmp_path / method
     save_hydra_config(cfg, out)
     metrics = run_experiment(cfg, out)
@@ -145,3 +147,75 @@ def test_fixed_override_from_command_line():
     comp = build_components(cfg)
     assert "A.persist" not in comp.simulator.space.free_names
     assert comp.simulator.theta_dim == 9
+
+
+# ---------------------------------------------------------------- data seed (P1)
+def reference_fingerprint(*overrides):
+    import hashlib
+
+    from bio_sbi.pipeline import build_data_generator, reference_parameters
+
+    cfg = config(*overrides)
+    data = build_data_generator(cfg, build_components(cfg).generator)
+    truth = reference_parameters(cfg, data.simulator)
+    digest = hashlib.sha256(np.round(truth, 12).tobytes())
+    for cohort in data.dataset(truth, "reference"):
+        digest.update(np.ascontiguousarray(cohort.counts, dtype=np.int64).tobytes())
+    return digest.hexdigest()[:16]
+
+
+@pytest.mark.parametrize(
+    ("overrides", "expected"),
+    [
+        ((), "81c73a0514ed59c0"),
+        (("seed=3",), "d2cd433cb03710ae"),
+        (("observation=noisy", "seed=1"), "e8e94e8d3d550f71"),
+        (("simulator=bellman_harris",), "6d005ff4a42371e1"),  # rejection sampler
+        (("truth.source=prior", "seed=2"), "3b338ccd80349f8f"),
+    ],
+)
+def test_default_data_seed_reproduces_previous_reference(overrides, expected):
+    # Digests recorded before data_seed existed (commit 3e85bd8, design.clones=6).
+    assert reference_fingerprint(*overrides) == expected
+
+
+def test_data_seed_controls_reference_only():
+    base = reference_fingerprint("truth.source=prior", "seed=0", "data_seed=7")
+    assert reference_fingerprint("truth.source=prior", "seed=5", "data_seed=7") == base
+    assert reference_fingerprint("truth.source=prior", "seed=0", "data_seed=8") != base
+    cfg = config("seed=5", "data_seed=7")
+    assert build_components(cfg).generator.seed == 5  # training streams follow `seed`
+
+
+def test_reference_npz_depends_on_data_seed_only(tmp_path):
+    tiny = ["budget.sbc_cases=0", "budget.ppc_samples=0"]
+
+    def reference(name, *overrides):
+        metrics = run_experiment(config(*tiny, *overrides), tmp_path / name)
+        with np.load(tmp_path / name / "reference.npz") as f:
+            return metrics, {k: f[k] for k in f.files}
+
+    m_a, a = reference("a", "seed=0", "data_seed=3")
+    m_b, b = reference("b", "seed=1", "data_seed=3")
+    _, c = reference("c", "seed=0", "data_seed=4")
+    assert a.keys() == b.keys() and all(np.array_equal(a[k], b[k]) for k in a)
+    assert any(not np.array_equal(a[k], c[k]) for k in a if k.startswith("counts"))
+    assert (m_a["seed"], m_a["data_seed"], m_b["seed"]) == (0, 3, 1)
+    # Different training seeds still give different posteriors.
+    post = lambda m: [r["posterior_mean"] for r in m["recovery"]["per_parameter"]]  # noqa: E731
+    assert post(m_a) != post(m_b)
+
+
+# ---------------------------------------------------------------- detection rate (P2)
+def test_reference_detection_in_metrics(tmp_path):
+    metrics = run_experiment(
+        config("simulator=bellman_harris", "budget.sbc_cases=0", "budget.ppc_samples=0"),
+        tmp_path,
+    )
+    detection = metrics["reference_detection"]
+    assert [d["horizon"] for d in detection] == [80.0, 160.0, 240.0]
+    for d in detection:
+        assert d["recovered"] == 6 and d["seeded"] >= 6
+        assert 0 < d["detection_rate"] <= 1 and d["detection_probability"] is None
+    runs, _ = collect(tmp_path)
+    assert "detection_rate_h80" in runs.columns and runs["data_seed"].iloc[0] == 0

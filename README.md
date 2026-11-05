@@ -14,12 +14,13 @@ Every part of the pipeline is a swappable [Hydra](https://hydra.cc) config group
 | Group | Options | What it controls |
 |---|---|---|
 | `simulator` | `galton_watson`, `bellman_harris` | Generative model (time is generations or hours) |
-| `law` | `two_type` (all transitions), `reversible_ab`, `hierarchy_ab`, `minimal_ab`, `three_type`, `multi_founder` | Cell types, transitions, founders, fixed values, prior |
-| `observation` | `perfect`, `noisy`, `all_clones`, `three_as_two` | Capture, type→label confusion, clone selection |
+| `law` | `two_type` (all transitions), `reversible_ab`, `hierarchy_ab`, `minimal_ab`, `three_type`, `three_type_traj`, `multi_founder` | Cell types, transitions, founders, fixed values, prior |
+| `observation` | `perfect`, `noisy`, `all_clones`, `three_as_two`, `three_split` | Capture, type→label confusion, clone selection |
 | `summary` | `moments`, `means` | Summary statistics fed to the network |
 | `inference` | `npe`, `nle`, `nre` | sbi method family |
 | `budget` | `smoke`, `dev`, `full` | Simulations, epochs, posterior/SBC sample sizes |
-| `experiment` | `compare_methods`, `design_sweep`, `noise_sensitivity` | Ready-made multirun sweeps |
+| `design` | `default`, `real_like`, `single_128`, `three_128`, `single_384` | Endpoints and clones per endpoint |
+| `experiment` | `e1a_*` … `e4_design`, `x2_seeds` (see [TODO.md](TODO.md)), `b_row_*`, `design_comparison`, `compare_methods`, `design_sweep`, `noise_sensitivity` | Ready-made multirun sweeps (each documents itself in `info.md`) |
 
 `simulator`, `law` and `observation` describe the **inference model** (what you assume).
 The reference data come from a separate **data model**, `data.simulator`, `data.law`
@@ -58,7 +59,7 @@ The results go to `outputs/<simulator>-<law>-<method>/<timestamp>/`:
 | `posterior.pt` | Trained posterior (`FittedPosterior`, reload with `FittedPosterior.load`) |
 | `posterior_samples.csv.gz` | Posterior samples at the reference data (physical units) |
 | `recovery.csv` | Per parameter: truth, mean, 90% CI, z-score, **contraction**, inferred/fixed, `at_boundary` (truth 0 or 1: no coverage score) |
-| `metrics.json` | Everything above plus SBC calibration and timings |
+| `metrics.json` | Everything above plus SBC calibration, timings, `seed`/`data_seed` and `reference_detection` (observed-organoid fraction per horizon, see below) |
 | `ppc.npz` | Posterior-predictive summaries (misspecification check) |
 | `sbc.npz`, `figures/sbc.png` | SBC ranks and rank histograms |
 | `figures/posterior.png` | Prior vs posterior marginals with the true value |
@@ -86,7 +87,27 @@ uv run bio-sbi -m observation=noisy 'observation.capture=[0.9,0.9],[0.6,0.6]'
 uv run bio-sbi-collect multirun/<timestamp>
 #   -> summary_runs.csv        one row per run (overrides + headline metrics)
 #   -> summary_parameters.csv  one row per run x parameter (contraction, error, ...)
+
+# Group by sweep folder + swept keys and average over seeds
+uv run python scripts/summarize.py results/<exp> [--params 'A.*' B.to_A] [--group-by KEY ...]
+#   -> summary_groups.csv            per group: runs, error, contraction, coverage, SBC, PPC
+#   -> summary_group_parameters.csv  per group x parameter: truth, mean, sd, error,
+#                                    contraction, 90% coverage across seeds, recovered
 ```
+
+The experiment presets `e1a_*` to `e4_design` and `x2_seeds` implement the sweeps of
+the experiments plan ([TODO.md](TODO.md)); each file's header gives the exact commands
+(some need one run per inference arm, with a separate `hydra.sweep.dir`) and the run
+count. They use the baseline of the plan (`law=reversible_ab`, `design=real_like`:
+days 6 and 10 with 165 and 101 clones, in generations or hours depending on the
+simulator).
+
+**Observed-organoid fraction.** For the reference dataset, `metrics.json` lists per
+horizon `seeded` and `detected` clones and `detection_rate = detected / seeded` (only
+when clones are recovered by forward simulation plus rejection, e.g. Bellman-Harris)
+and `detection_probability`, the exact P(clone has >= 1 captured cell) for
+Galton-Watson. `bio-sbi-collect` adds them as `detection_rate_h<h>` /
+`detection_probability_h<h>` columns. Training simulations do not record them.
 
 The `design_sweep` preset uses Galton-Watson horizons (generations). For Bellman-Harris,
 pass horizons in hours.
@@ -175,7 +196,9 @@ reference:               # ground truth when this law generates the reference da
   `{type: p}`).
 * `confusion`: the probability that a true type receives a measured label. It is
   rectangular when there are more true types than markers, e.g. `{C: {B: 1}}` reads
-  a hidden C as B (`observation=three_as_two`). A single number is a symmetric
+  a hidden C as B (`observation=three_as_two`); `observation=three_split` reads C as
+  A with probability `q` and as B with `1 - q` (`observation.q=0.3`, a top-level key
+  of that file interpolated into the matrix). A single number is a symmetric
   mislabelling rate.
 * `selection`: `detected` keeps only clones with at least one detected cell; `all`
   keeps every seeded clone.
@@ -266,9 +289,15 @@ warning. Before trusting a real-data fit, check calibration (SBC) for that desig
 
 ## Reproducibility
 
-* **Seeds**: every stochastic stage uses a keyed random stream derived from `seed`
-  (`bio_sbi.rng`). Results do not depend on `workers` or on simulation order, and
+* **Seeds**: every stochastic stage uses a keyed random stream derived from a root
+  seed (`bio_sbi.rng`). Results do not depend on `workers` or on simulation order, and
   identical configs give identical metrics (this is tested).
+* **Data seed vs inference seed**: `data_seed` (default `${seed}`) seeds the data side
+  only, the truth draw (`truth.source=prior`) and the reference dataset; `seed` seeds
+  training simulations, network training, posterior sampling, prior samples for
+  contraction, the PPC and SBC. `data_seed=3 seed=0,1,2,3,4` therefore trains five
+  times on the same `reference.npz`. With the default, results equal those of earlier
+  versions.
 * **Config**: Hydra stores the composed config and the overrides in every run.
 * **Environment**: `uv.lock` pins every dependency (`sbi==0.27.0`), and
   `manifest.json` records versions and the git commit.

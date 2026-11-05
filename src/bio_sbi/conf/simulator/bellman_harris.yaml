@@ -3,6 +3,7 @@
 # shape = 1 gives exponential (Markov) lifetimes; large shapes approach synchronous divisions.
 name: bellman_harris
 horizons: [80, 160, 240]       # default design endpoints (hours)
+real_horizons: [144, 240]      # day 6 / day 10 of the real data (design=real_like)
 reference:                     # truth for the lifetime parameters (one per law type)
   A: {mean_lifetime: 20.0}
   B: {mean_lifetime: 30.0}

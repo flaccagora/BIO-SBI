@@ -1,0 +1,8 @@
+# Real-like design (CRC0322 data in submodules/GW/data): day 6 and day 10 organoids,
+# 165 and 101 recovered clones. Horizons come from the simulator's `real_horizons`
+# (Galton-Watson [6, 10] generations, Bellman-Harris [144, 240] hours), so the same
+# design works when sweeping `simulator`.
+_target_: bio_sbi.design.Design
+name: real_like
+horizons: ${simulator.real_horizons}
+clones: [165, 101]

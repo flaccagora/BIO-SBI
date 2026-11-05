@@ -1,0 +1,47 @@
+# @package _global_
+# E2c: a hidden third type C (data law three_type) read by two markers: a C cell is
+# labelled A with probability q and B with 1 - q (observation three_split). Three
+# inference arms, one run each (Galton-Watson; add simulator=bellman_harris for BH):
+#   bio-sbi -m +experiment=e2c_third_type hydra.sweep.dir=results/e2c/ignore_c
+#   bio-sbi -m +experiment=e2c_third_type law=three_type observation=three_split \
+#       hydra.sweep.dir=results/e2c/model_c_free
+#   bio-sbi -m +experiment=e2c_third_type law=three_type_traj observation=three_split \
+#       hydra.sweep.dir=results/e2c/model_c_traj
+# 3 q x 2 C fractions x 5 seeds = 30 runs per arm (90 in total).
+defaults:
+  - override /law: reversible_ab          # arm "ignore C": two-type inference model
+  - override /design: real_like
+  - override /budget: dev
+  - override /law@data.law: three_type
+  - override /observation@data.observation: three_split
+observation:
+  q: ${data.observation.q}   # three_split inference arms assume the true split is known
+data:
+  observation:
+    q: 0.5
+  law:
+    reference:
+      # A row giving ~15% C among living cells at day 6 and 10 (GW expected counts);
+      # to_C, div_AC and div_CC of three_type scaled by 0.35, mass moved to div_AA.
+      A: {death: 0.03, persist: 0.02, to_C: 0.0175, div_AA: 0.7925, div_AC: 0.105, div_CC: 0.035}
+info:
+  title: "E2c: a hidden third type read as A or B"
+  question: |
+    Data have a third type C that the markers read as A (prob. q) or B (1 - q),
+    q in {0, 0.5, 1}, at about 5% or 15% of cells. Are the A and B rows still
+    recovered when C is ignored (two-type model), modelled freely (three_type), or
+    modelled with the trajectory constraint C -> B only (three_type_traj)? Does the
+    PPC flag the two-type model?
+  notes: |
+    C fraction set through the data A row (to_C, div_AC, div_CC scaled by 0.1 -> ~5%,
+    by 0.35 -> ~15% of living cells at generations 6 and 10, GW expected counts).
+    three_type_traj encodes an assumption pending Q1 (see its YAML). For the
+    "ignore C" arm, A.to_B / A.div_AB / A.div_BB have truth 0 in the data (A makes B
+    only through C), so error/coverage of those rows reads against zero.
+hydra:
+  sweeper:
+    params:
+      data.observation.q: 0,0.5,1
+      data.law.reference.A: "{death:0.03,persist:0.02,to_C:0.005,div_AA:0.905,div_AC:0.03,div_CC:0.01},\
+        {death:0.03,persist:0.02,to_C:0.0175,div_AA:0.7925,div_AC:0.105,div_CC:0.035}"
+      seed: 0,1,2,3,4

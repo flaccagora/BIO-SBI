@@ -84,6 +84,9 @@ class ObservationModel:
             has one (Galton-Watson). Otherwise forward simulation plus rejection is used.
         max_attempts_per_clone: Rejection budget; a dataset needing more seeded clones
             per recovered clone is marked invalid.
+        q: Free number that a config may interpolate into ``confusion`` (e.g. the
+            split of a hidden type between two labels in ``three_split.yaml``). Not
+            used by the model itself; recorded so it can be swept and reported.
     """
 
     types: Sequence[str]
@@ -93,6 +96,7 @@ class ObservationModel:
     selection: str = "detected"
     exact_detection: bool = True
     max_attempts_per_clone: int = 1000
+    q: float | None = None
 
     def __post_init__(self) -> None:
         self.types = tuple(self.types)

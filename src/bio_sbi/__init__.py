@@ -12,4 +12,10 @@ Hydra config group:
 * :mod:`bio_sbi.pipeline` - glue that runs one reproducible experiment.
 """
 
+from omegaconf import OmegaConf
+
 __version__ = "0.2.0"
+
+# Config resolver: ``${complement:${..q}}`` = 1 - q (e.g. observation/three_split.yaml).
+if not OmegaConf.has_resolver("complement"):
+    OmegaConf.register_new_resolver("complement", lambda x: 1.0 - float(x))

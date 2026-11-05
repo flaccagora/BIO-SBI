@@ -1,0 +1,32 @@
+# @package _global_
+# E1a (founder type): organoid death changes which cell types seed the clones. Data are
+# seeded by A with probability f and by B with 1 - f; inference either assumes
+# single-A founders (wrong for f < 1) or infers the founder row. Run once per arm:
+#   bio-sbi -m +experiment=e1a_founder_type hydra.sweep.dir=results/e1a/founder_type/fixed
+#   bio-sbi -m +experiment=e1a_founder_type '~law.fixed.founder' \
+#       hydra.sweep.dir=results/e1a/founder_type/inferred
+# 4 f x 2 simulators x 5 seeds = 40 runs per arm (80 in total).
+defaults:
+  - override /law: reversible_ab
+  - override /design: real_like
+  - override /budget: dev
+data:
+  law:
+    fixed:
+      founder: {A: 1.0, B: 0.0}   # both keys present so the sweep below can set them
+info:
+  title: "E1a: wrong founder types (organoid death)"
+  question: |
+    How stable is inference of the A and B rows when the founder type mix of the data
+    (founder.A = f, f in {1.0, 0.9, 0.7, 0.5}) differs from the assumed single-A
+    founders? Compare with the arm that infers the founder row ('~law.fixed.founder').
+  notes: |
+    Baseline otherwise (reversible_ab, real-like design, perfect observation, moments,
+    NPE 5k). Output: bias of each A/B parameter vs f, PPC, and (inferred arm) whether
+    founder.A itself is recovered. The f = 1.0 setting is the well-specified control.
+hydra:
+  sweeper:
+    params:
+      simulator: galton_watson,bellman_harris
+      data.law.fixed.founder: "{A:1.0,B:0.0},{A:0.9,B:0.1},{A:0.7,B:0.3},{A:0.5,B:0.5}"
+      seed: 0,1,2,3,4

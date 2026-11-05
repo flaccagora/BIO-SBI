@@ -1,0 +1,30 @@
+# @package _global_
+# E2b: symmetric A <-> B mis-typing at rate e in the DATA only; inference assumes a
+# perfect assay: bias from an ignored error.
+#   bio-sbi -m +experiment=e2b_typing_ignored hydra.sweep.dir=results/e2/ignored
+# 6 e x 2 simulators x 5 seeds = 60 runs.
+defaults:
+  - override /law: reversible_ab
+  - override /design: real_like
+  - override /budget: dev
+  - override /observation@data.observation: noisy
+data:
+  observation:
+    capture: 1.0
+    confusion: 0.05
+info:
+  title: "E2b: ignored mis-typing between A and B"
+  question: |
+    How biased are the A/B parameters when a fraction e in {0, .02, .05, .1, .15, .2}
+    of cells is mislabelled in the data but inference assumes perfect typing? Does the
+    PPC reveal the misspecification?
+  notes: |
+    Largest tolerable e = bias below the posterior std. If E2b is biased and E2a is
+    not, the error rate must be estimated (Q3) and passed to the model. e = 0 is the
+    well-specified control (identical to the perfect assay).
+hydra:
+  sweeper:
+    params:
+      simulator: galton_watson,bellman_harris
+      data.observation.confusion: 0,0.02,0.05,0.1,0.15,0.2
+      seed: 0,1,2,3,4

@@ -1,0 +1,25 @@
+# Three types A (stem), B (differentiated), C (hidden intermediate), constrained by
+# trajectory inference: C only moves towards B, never back to A.
+#
+# ASSUMPTION (open question Q1 in TODO.md, to confirm with the biologists): "C -> B only"
+# means that no outcome of a C cell produces an A cell, i.e. C.to_A = 0 and every C
+# division with an A daughter (div_AA, div_AB, div_AC) is fixed to 0. A and B keep all
+# their transitions (as in three_type); in particular A -> C, B -> C and B divisions are
+# still inferred. Tighten or relax `fixed` once Q1 is answered.
+#
+# Typical use (E2c), with data from the unconstrained three_type law:
+#   law=three_type_traj observation=three_split
+#   law@data.law=three_type observation@data.observation=three_split
+name: three_type_traj
+types: [A, B, C]
+outcomes: all            # 10 outcomes per type; C has 6 free after the constraints
+max_daughters: 2
+founder_sizes: [1]
+fixed:
+  founder: {A: 1.0}
+  C: {to_A: 0.0, div_AA: 0.0, div_AB: 0.0, div_AC: 0.0}
+concentration: {}
+reference:               # same truth as three_type (already satisfies the constraints)
+  A: {death: 0.03, persist: 0.02, to_C: 0.05, div_AA: 0.50, div_AC: 0.30, div_CC: 0.10}
+  B: {death: 0.10, persist: 0.90}
+  C: {death: 0.05, persist: 0.10, to_B: 0.40, div_BC: 0.20, div_CC: 0.25}

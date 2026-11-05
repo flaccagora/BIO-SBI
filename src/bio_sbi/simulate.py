@@ -53,14 +53,32 @@ class DataGenerator:
 
     # ------------------------------------------------------------------ single dataset
     def cohort(
-        self, physical: np.ndarray, horizon: float, n: int, rng: np.random.Generator
+        self,
+        physical: np.ndarray,
+        horizon: float,
+        n: int,
+        rng: np.random.Generator,
+        stats: dict | None = None,
     ) -> np.ndarray | None:
-        """Simulate one cohort of ``n`` *retained* clones; ``None`` if invalid."""
+        """Simulate one cohort of ``n`` *retained* clones; ``None`` if invalid.
+
+        Args:
+            physical: Validated physical parameters.
+            horizon: Endpoint in the simulator's time unit.
+            n: Number of clones to retain.
+            rng: Random stream of this cohort.
+            stats: Optional dict filled with ``seeded`` (clones simulated) and
+                ``detected`` (of those, clones with >= 1 detected cell). Both are
+                ``None`` for the exact detection-conditioned sampler, which never
+                simulates undetected clones. Counting does not consume random numbers.
+        """
         sim, obs = self.simulator, self.observation
         if obs.selection == "detected" and obs.exact_detection and sim.supports_detected_sampling:
             captured = sim.simulate_detected(physical, horizon, n, obs.capture, rng)
+            if stats is not None:
+                stats.update(seeded=None, detected=None)
             return None if np.any(captured == INVALID) else obs.relabel(captured, rng)
-        kept, need, attempts, batch = [], n, 0, n
+        kept, need, attempts, batch, detected = [], n, 0, n, 0
         while need > 0:
             if attempts + batch > n * obs.max_attempts_per_clone:
                 return None
@@ -69,24 +87,70 @@ class DataGenerator:
             if np.any(true == INVALID):
                 return None
             measured = obs.measure(true, rng)
+            if stats is not None:
+                detected += int(np.count_nonzero(measured.sum(axis=1)))
             accepted = measured[obs.keep(measured)][:need]
             kept.append(accepted)
             need -= len(accepted)
             # Grow the next batch according to the observed acceptance rate.
             rate = max(sum(len(k) for k in kept) / attempts, 1.0 / obs.max_attempts_per_clone)
             batch = int(min(max(need / rate * 1.2, 1), n * obs.max_attempts_per_clone))
+        if stats is not None:
+            stats.update(seeded=attempts, detected=detected)
         return np.concatenate(kept)
 
-    def dataset(self, physical: np.ndarray, key: object) -> list[Cohort] | None:
-        """Simulate all cohorts of the design for one parameter vector."""
+    def dataset(
+        self, physical: np.ndarray, key: object, stats: list[dict] | None = None
+    ) -> list[Cohort] | None:
+        """Simulate all cohorts of the design for one parameter vector.
+
+        Args:
+            physical: Physical parameters.
+            key: Random-stream key of this dataset.
+            stats: Optional list that receives one :meth:`detection_record` per cohort
+                (used for the reference dataset; training simulations pass nothing).
+        """
         physical = self.simulator.validate(physical)
         cohorts = []
         for i, (horizon, n) in enumerate(self.design.cohorts):
-            counts = self.cohort(physical, horizon, n, rng_for(self.seed, key, "cohort", i))
+            record = {} if stats is not None else None
+            counts = self.cohort(physical, horizon, n, rng_for(self.seed, key, "cohort", i), record)
             if counts is None:
                 return None
             cohorts.append(Cohort(horizon, counts))
+            if stats is not None:
+                stats.append(self.detection_record(physical, horizon, n, **record))
         return cohorts
+
+    def detection_record(
+        self, physical: np.ndarray, horizon: float, recovered: int, seeded, detected
+    ) -> dict:
+        """Observed-organoid fraction of one cohort.
+
+        Args:
+            physical: Physical parameters.
+            horizon: Endpoint.
+            recovered: Clones retained in the cohort.
+            seeded: Clones simulated to retain them (``None`` for the exact sampler).
+            detected: Simulated clones with >= 1 detected cell (``None`` likewise).
+
+        Returns:
+            ``horizon``, ``recovered``, ``seeded``, ``detected``, the empirical
+            ``detection_rate = detected / seeded`` (``None`` without rejection) and
+            ``detection_probability``, the exact P(clone has >= 1 captured cell) when
+            the simulator provides it (Galton-Watson), else ``None``.
+        """
+        exact = getattr(self.simulator, "detection_probability", None)
+        return {
+            "horizon": float(horizon),
+            "recovered": int(recovered),
+            "seeded": seeded,
+            "detected": detected,
+            "detection_rate": detected / seeded if seeded else None,
+            "detection_probability": float(exact(physical, horizon, self.observation.capture))
+            if exact is not None
+            else None,
+        }
 
     def summarize(self, cohorts: list[Cohort] | None) -> np.ndarray:
         """Summary vector of a dataset; NaN-filled when the dataset is invalid."""

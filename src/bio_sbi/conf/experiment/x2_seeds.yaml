@@ -1,0 +1,21 @@
+# @package _global_
+# X2: separate the spread due to the dataset from the spread due to training.
+# Training spread (1 dataset, 5 training seeds):
+#   bio-sbi -m +experiment=x2_seeds hydra.sweep.dir=results/x2/training
+# Dataset spread (5 datasets, 1 training seed):
+#   bio-sbi -m +experiment=x2_seeds data_seed=0,1,2,3,4 seed=0 hydra.sweep.dir=results/x2/data
+# 5 runs per arm. Add the final configuration's overrides to both commands.
+defaults:
+  - override /law: reversible_ab
+  - override /design: real_like
+  - override /budget: dev
+data_seed: 0
+info:
+  title: "X2: dataset seed vs inference seed"
+  question: |
+    How much of the run-to-run spread of the posterior comes from the reference
+    dataset (data_seed) and how much from training and sampling (seed)?
+hydra:
+  sweeper:
+    params:
+      seed: 0,1,2,3,4

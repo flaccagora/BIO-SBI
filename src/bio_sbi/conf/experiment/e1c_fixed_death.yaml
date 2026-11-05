@@ -1,0 +1,33 @@
+# @package _global_
+# E1c: fix A.death and B.death in the inference model (possibly to wrong values) and
+# infer everything else; the data always use the truth (A.death 0.03, B.death 0.10).
+#   bio-sbi -m +experiment=e1c_fixed_death hydra.sweep.dir=results/e1c/gw
+# 4 dA x 4 dB x 5 seeds = 80 runs (Galton-Watson). Bellman-Harris corners:
+#   bio-sbi -m +experiment=e1c_fixed_death simulator=bellman_harris \
+#       law.fixed.A.death=0,0.2 law.fixed.B.death=0,0.4 hydra.sweep.dir=results/e1c/bh
+defaults:
+  - override /law: reversible_ab
+  - override /design: real_like
+  - override /budget: dev
+law:
+  fixed:              # merged into reversible_ab's fixed values (inference model only)
+    A: {death: 0.03}
+    B: {death: 0.1}
+info:
+  title: "E1c: death fixed in the inference model"
+  question: |
+    If A.death and B.death are fixed (to dA in {0, .03 (true), .1, .2} and dB in
+    {0, .1 (true), .2, .4}) and the rest is inferred, do other parameters compensate
+    (a flat PPC/C2ST valley = death not identifiable) or is there a sharp minimum at
+    the truth?
+  notes: |
+    Output per (dA, dB): PPC fraction_outside_95, scripts/truth_vs_posterior.py C2ST,
+    and the inferred values of the other parameters (likely persist and the division
+    split carry the compensation). Compare with the contraction of A.death / B.death
+    in the free-death baseline.
+hydra:
+  sweeper:
+    params:
+      law.fixed.A.death: 0,0.03,0.1,0.2
+      law.fixed.B.death: 0,0.1,0.2,0.4
+      seed: 0,1,2,3,4

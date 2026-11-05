@@ -1,0 +1,43 @@
+# @package _global_
+# E3a arms (ii)/(iii): per-type division times in the data (A 20 h, B in {20, 30, 45} h);
+# inference fixes BOTH mean lifetimes to one global value T: the pooled mean (ii) or
+# the pooled mean -25% / +25% (iii). Each `lifetime_setting` pairs a data B lifetime
+# with an inference T, so the grid is listed explicitly.
+#   bio-sbi -m +experiment=e3a_lifetime_fixed hydra.sweep.dir=results/e3a/fixed
+# 3 B lifetimes x 3 T x 5 seeds = 45 runs.
+#
+# ASSUMPTION: the "true pooled mean" is the arithmetic mean of the two type means,
+# (20 + B) / 2. A composition-weighted mean would sit closer to whichever type
+# dominates the endpoint clones; change T in the list below if that is preferred.
+defaults:
+  - override /simulator: bellman_harris
+  - override /law: reversible_ab
+  - override /design: real_like
+  - override /budget: dev
+lifetime_setting: {B: 30, T: 25}   # B: data B.mean_lifetime (h); T: inference fixed value
+data:
+  simulator:
+    reference:
+      B: {mean_lifetime: '${lifetime_setting.B}'}
+simulator:
+  model:
+    fixed:
+      A: {mean_lifetime: '${lifetime_setting.T}'}
+      B: {mean_lifetime: '${lifetime_setting.T}'}
+info:
+  title: "E3a: per-type division time, one global lifetime assumed"
+  question: |
+    With A.mean_lifetime = 20 h and B.mean_lifetime in {20, 30, 45} h in the data,
+    how biased are the outcome probabilities when inference fixes both lifetimes to
+    one global value T (the pooled mean (20 + B) / 2, or that value -25% / +25%)?
+    Does the PPC flag it?
+  notes: |
+    lifetime_setting = {B: data B lifetime, T: fixed inference lifetime}. Pooled
+    means: 20, 25, 32.5 h. Compare with e3a_lifetime_free at the same B.
+hydra:
+  sweeper:
+    params:
+      lifetime_setting: "{B:20,T:20},{B:20,T:15},{B:20,T:25},\
+        {B:30,T:25},{B:30,T:18.75},{B:30,T:31.25},\
+        {B:45,T:32.5},{B:45,T:24.375},{B:45,T:40.625}"
+      seed: 0,1,2,3,4

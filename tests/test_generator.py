@@ -94,3 +94,35 @@ def test_all_clone_selection_keeps_extinct(law):
     )
     counts = gen.dataset(gw.physical_from_mapping(ref), "z")[0].counts
     assert len(counts) == 200 and np.any(counts.sum(1) == 0)
+
+
+def test_detection_stats_rejection_vs_exact(gw, gw_truth):
+    stats_exact, stats_rej = [], []
+    gen_exact = make(gw, capture=0.5)
+    gen_rej = make(gw, capture=0.5, exact_detection=False)
+    gen_rej.design = Design([4], [4000])
+    gen_exact.dataset(gw_truth, "k", stats=stats_exact)
+    gen_rej.dataset(gw_truth, "k", stats=stats_rej)
+    assert [s["seeded"] for s in stats_exact] == [None, None]
+    exact = stats_exact[1]["detection_probability"]
+    assert exact == pytest.approx(
+        gw.detection_probability(gw_truth, 4, gen_exact.observation.capture)
+    )
+    (rej,) = stats_rej
+    assert rej["recovered"] == 4000 and rej["seeded"] >= 4000
+    assert rej["detection_rate"] == pytest.approx(rej["detection_probability"], abs=0.02)
+    assert rej["detection_probability"] == pytest.approx(exact)
+
+
+def test_detection_stats_do_not_change_data(gw, gw_truth):
+    gen = make(gw, capture=0.7, exact_detection=False)
+    plain = gen.dataset(gw_truth, "k")
+    counted = gen.dataset(gw_truth, "k", stats=[])
+    assert all(np.array_equal(a.counts, b.counts) for a, b in zip(plain, counted, strict=True))
+
+
+def test_detection_stats_all_clones(gw, gw_truth):
+    stats = []
+    make(gw, selection="all", exact_detection=False).dataset(gw_truth, "k", stats=stats)
+    assert [s["seeded"] for s in stats] == [5, 7]
+    assert all(s["detected"] <= s["seeded"] for s in stats)

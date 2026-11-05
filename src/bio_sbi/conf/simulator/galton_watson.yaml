@@ -2,6 +2,7 @@
 # Every living cell has exactly one event per generation. Horizons are generations.
 name: galton_watson
 horizons: [4, 8, 12]           # default design endpoints (generations)
+real_horizons: [6, 10]         # day 6 / day 10 of the real data (design=real_like)
 reference: {}                  # truth for simulator-specific parameters (none here)
 model:
   _target_: bio_sbi.simulators.GaltonWatson

@@ -1,0 +1,35 @@
+# @package _global_
+# E3c: quiescence (outcome persist) vs longer lifetimes. The data have A.persist in
+# {0.03, 0.15, 0.3} (other A entries rescaled); inference fixes A.persist = 0, or keeps
+# it free as the control arm:
+#   bio-sbi -m +experiment=e3c_persist hydra.sweep.dir=results/e3c/persist_fixed0
+#   bio-sbi -m +experiment=e3c_persist '~law.fixed.A.persist' \
+#       hydra.sweep.dir=results/e3c/persist_free
+# 3 persist values x 5 seeds = 15 runs per arm (30 in total).
+defaults:
+  - override /simulator: bellman_harris
+  - override /law: reversible_ab
+  - override /design: real_like
+  - override /budget: dev
+law:
+  fixed:
+    A: {persist: 0.0}       # inference model only; data use truth.values
+truth:
+  values:
+    A: {death: 0.03, to_B: 0.05, div_AB: 0.05, div_AA: 0.55, div_BB: 0.29, persist: 0.03}
+info:
+  title: "E3c: quiescence vs division time"
+  question: |
+    Are A.persist (quiescence) and the mean lifetimes confounded? With A.persist in
+    {0.03, 0.15, 0.3} in the data, does fixing A.persist = 0 shift A.mean_lifetime
+    (longer lifetimes absorbing quiescence) or other outcomes, and does the PPC see
+    it? The free arm gives the posterior correlation persist <-> mean_lifetime.
+  notes: |
+    "Inattivazione" is read as quiescence here (to confirm, Q4).
+hydra:
+  sweeper:
+    params:
+      truth.values.A: "{death:0.03,to_B:0.05,div_AB:0.05,div_AA:0.55,div_BB:0.29,persist:0.03},\
+        {death:0.026289,to_B:0.043814,div_AB:0.043814,div_AA:0.481959,div_BB:0.254124,persist:0.15},\
+        {death:0.021649,to_B:0.036082,div_AB:0.036082,div_AA:0.396907,div_BB:0.20928,persist:0.3}"
+      seed: 0,1,2,3,4

@@ -12,13 +12,16 @@ defaults:
   - summary: moments           # summary statistic: moments | means
   - inference: npe             # sbi method: npe | nle | nre
   - budget: dev                # compute budget: smoke | dev | full
-  - design: default            # endpoints x clones: default | single_128 | three_128 | single_384
+  - design: default            # endpoints x clones: default | real_like | single_128 | three_128 | single_384
   - simulator@data.simulator: ${simulator}       # data-generating model (default: same)
   - law@data.law: ${law}
   - observation@data.observation: ${observation}
   - _self_
 
 seed: 0              # root seed; every stochastic stage derives a keyed stream from it
+data_seed: ${seed}   # root seed of the DATA side only: truth draw (truth.source=prior)
+                     # and reference dataset. `seed` keeps seeding training simulations,
+                     # network training, posterior sampling, PPC and SBC.
 device: cpu          # torch device for training (cpu | cuda)
 workers: 4           # threads for simulating independent datasets
 torch_threads: 4     # torch intra-op threads (0 = torch default)

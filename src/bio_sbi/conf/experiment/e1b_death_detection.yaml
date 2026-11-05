@@ -1,0 +1,46 @@
+# @package _global_
+# E1b: how do A.death and B.death change the fraction of seeded organoids that are
+# detected at day 6 and day 10? No inference is needed: each job only simulates the
+# reference dataset and records `reference_detection` in metrics.json (exact
+# detection_probability for Galton-Watson, empirical detection_rate for Bellman-Harris);
+# training uses a token budget and SBC/PPC are off.
+#   bio-sbi -m +experiment=e1b_death_detection hydra.sweep.dir=results/e1b
+# 5 A.death x 4 B.death x 2 simulators = 40 runs (seed 0 only).
+defaults:
+  - override /law: reversible_ab
+  - override /design: real_like
+  - override /budget: smoke
+budget:
+  sbc_cases: 0
+  ppc_samples: 0
+# Each value is a full row: death set, the other entries rescaled from the reference
+# (A: death 0.03, B: death 0.10) to keep their proportions.
+truth:
+  values:
+    A: {persist: 0.03, to_B: 0.05, div_AB: 0.05, div_AA: 0.55, div_BB: 0.29, death: 0.03}
+    B: {persist: 0.1, to_A: 0.8, death: 0.1}
+info:
+  title: "E1b: per-type death and the observed-organoid fraction"
+  question: |
+    How strongly do A.death in {0, .03, .1, .2, .3} and B.death in {0, .1, .3, .5}
+    change the fraction of seeded organoids detected at day 6 and day 10 (GW exact
+    s_G, BH simulated)? If the real experiment knows how many organoids were seeded,
+    this fraction is an extra datum.
+  notes: |
+    Read `detection_probability_h<h>` (GW, exact) and `detection_rate_h<h>` (BH,
+    detected / seeded, from the rejection loop) from `bio-sbi-collect` or
+    `scripts/summarize.py`. The BH estimate uses only as many seeded clones as needed
+    to recover 165/101 clones; add `design.clones=2000` for a tighter estimate. The
+    trained posteriors of this sweep are meaningless (token budget).
+hydra:
+  sweeper:
+    params:
+      simulator: galton_watson,bellman_harris
+      truth.values.A: "{persist:0.030928,to_B:0.051546,div_AB:0.051546,div_AA:0.56701,div_BB:0.29897,death:0},\
+        {persist:0.03,to_B:0.05,div_AB:0.05,div_AA:0.55,div_BB:0.29,death:0.03},\
+        {persist:0.027835,to_B:0.046392,div_AB:0.046392,div_AA:0.510309,div_BB:0.269072,death:0.1},\
+        {persist:0.024742,to_B:0.041237,div_AB:0.041237,div_AA:0.453608,div_BB:0.239176,death:0.2},\
+        {persist:0.021649,to_B:0.036082,div_AB:0.036082,div_AA:0.396907,div_BB:0.20928,death:0.3}"
+      truth.values.B: "{persist:0.111111,to_A:0.888889,death:0},{persist:0.1,to_A:0.8,death:0.1},\
+        {persist:0.077778,to_A:0.622222,death:0.3},{persist:0.055556,to_A:0.444444,death:0.5}"
+      seed: 0

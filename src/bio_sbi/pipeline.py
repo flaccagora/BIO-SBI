@@ -51,7 +51,18 @@ class Components:
     method: InferenceMethod
 
 
-def _generator(cfg: DictConfig, section: DictConfig) -> DataGenerator:
+def data_seed(cfg: DictConfig) -> int:
+    """Root seed of the data side: the truth draw and the reference dataset.
+
+    ``data_seed`` defaults to ``seed`` (configs written before it existed lack the key).
+    Everything on the inference side (training simulations, network training, posterior
+    sampling, prior samples for contraction, PPC, SBC) keeps using ``seed``.
+    """
+    value = cfg.get("data_seed")
+    return int(cfg.seed if value is None else value)
+
+
+def _generator(cfg: DictConfig, section: DictConfig, seed: int) -> DataGenerator:
     """Build a data generator from a ``{simulator, observation}`` config section."""
     simulator = instantiate(section.simulator.model, _convert_="all")
     observation = instantiate(section.observation, _convert_="all", types=list(simulator.types))
@@ -60,14 +71,14 @@ def _generator(cfg: DictConfig, section: DictConfig) -> DataGenerator:
         observation=observation,
         design=instantiate(cfg.design, _convert_="all"),
         summary=instantiate(cfg.summary, _convert_="all"),
-        seed=int(cfg.seed),
+        seed=seed,
         workers=int(cfg.workers),
     )
 
 
 def build_components(cfg: DictConfig) -> Components:
     """Instantiate the inference model, its data generator and the sbi method."""
-    generator = _generator(cfg, cfg)
+    generator = _generator(cfg, cfg, int(cfg.seed))
     method = instantiate(cfg.inference.method, _convert_="all", device=cfg.device, seed=cfg.seed)
     return Components(generator.simulator, generator, method)
 
@@ -76,9 +87,10 @@ def build_data_generator(cfg: DictConfig, model: DataGenerator) -> DataGenerator
     """Instantiate the data-generating model and check it is comparable with ``model``.
 
     Data and inference model must share the time unit and the measured labels; the
-    number of *true* types, transitions, founders and parameters may differ.
+    number of *true* types, transitions, founders and parameters may differ. The data
+    generator draws from :func:`data_seed`, the inference generator from ``seed``.
     """
-    data = _generator(cfg, cfg.data)
+    data = _generator(cfg, cfg.data, data_seed(cfg))
     if data.simulator.time_unit != model.simulator.time_unit:
         raise ValueError(
             f"Data model counts time in {data.simulator.time_unit}, inference model in "
@@ -105,10 +117,10 @@ def reference_parameters(cfg: DictConfig, simulator: BranchingSimulator) -> np.n
     ``truth.source=reference`` merges ``data.law.reference``, ``data.simulator.reference``
     (entries for types the law lacks are ignored) and ``truth.values``, later winning;
     fixed values of the data law fill in automatically. ``truth.source=prior`` draws
-    one sample from the data model's prior.
+    one sample from the data model's prior, seeded by :func:`data_seed`.
     """
     if cfg.truth.source == "prior":
-        seed_torch(seed_for(cfg.seed, "truth"))
+        seed_torch(seed_for(data_seed(cfg), "truth"))
         return simulator.decode(simulator.prior().sample((1,)).numpy()[0])
     if cfg.truth.source != "reference":
         raise ValueError("truth.source must be 'reference' or 'prior'")
@@ -147,7 +159,8 @@ def run_experiment(cfg: DictConfig, out: str | Path) -> dict:
 
     # 1. Reference ("observed") dataset from the data model.
     truth = reference_parameters(cfg, data_gen.simulator)
-    reference = data_gen.dataset(truth, "reference")
+    detection: list[dict] = []
+    reference = data_gen.dataset(truth, "reference", stats=detection)
     if reference is None:
         raise RuntimeError("Reference parameters exceed simulation limits; adjust truth/limits")
     x_obs = gen.summarize(reference)
@@ -160,6 +173,7 @@ def run_experiment(cfg: DictConfig, out: str | Path) -> dict:
         **{f"counts_h{c.horizon:g}": c.counts for c in reference},
     )
     LOG.info("Reference clones: %s", {c.horizon: c.counts.sum(0).tolist() for c in reference})
+    LOG.info("Reference detection: %s", detection)
     if not well_specified:
         LOG.info("Misspecified: data %s/%s, inference %s/%s", cfg.data.simulator.name,
                  cfg.data.law.name, cfg.simulator.name, cfg.law.name)  # fmt: skip
@@ -219,6 +233,8 @@ def run_experiment(cfg: DictConfig, out: str | Path) -> dict:
         "data_simulator": cfg.data.simulator.name,
         "data_law": cfg.data.law.name,
         "well_specified": well_specified,
+        "seed": int(cfg.seed),
+        "data_seed": data_seed(cfg),
         "inference": cfg.inference.name,
         "rounds": comp.method.rounds,
         "simulations": int(cfg.budget.simulations),
@@ -227,6 +243,7 @@ def run_experiment(cfg: DictConfig, out: str | Path) -> dict:
             "horizons": list(gen.design.horizons),
             "clones": list(gen.design.clones),
         },
+        "reference_detection": detection,
         "n_free_parameters": int(sim.theta_dim),
         "x_dim": int(fitted.feature_mask.sum()),
         "training": fitted.history,

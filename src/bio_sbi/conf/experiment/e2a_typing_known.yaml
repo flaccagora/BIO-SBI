@@ -1,0 +1,31 @@
+# @package _global_
+# E2a: symmetric A <-> B mis-typing at rate e, KNOWN to the inference model (data and
+# inference both use the noisy assay with the same e): information loss only.
+#   bio-sbi -m +experiment=e2a_typing_known hydra.sweep.dir=results/e2/known
+# 6 e x 2 simulators x 5 seeds = 60 runs.
+defaults:
+  - override /law: reversible_ab
+  - override /design: real_like
+  - override /budget: dev
+  - override /observation: noisy
+observation:
+  capture: 1.0
+  confusion: 0.05
+data:
+  observation:        # the data assay follows the inference assay
+    capture: ${observation.capture}
+    confusion: ${observation.confusion}
+info:
+  title: "E2a: known mis-typing between A and B"
+  question: |
+    How much information is lost when a fraction e in {0, .02, .05, .1, .15, .2} of
+    cells is labelled with the other type, and the error rate is known and modelled?
+  notes: |
+    Compare with E2b (same data, error ignored by inference) at equal e. Asymmetric
+    version: 'observation.confusion={A: {A: 0.95, B: 0.05}, B: {A: 0.15, B: 0.85}}'.
+hydra:
+  sweeper:
+    params:
+      simulator: galton_watson,bellman_harris
+      observation.confusion: 0,0.02,0.05,0.1,0.15,0.2
+      seed: 0,1,2,3,4

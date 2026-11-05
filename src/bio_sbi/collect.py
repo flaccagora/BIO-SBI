@@ -38,6 +38,8 @@ def collect(root: str | Path) -> tuple[pd.DataFrame, pd.DataFrame]:
             "data_simulator": m.get("data_simulator", m["simulator"]),
             "data_law": m.get("data_law", m["law"]),
             "well_specified": m.get("well_specified", True),
+            "seed": m.get("seed"),
+            "data_seed": m.get("data_seed", m.get("seed")),
             "inference": m["inference"],
             "n_free_parameters": m.get("n_free_parameters"),
             "rounds": m["rounds"],
@@ -52,6 +54,10 @@ def collect(root: str | Path) -> tuple[pd.DataFrame, pd.DataFrame]:
             "simulation_seconds": sum(r["simulation_seconds"] for r in m["training"]),
             "total_seconds": m["total_seconds"],
         }
+        for d in m.get("reference_detection", []):  # observed-organoid fraction per horizon
+            for key in ("seeded", "detection_rate", "detection_probability"):
+                if d.get(key) is not None:
+                    row[f"{key}_h{d['horizon']:g}"] = d[key]
         ppc = m.get("ppc")
         if ppc:
             row["ppc_fraction_outside_95"] = ppc["fraction_outside_95"]

@@ -62,26 +62,42 @@ BH cost is still to be measured (P0).
 ## P. Prerequisites (code changes, before the experiments that need them)
 
 - [ ] **P0 – BH timing**: `budget=smoke` and `budget=dev` with `simulator=bellman_harris`
-      at the real-like design. Record the seconds per run here.
-- [ ] **P1 – separate seeds**: add `data_seed` (default `${seed}`). It would seed the truth
-      draw and the reference dataset (`pipeline.py`, keys `"truth"` and `"ref"`), while
-      `seed` keeps seeding training, sampling and SBC. Needed for "seed of inference vs
-      seed of dataset". Test: same `data_seed` with different `seed` gives an
-      identical `reference.npz`.
-- [ ] **P2 – observed-organoid fraction**: record `detection_rate = recovered clones /
-      seeded clones` per horizon in `metrics.json` (the rejection loop in `simulate.py`
-      already counts attempts). For GW, also expose the exact `s_G` from the
-      detection recursion. Needed for 1b.
-- [ ] **P3 – new configs**:
-  - `observation/three_split.yaml`: three true types read through two markers, with
-    the hidden C labelled A with probability `q` and B with `1 - q` (for 2c).
-  - `law/three_type_traj.yaml`: the three-type law constrained by trajectory inference
-    (C → B only: `C.to_A = 0`, C divisions producing A fixed to 0). The exact
-    constraints depend on Q1.
-  - `experiment/<name>.yaml` presets for each sweep below.
-- [ ] **P4 – generic summariser**: generalise `scripts/summarize_b_row.py` into
-      `scripts/summarize.py <results/exp> --params ...`, which averages over seeds and
-      groups by the sweep keys.
+      at the real-like design. Record the seconds per run here. **Not run yet** (machine
+      busy); when it is idle, run one job at a time and read `total_seconds`,
+      `training[*].simulation_seconds` and `training[*].training_seconds` from each
+      `metrics.json` (or `uv run bio-sbi-collect results/p0_bh_timing`):
+      ```bash
+      uv run bio-sbi simulator=bellman_harris law=reversible_ab design=real_like \
+          budget=smoke hydra.run.dir=results/p0_bh_timing/smoke
+      uv run bio-sbi simulator=bellman_harris law=reversible_ab design=real_like \
+          budget=dev hydra.run.dir=results/p0_bh_timing/dev
+      # GW reference point at the same design and budget
+      uv run bio-sbi simulator=galton_watson law=reversible_ab design=real_like \
+          budget=dev hydra.run.dir=results/p0_bh_timing/gw_dev
+      ```
+      (`workers=4 torch_threads=4` are the defaults; note them with the timings.)
+- [x] **P1 – separate seeds**: `data_seed` (default `${seed}`) seeds the truth draw
+      (`"truth"`) and the reference dataset (data generator, `"reference"`); `seed` keeps
+      training simulations, training, posterior sampling (`"ref"`), prior samples
+      (`"prior-reference"`), PPC and SBC. Default reproduces earlier reference data
+      bit for bit (regression test); `metrics.json` records both seeds.
+- [x] **P2 – observed-organoid fraction**: `metrics.json` → `reference_detection` per
+      horizon: `seeded`, `detected`, `detection_rate` (rejection loop, e.g. BH) and the
+      exact `detection_probability` = 1 − P(no captured cell) for GW. Collected as
+      `detection_rate_h<h>` / `detection_probability_h<h>`; training sims unaffected.
+- [x] **P3 – new configs**: `observation/three_split.yaml` (top-level `q`),
+      `law/three_type_traj.yaml` (C.to_A and C divisions with an A daughter fixed to 0;
+      A and B rows free — assumption pending Q1), `design/real_like.yaml` (days 6/10,
+      165/101 clones, GW generations or BH hours), and presets `e1a_founder_type`,
+      `e1a_founder_number`, `e1b_death_detection`, `e1c_fixed_death`,
+      `e2a_typing_known`, `e2b_typing_ignored`, `e2c_third_type`, `e3a_lifetime_free`,
+      `e3a_lifetime_fixed`, `e3b_desync`, `e3c_persist`, `e4_design`, `x2_seeds`
+      (commands and run counts in each file's header; every grid point composes and
+      builds, tested).
+- [x] **P4 – generic summariser**: `scripts/summarize.py <results/exp> [--params ...]
+      [--group-by ...]` groups by sweep folder + varying overrides, averages over seeds,
+      writes `summary_groups.csv` and `summary_group_parameters.csv` (mean, sd, error,
+      contraction, coverage, `recovered`, SBC, PPC, detection).
 
 ---
 

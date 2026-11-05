@@ -1,0 +1,37 @@
+# @package _global_
+# E1a (founder number): clones in the data start from 1, 2 or 3 cells (all A);
+# inference assumes single-cell seeding (law.founder_sizes=[1], wrong for p1 < 1) or
+# infers the founder_size row (law.founder_sizes=[1,2,3]). Both arms in one sweep:
+#   bio-sbi -m +experiment=e1a_founder_number hydra.sweep.dir=results/e1a/founder_number
+# 3 p1 x 2 inference arms x 2 simulators x 5 seeds = 60 runs.
+defaults:
+  - override /law: reversible_ab
+  - override /design: real_like
+  - override /budget: dev
+data:
+  law:
+    name: reversible_ab_multi_founder
+    founder_sizes: [1, 2, 3]
+    reference:
+      founder_size: {1: 0.85, 2: 0.12, 3: 0.03}   # int keys: Hydra overrides cannot quote them
+law:
+  concentration:
+    founder_size: {1: 8.0}   # prior belief: single-cell seeding is common (as multi_founder)
+info:
+  title: "E1a: wrong number of founder cells (organoid death)"
+  question: |
+    How stable is inference of the A and B rows when clones in the data start from
+    1, 2 or 3 A cells (P(1 cell) = p1 in {1.0, 0.85, 0.6}) but inference assumes one
+    founder cell? Compare with inference of the founder_size row (law.founder_sizes=[1,2,3]).
+  notes: |
+    Data law = reversible_ab dynamics with founder_sizes [1, 2, 3] (founders always A).
+    With law.founder_sizes=[1] the inference prior has no founder_size parameter; with
+    [1,2,3] it has a Dirichlet(8, 1, 1) prior. p1 = 1.0 is the well-specified control.
+    Output: bias of each A/B parameter vs p1, PPC, recovery of founder_size.1.
+hydra:
+  sweeper:
+    params:
+      simulator: galton_watson,bellman_harris
+      data.law.reference.founder_size: "{1:1.0,2:0.0,3:0.0},{1:0.85,2:0.12,3:0.03},{1:0.6,2:0.3,3:0.1}"
+      law.founder_sizes: "[1],[1,2,3]"
+      seed: 0,1,2,3,4

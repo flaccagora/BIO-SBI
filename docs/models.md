@@ -75,6 +75,12 @@ This draws exactly from the captured counts given detection, at a cost proportio
 the size of the observed tree. The founder mixture among recovered clones is therefore
 reweighted by detectability, and generally differs from `founder` and `founder_size`.
 
+**Detection probability.** A seeded clone is recovered with probability
+`sum_n P(N = n)(1 - (1 - q)^n)` (`GaltonWatson.detection_probability`). This is the
+exact *observed-organoid fraction*, reported per horizon for the reference dataset as
+`reference_detection[*].detection_probability` in `metrics.json`. The exact sampler
+never simulates undetected clones, so it has no empirical `detection_rate`.
+
 ## Bellman-Harris (`simulator=bellman_harris`)
 
 This is an age-dependent process. A type-`k` cell born at time `t` lives
@@ -89,7 +95,9 @@ alive at the horizon `T`. All founders are born at `t = 0`.
 * `shape → ∞`: deterministic lifetimes, which reduce to Galton-Watson with generation
   time `mean` (checked in the tests).
 * Clones under `selection: detected` are recovered by forward simulation plus rejection
-  (`observation.max_attempts_per_clone`).
+  (`observation.max_attempts_per_clone`). For the reference dataset the rejection loop
+  reports `seeded` (clones simulated), `detected` (those with >= 1 detected cell) and
+  `detection_rate = detected / seeded`, an estimate of the observed-organoid fraction.
 
 ## Observation model
 
@@ -98,6 +106,8 @@ The order of operations is biology, then capture `Binomial(n_k, capture[k])` per
 labels, then selection. `confusion` is `true types × labels`, so it may be rectangular:
 three true types read through two markers is a `3 × 2` matrix. An undetected endpoint
 cell is not a death, and an undetected clone is not an extinct clone.
+`observation=three_split` is such a matrix with a hidden C read as A with probability
+`q` and as B with `1 - q`.
 
 ## Data model vs inference model
 
@@ -105,6 +115,12 @@ cell is not a death, and an undetected clone is not an extinct clone.
 `simulator`, `law` and `observation` define the prior, the training simulations and
 calibration. The two must share the time unit and the label set. Everything else
 (number of true types, transitions, founders, fixed values, assay) may differ.
+
+The two sides also have separate root seeds: `data_seed` (default `seed`) drives the
+truth draw and the reference dataset (stream keys `"truth"` and `"reference"`); `seed`
+drives everything on the inference side (`"round-<r>"` training simulations, network
+training, `"ref"` posterior sampling, `"prior-reference"` prior samples for
+contraction, `"ppc"`, `"sbc-theta"`/`"sbc"`, and `"measured"` in `bio-sbi-infer`).
 
 * **Recovery** compares posterior and truth by parameter name. A name missing from
   the data model has `truth = NaN` and is not scored. Names that match can still

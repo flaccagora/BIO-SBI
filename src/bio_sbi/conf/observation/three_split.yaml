@@ -1,0 +1,16 @@
+# Two markers reading three true types: the hidden type C is labelled A with probability
+# q and B with probability 1 - q (q = 0: C read as B, as in three_as_two; q = 1: C read
+# as A). Every cell is detected; only clones with >= 1 detected cell are recorded.
+# Data side:       observation@data.observation=three_split data.observation.q=0.5
+# Inference side:  observation=three_split observation.q=0.5   (split assumed known)
+_target_: bio_sbi.observation.ObservationModel
+q: 0.5                         # P(a C cell is labelled A); 1 - q = P(labelled B)
+labels: [A, B]
+capture: null
+confusion:
+  A: {A: 1.0}
+  B: {B: 1.0}
+  C: {A: '${...q}', B: '${complement:${...q}}'}
+selection: detected
+exact_detection: true
+max_attempts_per_clone: 1000

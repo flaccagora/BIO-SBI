@@ -1,0 +1,23 @@
+# @package _global_
+# E3b: desynchronisation. The data use Gamma lifetimes with shape k (CV = 1/sqrt(k)),
+# k in {1, 2, 4, 8, 32} or per type; inference keeps the default shape 8.
+#   bio-sbi -m +experiment=e3b_desync hydra.sweep.dir=results/e3b
+# 7 shapes x 5 seeds = 35 runs.
+defaults:
+  - override /simulator: bellman_harris
+  - override /law: reversible_ab
+  - override /design: real_like
+  - override /budget: dev
+info:
+  title: "E3b: desynchronisation (lifetime CV) misspecified"
+  question: |
+    How biased are the outcome probabilities and lifetimes when the data lifetime
+    shape (1, 2, 4, 8, 32, or per type {A: 4, B: 16} / {A: 16, B: 4}; CV 1 -> 0.18)
+    differs from the shape 8 assumed by inference? Does the PPC flag it?
+  notes: |
+    Shape 8 is the well-specified control.
+hydra:
+  sweeper:
+    params:
+      data.simulator.model.lifetime_shape: "1,2,4,8,32,{A:4,B:16},{A:16,B:4}"
+      seed: 0,1,2,3,4
