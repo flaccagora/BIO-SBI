@@ -100,9 +100,15 @@ Status: 30/30 runs done; direct checks done.
 Remaining:
 - [ ] Sequential NPE (`inference.method.rounds=4`) with `law=two_type` at 20k
       simulations: if it recovers `B.to_A`, the failure was training coverage; if not,
-      the data do not determine it.
+      the data do not determine it. **Running** (`results/b_row/two_type_snpe/`).
+      Seed 0: `B.to_A` = 0.19 ± 0.14, same as amortised. Caveat: later rounds sample
+      from the round-0 posterior, which is already prior-like for `B.to_A`, so SNPE
+      alone cannot settle coverage vs identifiability.
 - [ ] `two_type` with an informative prior on B (`law.concentration`) or with
       `truth.source=prior`, to separate "prior tail" from "non-identifiable".
+      **Running** as `+experiment=b_row_flat_prior` (`B.to_A` prior uniform on [0, 1]:
+      concentration 1 for `to_A`, 0.2 for the other B outcomes) →
+      `results/b_row/two_type_flat_to_A/`.
 - [ ] Finish `results/b_row/info.md` with the 50k results and a conclusion.
 
 ---
@@ -251,6 +257,10 @@ for each parameter?
   C2ST predicts the signal appears around 512 clones)?
 - Deliverable: a table *"to estimate X to ±0.05 you need N organoids at days D"* for
   experiment planning.
+- **Running first slice** (`+experiment=design_comparison`, `results/design_comparison/`):
+  `design ∈ {single_128 ([12]×128), three_128 ([4,8,12]×128), single_384 ([12]×384)}`
+  × `law ∈ {two_type, reversible_ab}` × 5 seeds, NPE 20k. `single_384` matches
+  `three_128`'s total clones, separating time points from clone count.
 
 ---
 
