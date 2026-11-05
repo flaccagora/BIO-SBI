@@ -174,9 +174,11 @@ def run_experiment(cfg: DictConfig, out: str | Path) -> dict:
             kept.append((theta, x))
         return x
 
+    # `prior` (CPU) is used for NumPy-side draws; the trainer gets a prior on its device.
     fitted = comp.method.fit(
-        prior, simulate, int(cfg.budget.simulations), x_obs, log_dir=out / "tensorboard"
-    )
+        sim.prior(cfg.device), simulate, int(cfg.budget.simulations), x_obs,
+        log_dir=out / "tensorboard",
+    )  # fmt: skip
     fitted.save(out / "posterior.pt")
     if kept:
         np.savez_compressed(
