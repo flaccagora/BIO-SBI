@@ -53,7 +53,7 @@ class FittedPosterior:
         return torch.as_tensor(x, device=getattr(self, "device", "cpu"))
 
     #: Wall-clock cap (s) on NPE rejection sampling; see :meth:`sample`.
-    max_sampling_time: float = 300.0
+    max_sampling_time: float = 60.0
 
     def _is_direct(self) -> bool:
         from sbi.inference.posteriors import DirectPosterior
@@ -74,7 +74,7 @@ class FittedPosterior:
         options = {"show_progress_bars": False}
         if self._is_direct():
             options.update(
-                max_sampling_time=getattr(self, "max_sampling_time", 300.0),
+                max_sampling_time=getattr(self, "max_sampling_time", 60.0),
                 return_partial_on_timeout=True,
             )
         try:
