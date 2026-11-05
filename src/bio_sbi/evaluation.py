@@ -101,7 +101,7 @@ def calibration(
     from sbi.diagnostics import run_sbc
 
     valid = np.all(np.isfinite(x), axis=1)
-    theta_t = torch.as_tensor(theta[valid], dtype=torch.float32)
+    theta_t = torch.as_tensor(theta[valid], dtype=torch.float32, device=fitted.device)
     x_t = fitted.condition(x[valid])
     seed_torch(seed_for(seed, "sbc"))
     ranks, _ = run_sbc(

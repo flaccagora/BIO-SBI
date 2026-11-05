@@ -1,0 +1,30 @@
+# @package _global_
+# CPU vs GPU, training batch 128 vs 512, on one fixed configuration.
+#   bio-sbi -m +experiment=device_benchmark                              (amortised NPE)
+#   bio-sbi -m +experiment=device_benchmark inference.method.rounds=4    (sequential NPE)
+defaults:
+  - override /budget: dev
+  - override /law: two_type
+seed: 0
+torch_threads: 4
+workers: 4
+budget:
+  simulations: 20000
+  sbc_cases: 200
+  ppc_samples: 200
+info:
+  title: "Device and batch-size benchmark"
+  question: |
+    Training is 88-97% of run time. Does training on the GPU (RTX A1000, torch
+    2.14.1+cu126) and/or a larger training batch (512 instead of 128) make runs faster
+    without degrading the posterior? Same config, seed and reference data in every job
+    (two_type law, default design 3 x 32 clones, 20k simulations, NPE); compare wall
+    time, training time, epochs, recovery error/contraction and SBC calibration.
+  notes: |
+    Runs share the machine with other sweeps; timings are comparable within this
+    sweep (run sequentially under similar load), not with runs from other sweeps.
+hydra:
+  sweeper:
+    params:
+      device: cpu,cuda
+      inference.method.training.training_batch_size: 128,512

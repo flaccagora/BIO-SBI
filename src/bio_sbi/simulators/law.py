@@ -209,7 +209,15 @@ class ParameterSpace:
 
     # ------------------------------------------------------------------ prior
     def prior(self, device: str = "cpu") -> torch.distributions.Distribution:
-        """Product prior over ``theta``: stick Betas times (log-)uniform scalars."""
+        """Product prior over ``theta``: stick Betas times (log-)uniform scalars.
+
+        Returned as a :class:`MovablePrior`, so sbi can move trained posteriors between
+        devices (e.g. train on a GPU, sample on a CPU-only machine).
+        """
+        return MovablePrior(self._build_prior, device)
+
+    def _build_prior(self, device: str = "cpu") -> torch.distributions.Distribution:
+        """Build the underlying torch distribution on ``device``."""
         a, b = [], []
         for r in self.rows:
             tail = np.cumsum(r.alpha[::-1])[::-1]
@@ -325,6 +333,53 @@ class ParameterSpace:
         if np.any(p[start:] <= 0):
             raise ValueError("Scalar parameters must be positive")
         return p
+
+
+class MovablePrior(torch.distributions.Distribution):
+    """Torch distribution wrapper with ``.to(device)``, as sbi's ``posterior.to`` expects.
+
+    Delegates sampling, density, support and moments to a distribution rebuilt by
+    ``build(device)``; ``build`` must be picklable (e.g. a bound method).
+    """
+
+    arg_constraints: dict = {}
+
+    def __init__(self, build, device: str = "cpu") -> None:
+        self._build = build
+        self.base = build(device)
+        super().__init__(
+            batch_shape=self.base.batch_shape,
+            event_shape=self.base.event_shape,
+            validate_args=False,
+        )
+
+    @property
+    def support(self):
+        """Support of the underlying distribution."""
+        return self.base.support
+
+    @property
+    def mean(self) -> torch.Tensor:
+        """Mean of the underlying distribution."""
+        return self.base.mean
+
+    @property
+    def variance(self) -> torch.Tensor:
+        """Variance of the underlying distribution."""
+        return self.base.variance
+
+    def sample(self, sample_shape=()) -> torch.Tensor:
+        """Draw samples."""
+        return self.base.sample(sample_shape)
+
+    def log_prob(self, value: torch.Tensor) -> torch.Tensor:
+        """Log density."""
+        return self.base.log_prob(value)
+
+    def to(self, device) -> MovablePrior:
+        """Rebuild the distribution on ``device``."""
+        self.base = self._build(str(device))
+        return self
 
 
 # ---------------------------------------------------------------------- the law

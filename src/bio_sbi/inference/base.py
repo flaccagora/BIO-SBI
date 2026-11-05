@@ -37,6 +37,7 @@ class FittedPosterior:
         method: Name of the inference method.
         amortized: ``True`` if trained on prior simulations only (valid for any ``x``).
         history: Per-round training diagnostics.
+        device: Torch device the posterior lives on (``"cpu"`` or ``"cuda"``).
     """
 
     posterior: Any
@@ -44,11 +45,12 @@ class FittedPosterior:
     method: str
     amortized: bool
     history: list[dict] = field(default_factory=list)
+    device: str = "cpu"
 
     def condition(self, x: np.ndarray) -> torch.Tensor:
         """Apply the feature mask and convert a summary vector (or batch) to a tensor."""
         x = np.atleast_2d(np.asarray(x, dtype=np.float32))[:, self.feature_mask]
-        return torch.as_tensor(x)
+        return torch.as_tensor(x, device=getattr(self, "device", "cpu"))
 
     def sample(self, x: np.ndarray, n: int, seed: int = 0) -> np.ndarray:
         """Draw ``n`` posterior samples of ``theta`` given one summary vector ``x``."""
@@ -61,7 +63,8 @@ class FittedPosterior:
         """Posterior log-density (normalised for NPE; unnormalised for NLE/NRE)."""
         with torch.no_grad():
             values = self.posterior.log_prob(
-                torch.as_tensor(theta, dtype=torch.float32), x=self.condition(x)
+                torch.as_tensor(theta, dtype=torch.float32, device=getattr(self, "device", "cpu")),
+                x=self.condition(x),
             )
         return values.cpu().numpy()
 
@@ -71,8 +74,21 @@ class FittedPosterior:
 
     @staticmethod
     def load(path: str | Path) -> FittedPosterior:
-        """Load a posterior written by :meth:`save` (uses pickle: trusted files only)."""
-        return torch.load(path, weights_only=False, map_location="cpu")
+        """Load a posterior written by :meth:`save` onto the CPU (pickle: trusted files only).
+
+        Posteriors trained on a GPU are moved to the CPU, so they can be used on machines
+        without one; call ``fitted.to("cuda")`` to move them back.
+        """
+        fitted = torch.load(path, weights_only=False, map_location="cpu")
+        if getattr(fitted, "device", "cpu") != "cpu":
+            fitted.to("cpu")
+        return fitted
+
+    def to(self, device: str) -> FittedPosterior:
+        """Move the posterior (estimator, prior, default ``x``) to ``device``."""
+        self.posterior.to(device)
+        self.device = str(device)
+        return self
 
 
 class InferenceMethod(ABC):
@@ -147,7 +163,7 @@ class InferenceMethod(ABC):
         """Train the estimator, simulating each round's parameters on the fly.
 
         Args:
-            prior: Prior over ``theta``.
+            prior: Prior over ``theta``, on the training device (``self.device``).
             simulate: Callback returning summaries for a ``(N, d)`` theta batch.
             simulations: Total simulation budget across all rounds.
             x_observed: Reference summary; required for sequential rounds.
@@ -181,8 +197,8 @@ class InferenceMethod(ABC):
                 mask = x[valid].std(0) > 1e-8
             self.append(
                 trainer,
-                torch.as_tensor(theta[valid], dtype=torch.float32),
-                torch.as_tensor(x[valid][:, mask]),
+                torch.as_tensor(theta[valid], dtype=torch.float32, device=self.device),
+                torch.as_tensor(x[valid][:, mask], device=self.device),
                 proposal,
             )
             seed_torch(seed_for(self.seed, "train", r))
@@ -202,8 +218,12 @@ class InferenceMethod(ABC):
                 }
             )
             if r + 1 < self.rounds:
-                x_o = torch.as_tensor(np.asarray(x_observed, np.float32)[None, mask])
+                x_o = torch.as_tensor(
+                    np.asarray(x_observed, np.float32)[None, mask], device=self.device
+                )
                 proposal = posterior.set_default_x(x_o)
         if writer is not None:
             writer.close()
-        return FittedPosterior(posterior, mask, self.name, self.rounds == 1, history)
+        return FittedPosterior(
+            posterior, mask, self.name, self.rounds == 1, history, str(self.device)
+        )
