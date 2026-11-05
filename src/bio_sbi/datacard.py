@@ -51,6 +51,15 @@ def _fmt(value) -> str:
     return str(value)
 
 
+def _field(key: str, value, defaults: dict) -> str:
+    """Format one data-model field; spell out what a null or scalar setting means."""
+    if value is None:
+        return defaults.get(key, "default")
+    if key == "capture" and isinstance(value, (int, float)):
+        return f"{value:g} for every type"
+    return _fmt(value)
+
+
 def job_record(job: Path) -> dict:
     """Data-side description of one run (from its saved config and reference data)."""
     cfg = OmegaConf.load(job / ".hydra" / "config.yaml")
@@ -93,9 +102,7 @@ def job_record(job: Path) -> dict:
     }
     return {
         "job": job,
-        "fields": {
-            k: defaults.get(k, "default") if v is None else _fmt(v) for k, v in fields.items()
-        },  # fmt: skip
+        "fields": {k: _field(k, v, defaults) for k, v in fields.items()},
         "truth": truth,
         "data_seed": int(data_seed if data_seed is not None else _value(cfg, "seed", 0)),
         "dataset": digest.hexdigest()[:12],
@@ -223,5 +230,6 @@ def write_data_section(root: str | Path) -> Path:
     root = Path(root)
     path = root / "info.md"
     text = path.read_text() if path.exists() else f"# {root.name}\n"
-    path.write_text(upsert_section(text, describe_data(root)))
+    text = upsert_section(text, describe_data(root))
+    path.write_text(text if text.endswith("\n") else text + "\n")
     return path
