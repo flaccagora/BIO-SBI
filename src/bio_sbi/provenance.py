@@ -27,8 +27,24 @@ def _git(*args: str) -> str | None:
     return result.stdout.strip() if result.returncode == 0 else None
 
 
+def _git_state() -> tuple[str | None, bool | None]:
+    status = _git("status", "--porcelain")
+    return _git("rev-parse", "HEAD"), (bool(status) if status is not None else None)
+
+
+#: Git state when this module was imported, i.e. the code a (multirun) process executes.
+#: A multirun keeps its imported code even if commits happen while it runs, so the HEAD
+#: at run time can differ from the code that ran.
+_LOADED_COMMIT, _LOADED_DIRTY = _git_state()
+
+
 def manifest() -> dict:
-    """Collect environment metadata as a JSON-serialisable dict."""
+    """Collect environment metadata as a JSON-serialisable dict.
+
+    ``git_commit``/``git_dirty`` describe the code loaded by this process;
+    ``git_commit_at_run`` is the repository HEAD when the run started (they differ if
+    commits were made while a long multirun was executing).
+    """
     import torch
 
     versions = {}
@@ -37,13 +53,14 @@ def manifest() -> dict:
             versions[name] = importlib.metadata.version(name)
         except importlib.metadata.PackageNotFoundError:
             versions[name] = None
-    status = _git("status", "--porcelain")
+    head, _ = _git_state()
     return {
         "python": platform.python_version(),
         "platform": platform.platform(),
         "packages": versions,
-        "git_commit": _git("rev-parse", "HEAD"),
-        "git_dirty": bool(status) if status is not None else None,
+        "git_commit": _LOADED_COMMIT,
+        "git_dirty": _LOADED_DIRTY,
+        "git_commit_at_run": head,
         "cuda": torch.cuda.is_available(),
         "torch_threads": torch.get_num_threads(),
     }
