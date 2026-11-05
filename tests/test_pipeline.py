@@ -260,3 +260,25 @@ def test_npe_sbc_is_bounded_and_counts_leakage(tmp_path):
     assert time.perf_counter() - start < 60
     assert metrics["cases"] + metrics["excluded_leakage"] + metrics["invalid_cases"] == 4
     assert ranks.shape == (metrics["cases"], comp.simulator.theta_dim)
+
+
+def test_data_section_from_runs(tmp_path):
+    from bio_sbi.datacard import describe_data, upsert_section, write_data_section
+
+    for seed in (0, 1):
+        cfg = config(
+            f"seed={seed}", "budget.sbc_cases=0", "budget.ppc_samples=0", "budget.simulations=64"
+        )
+        out = tmp_path / f"job{seed}"
+        save_hydra_config(cfg, out)
+        run_experiment(cfg, out)
+    text = describe_data(tmp_path)
+    assert "Synthetic data" in text and "2 distinct reference datasets" in text
+    assert "galton_watson" in text and "A | death 0.03" in text
+    (tmp_path / "info.md").write_text("# T\n\n## Question\n\nq\n\n## Results\n\nr\n")
+    write_data_section(tmp_path)
+    body = (tmp_path / "info.md").read_text()
+    assert body.index("## Question") < body.index("## Data") < body.index("## Results")
+    write_data_section(tmp_path)  # idempotent: replaced, not duplicated
+    assert (tmp_path / "info.md").read_text().splitlines().count("## Data") == 1
+    assert upsert_section("# x\n", "## Data\n\nd\n").endswith("## Data\n\nd\n")

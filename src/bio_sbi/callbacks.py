@@ -3,8 +3,10 @@
 :class:`ExperimentInfo` writes ``info.md`` into every multirun (sweep) directory so a
 results folder documents itself: what question the sweep answers (from the ``info``
 block of an experiment preset), the exact command-line overrides, the swept grid, the
-fixed settings that matter, and the code version. Results are appended by the user or
-by analysis scripts afterwards.
+fixed settings that matter, the code version, and a standard **Data** section (synthetic
+data, data model, true parameters, design, data seeds; see :mod:`bio_sbi.datacard`)
+that is filled in from the runs when the multirun ends. Results are appended by the
+user or by analysis scripts afterwards.
 
 Registered in ``conf/config.yaml`` under ``hydra.callbacks``.
 """
@@ -18,6 +20,7 @@ from typing import Any
 from hydra.experimental.callback import Callback
 from omegaconf import DictConfig, OmegaConf
 
+from .datacard import SYNTHETIC, TITLE, write_data_section
 from .provenance import _git
 
 
@@ -93,6 +96,13 @@ def render_info(config: DictConfig) -> str:
     if info.get("notes"):
         lines += ["## Notes", "", str(info.notes).strip(), ""]
     lines += [
+        TITLE,
+        "",
+        SYNTHETIC,
+        "",
+        "_Completed automatically from the runs (`.hydra/config.yaml`, `reference.npz`) when",
+        "the multirun ends; refresh with `uv run python scripts/add_data_section.py <dir>`._",
+        "",
         "## Results",
         "",
         "One directory per job (`metrics.json`, `recovery.csv`, posterior samples, SBC, PPC,",
@@ -103,7 +113,7 @@ def render_info(config: DictConfig) -> str:
 
 
 class ExperimentInfo(Callback):
-    """Write ``<sweep dir>/info.md`` when a multirun starts (never overwrites)."""
+    """Write ``<sweep dir>/info.md`` at multirun start; fill its Data section at the end."""
 
     def on_multirun_start(self, config: DictConfig, **kwargs: Any) -> None:
         """Create the sweep directory and its ``info.md``."""
@@ -112,3 +122,9 @@ class ExperimentInfo(Callback):
         path = sweep_dir / "info.md"
         if not path.exists():
             path.write_text(render_info(config))
+
+    def on_multirun_end(self, config: DictConfig, **kwargs: Any) -> None:
+        """Insert or refresh the Data section from the finished runs."""
+        sweep_dir = Path(config.hydra.sweep.dir)
+        if sweep_dir.exists():
+            write_data_section(sweep_dir)
