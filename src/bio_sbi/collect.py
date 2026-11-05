@@ -58,6 +58,8 @@ def collect(root: str | Path) -> tuple[pd.DataFrame, pd.DataFrame]:
             for key in ("seeded", "detection_rate", "detection_probability"):
                 if d.get(key) is not None:
                     row[f"{key}_h{d['horizon']:g}"] = d[key]
+        row["posterior_support_mass"] = m.get("posterior_support_mass")
+        row["posterior_samples_drawn"] = m.get("posterior_samples_drawn")
         ppc = m.get("ppc")
         if ppc:
             row["ppc_fraction_outside_95"] = ppc["fraction_outside_95"]

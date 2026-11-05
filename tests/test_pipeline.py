@@ -219,3 +219,23 @@ def test_reference_detection_in_metrics(tmp_path):
         assert 0 < d["detection_rate"] <= 1 and d["detection_probability"] is None
     runs, _ = collect(tmp_path)
     assert "detection_rate_h80" in runs.columns and runs["data_seed"].iloc[0] == 0
+
+
+def test_npe_sampling_is_bounded_when_posterior_leaves_the_prior(tmp_path):
+    """A wildly out-of-distribution x must not make NPE rejection sampling hang."""
+    import time
+
+    from bio_sbi.inference import FittedPosterior
+
+    cfg = config("budget.sbc_cases=0", "budget.ppc_samples=0")
+    metrics = run_experiment(cfg, tmp_path)
+    assert 0.0 <= metrics["posterior_support_mass"] <= 1.0
+    assert metrics["posterior_samples_drawn"] == 40
+    fitted = FittedPosterior.load(tmp_path / "posterior.pt")
+    fitted.max_sampling_time = 1.0
+    x = np.load(tmp_path / "reference.npz")["x"] * 1e4  # far outside the training data
+    start = time.perf_counter()
+    draws = fitted.sample(x, 100_000, seed=0)
+    assert time.perf_counter() - start < 30
+    assert len(draws) <= 100_000
+    assert 0.0 <= fitted.support_mass(x, n=2000) <= 1.0

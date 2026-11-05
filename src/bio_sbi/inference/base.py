@@ -52,12 +52,66 @@ class FittedPosterior:
         x = np.atleast_2d(np.asarray(x, dtype=np.float32))[:, self.feature_mask]
         return torch.as_tensor(x, device=getattr(self, "device", "cpu"))
 
+    #: Wall-clock cap (s) on NPE rejection sampling; see :meth:`sample`.
+    max_sampling_time: float = 300.0
+
+    def _is_direct(self) -> bool:
+        from sbi.inference.posteriors import DirectPosterior
+
+        return isinstance(self.posterior, DirectPosterior)
+
     def sample(self, x: np.ndarray, n: int, seed: int = 0) -> np.ndarray:
-        """Draw ``n`` posterior samples of ``theta`` given one summary vector ``x``."""
+        """Draw up to ``n`` posterior samples of ``theta`` given one summary vector ``x``.
+
+        For NPE, sbi draws from the flow and rejects samples outside the prior's support.
+        If the flow puts almost all its mass outside the support (typically when ``x``
+        is far from anything the model can produce, i.e. under misspecification), this
+        never finishes. Sampling is therefore capped at :attr:`max_sampling_time`
+        seconds and returns the samples accepted so far (possibly fewer than ``n``, or
+        none), with a warning. Use :meth:`support_mass` to quantify the problem.
+        """
+        seed_torch(seed)
+        options = {"show_progress_bars": False}
+        if self._is_direct():
+            options.update(
+                max_sampling_time=getattr(self, "max_sampling_time", 300.0),
+                return_partial_on_timeout=True,
+            )
+        try:
+            with torch.no_grad():
+                samples = self.posterior.sample((n,), x=self.condition(x), **options)
+        except RuntimeError as error:  # sbi raises when the cap is hit with 0 accepted
+            if "max_sampling_time" not in str(error):
+                raise
+            samples = torch.empty((0, self.posterior.prior.event_shape[0]))
+        if len(samples) < n:
+            import warnings
+
+            warnings.warn(
+                f"Only {len(samples)}/{n} posterior samples inside the prior support were "
+                "drawn before the time limit: the posterior mass lies mostly outside the "
+                "prior (see support_mass); results for this x are unreliable.",
+                stacklevel=2,
+            )
+        return samples.cpu().numpy()
+
+    def support_mass(self, x: np.ndarray, n: int = 10_000, seed: int = 0) -> float | None:
+        """Fraction of the NPE flow's mass at ``x`` that lies inside the prior support.
+
+        Close to 1 normally; close to 0 means the trained network maps ``x`` to
+        parameters the prior (hence the simulator) does not allow, a strong sign that the
+        model cannot explain ``x``. ``None`` for NLE/NRE (their MCMC respects the
+        support by construction).
+        """
+        if not self._is_direct():
+            return None
         seed_torch(seed)
         with torch.no_grad():
-            samples = self.posterior.sample((n,), x=self.condition(x), show_progress_bars=False)
-        return samples.cpu().numpy()
+            draws = self.posterior.sample(
+                (n,), x=self.condition(x), reject_outside_prior=False, show_progress_bars=False
+            )
+            inside = self.posterior.prior.support.check(draws)
+        return float(inside.float().mean())
 
     def log_prob(self, theta: np.ndarray, x: np.ndarray) -> np.ndarray:
         """Posterior log-density (normalised for NPE; unnormalised for NLE/NRE)."""

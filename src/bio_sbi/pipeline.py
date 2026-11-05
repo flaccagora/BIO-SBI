@@ -207,6 +207,13 @@ def run_experiment(cfg: DictConfig, out: str | Path) -> dict:
         x_obs, int(cfg.budget.posterior_samples), seed_for(cfg.seed, "ref")
     )
     sample_seconds = time.perf_counter() - t_sample
+    # Share of the (NPE) posterior inside the prior support at x_obs; ~0 under severe
+    # misspecification, when sampling may return few or no samples (see FittedPosterior).
+    support_mass = fitted.support_mass(x_obs, seed=seed_for(cfg.seed, "support"))
+    n_drawn = len(samples_theta)
+    if n_drawn == 0:
+        LOG.warning("No posterior samples inside the prior support: recovery and PPC are NaN")
+        samples_theta = np.full((2, sim.theta_dim), np.nan)
     samples = sim.decode(samples_theta)
     seed_torch(seed_for(cfg.seed, "prior-reference"))
     prior_samples = sim.decode(prior.sample((4096,)).numpy())
@@ -222,10 +229,11 @@ def run_experiment(cfg: DictConfig, out: str | Path) -> dict:
         out / "posterior_samples.csv.gz", index=False
     )
     shown = [i for i, n in enumerate(sim.parameter_names) if n in free]
-    plots.posterior_marginals(
-        samples[:, shown], prior_samples[:, shown], matched[shown],
-        [sim.parameter_names[i] for i in shown], out / "figures" / "posterior.png",
-    )  # fmt: skip
+    if n_drawn > 0:
+        plots.posterior_marginals(
+            samples[:, shown], prior_samples[:, shown], matched[shown],
+            [sim.parameter_names[i] for i in shown], out / "figures" / "posterior.png",
+        )  # fmt: skip
     scored = [r for r in rows if r["inferred"] and np.isfinite(r["truth"])]
     interior = [r for r in scored if not r["at_boundary"]]  # boundary truths: no coverage
 
@@ -250,6 +258,8 @@ def run_experiment(cfg: DictConfig, out: str | Path) -> dict:
         "x_dim": int(fitted.feature_mask.sum()),
         "training": fitted.history,
         "sampling_seconds": sample_seconds,
+        "posterior_samples_drawn": int(n_drawn),
+        "posterior_support_mass": support_mass,
         "recovery": {
             "scored_parameters": len(scored),
             "mean_abs_error": float(np.mean([r["abs_error"] for r in scored]))
@@ -267,7 +277,7 @@ def run_experiment(cfg: DictConfig, out: str | Path) -> dict:
 
     # 4. Posterior predictive check: does the fitted inference model reproduce x_obs?
     n_ppc = int(cfg.budget.get("ppc_samples", 0))
-    if n_ppc > 0:
+    if n_ppc > 0 and n_drawn > 0:
         ppc, x_pred = posterior_predictive_check(gen, samples_theta[:n_ppc], x_obs, fitted)
         metrics["ppc"] = ppc
         np.savez_compressed(out / "ppc.npz", x_pred=x_pred, x_obs=x_obs)
