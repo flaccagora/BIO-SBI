@@ -1,0 +1,30 @@
+exp,setting,z,par,ppc
+E1a type,0.5,0.9694,A.div_AB,0
+E1a type,0.7,0.686,A.div_AB,0
+E1a type,0.9,0.5376,A.div_AB,0.008333
+E1a number,0.6,0.9486,A.mean_lifetime,0
+E1a number,0.85,0.5333,A.mean_lifetime,0
+E1c,0.03/0,0.7029,A.to_B,0
+E1c,0.03/0.4,1.555,A.div_AB,0.0125
+E1c,0.2/0,1.041,A.mean_lifetime,0.0125
+E1c,0.2/0.1,1.329,A.mean_lifetime,0.03333
+E1c,0.2/0.4,1.938,A.div_BB,0.09583
+E1c,0/0,0.8119,A.to_B,0
+E1c,0/0.1,0.3376,A.div_AB,0
+E1c,0/0.4,1.395,B.to_A,0.01667
+E2b,0.02,0.1838,A.div_AB,0
+E2b,0.05,0.3087,A.div_AB,0.008333
+E2b,0.1,0.4701,A.div_AB,0
+E2b,0.15,0.667,A.div_AB,0
+E2b,0.2,0.8063,A.div_AB,0
+E3b,1,1.927,A.mean_lifetime,0.004167
+E3b,2,1.407,A.mean_lifetime,0
+E3b,32,0.7788,A.mean_lifetime,0
+E3b,4,0.341,A.div_AA,0
+E3b,"{A:16,B:4}",0.2302,A.mean_lifetime,0.004167
+E3b,"{A:4,B:16}",0.403,A.mean_lifetime,0
+E3c,0.03|persist_fixed0,0.6583,A.mean_lifetime,0
+E3c,0.15|persist_fixed0,0.6544,A.div_AA,0
+E3c,0.3|persist_fixed0,0.6873,A.div_AA,0.004167
+E3a,"{B:20,T:15}",0.892,A.persist,0.0125
+E3a,"{B:30,T:18.75}",1.314,A.div_AA,0

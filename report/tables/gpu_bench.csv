@@ -1,0 +1,7 @@
+label,total_seconds,training_seconds,mae_probabilities,mean_contraction,sbc_mean_abs_coverage_error
+"amortised, CPU, batch 128",121.4,104.3,0.1401,0.4921,0.03188
+"amortised, CPU, batch 512",115.3,98.85,0.1402,0.5104,0.02838
+"amortised, GPU, batch 128",294,276.9,0.1368,0.497,0.03312
+"amortised, GPU, batch 512",228.9,210.2,0.1381,0.5212,0.03138
+"sequential (4 rounds), CPU, batch 128",954.5,929.7,0.1348,0.5008,
+"sequential (4 rounds), GPU, batch 128",753.2,732.8,0.1288,0.4554,

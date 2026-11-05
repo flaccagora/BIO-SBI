@@ -114,10 +114,9 @@ Status: 30/30 runs done; direct checks done.
   a ≈ 0.05 is detectable.
 
 Remaining:
-- [ ] Sequential NPE (`inference.method.rounds=4`) with `law=two_type` at 20k
-      simulations: if it recovers `B.to_A`, the failure was training coverage; if not,
-      the data do not determine it. **Running** (`results/b_row/two_type_snpe/`).
-      Seed 0: `B.to_A` = 0.19 ± 0.14, same as amortised. Caveat: later rounds sample
+- [x] Sequential NPE (`inference.method.rounds=4`) with `law=two_type` at 20k
+      simulations (`results/b_row/two_type_snpe/`, 5/5 seeds): `B.to_A` 0.19–0.28,
+      unchanged from amortised (0.18–0.31). Caveat: later rounds sample
       from the round-0 posterior, which is already prior-like for `B.to_A`, so SNPE
       alone cannot settle coverage vs identifiability.
 - [x] `two_type` with a flat prior on `B.to_A` (`+experiment=b_row_flat_prior`,
@@ -126,8 +125,7 @@ Remaining:
       prior tail caused most of the miss, and the 3 × 32-clone data only weakly separate
       switching from division. SBC fails for B's *other* coordinates under this sparse
       prior (`B.to_A` itself is calibrated).
-- [x] `results/b_row/info.md` finished (amortised, flat prior, conclusions);
-      sequential NPE section to be completed (2/5 seeds).
+- [x] `results/b_row/info.md` finished (amortised, sequential, flat prior, conclusions).
 
 ---
 
@@ -275,10 +273,12 @@ for each parameter?
   C2ST predicts the signal appears around 512 clones)?
 - Deliverable: a table *"to estimate X to ±0.05 you need N organoids at days D"* for
   experiment planning.
-- **Running first slice** (`+experiment=design_comparison`, `results/design_comparison/`):
+- **First slice done** (`+experiment=design_comparison`, `results/design_comparison/info.md`):
   `design ∈ {single_128 ([12]×128), three_128 ([4,8,12]×128), single_384 ([12]×384)}`
   × `law ∈ {two_type, reversible_ab}` × 5 seeds, NPE 20k. `single_384` matches
-  `three_128`'s total clones, separating time points from clone count.
+  `three_128`'s total clones, separating time points from clone count. Result: 3
+  endpoints beat 1 at equal total clones (MAE 0.028 vs 0.058, reversible_ab).
+- **E4 BH done** (`results/e4/info.md`); E4 GW running (`results/e4/gw`).
 
 ---
 

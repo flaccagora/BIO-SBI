@@ -1,0 +1,9 @@
+arm,budget,mean,sd,contraction
+B div. fixed,20k,0.7056,0.1255,0.7142
+B div. fixed,50k,0.6969,0.13,0.6906
+B div. fixed,5k,0.7162,0.1348,0.6712
+all free,20k,0.2141,0.1502,-0.129
+all free,50k,0.2198,0.1535,-0.1843
+all free,5k,0.1971,0.143,-0.02503
+"all free, SNPE",4×5k,0.2148,0.1557,-0.223
+"all free, flat prior",20k,0.5274,0.2146,0.4546
