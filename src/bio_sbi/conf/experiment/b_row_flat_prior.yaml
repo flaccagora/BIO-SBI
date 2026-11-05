@@ -1,0 +1,36 @@
+# @package _global_
+# Separates "data cannot identify B.to_A" from "the prior puts ~no mass at the truth":
+# the inference prior on B.to_A is made uniform on [0, 1]; data and truth unchanged.
+#   bio-sbi -m +experiment=b_row_flat_prior
+defaults:
+  - override /budget: dev
+  - override /law: two_type
+law:
+  concentration:          # Dirichlet over B's six outcomes: to_A gets 1, the rest 0.2,
+    B:                    # so the marginal prior of B.to_A is Beta(1, 1) = uniform.
+      death: 0.2
+      persist: 0.2
+      div_AA: 0.2
+      div_AB: 0.2
+      div_BB: 0.2
+budget:
+  simulations: 20000
+  sbc_cases: 200
+  ppc_samples: 200
+info:
+  title: "B row with a flat prior on B.to_A"
+  question: |
+    Under the uniform Dirichlet prior over B's six outcomes, B.to_A ~ Beta(1, 5) and
+    P(B.to_A > 0.8) is about 0.03%, so amortised NPE (b_row_identifiability) never saw
+    training data near the true 0.80 and returned a prior-like posterior. Here the
+    inference prior on B.to_A is uniform (about 20% of simulations above 0.8); the data
+    model and truth are unchanged. Posterior near 0.8 => the data identify B.to_A and
+    the earlier failure was prior/training coverage. Posterior still broad => the data
+    at this design (3 endpoints x 32 clones) do not pin B.to_A down.
+  notes: |
+    The concentration 0.2 on the other B outcomes makes the prior favour sparse B rows
+    (one dominant outcome); compare SBC/PPC with the uniform-prior runs.
+hydra:
+  sweeper:
+    params:
+      seed: 0,1,2,3,4

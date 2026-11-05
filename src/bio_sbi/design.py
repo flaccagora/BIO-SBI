@@ -23,10 +23,12 @@ class Design:
     Args:
         horizons: Measurement endpoints in the simulator's time unit.
         clones: Clones per endpoint - one int for all endpoints or one per endpoint.
+        name: Label used in run directories and result tables.
     """
 
     horizons: Sequence[float]
     clones: int | Sequence[int] = 32
+    name: str = "custom"
 
     def __post_init__(self) -> None:
         self.horizons = tuple(float(h) for h in self.horizons)

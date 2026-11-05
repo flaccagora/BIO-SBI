@@ -11,3 +11,7 @@ outputs/
 multirun/
 sbi-logs/
 wandb/
+results/
+
+# Claude Code local state (worktrees, settings)
+.claude/

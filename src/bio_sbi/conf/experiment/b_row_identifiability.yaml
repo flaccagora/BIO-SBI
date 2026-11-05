@@ -1,0 +1,23 @@
+# @package _global_
+# Is B's outcome row identifiable from endpoint counts, or is the estimator undertrained?
+# Budget scaling x 5 seeds (each seed = new reference dataset + new training set), with
+# SBC and posterior-predictive checks. Run once per law to compare all-transitions
+# (two_type) with B divisions fixed to their true value 0 (reversible_ab):
+#   bio-sbi -m +experiment=b_row_identifiability law=two_type
+#   bio-sbi -m +experiment=b_row_identifiability law=reversible_ab
+defaults:
+  - override /budget: dev
+info:
+  title: "Identifiability of B's outcome row"
+  question: |
+    Is B -> A switching (B.to_A) recoverable from endpoint counts when all transitions
+    are free, or is the failure due to training budget / dataset / calibration?
+    Budget 5k/20k/50k x 5 seeds; run once per law (two_type, reversible_ab).
+budget:
+  sbc_cases: 200
+  ppc_samples: 200
+hydra:
+  sweeper:
+    params:
+      budget.simulations: 5000,20000,50000
+      seed: 0,1,2,3,4

@@ -1,0 +1,6 @@
+# Default design: the simulator's default endpoints, 32 recovered clones per endpoint.
+# A dataset = one cohort per endpoint; clones are independent and measured once.
+_target_: bio_sbi.design.Design
+name: default
+horizons: ${simulator.horizons}   # endpoints in the simulator's time unit
+clones: 32                        # recovered clones per endpoint (int or one per endpoint)

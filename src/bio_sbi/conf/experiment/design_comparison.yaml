@@ -1,0 +1,26 @@
+# @package _global_
+# Which experimental design identifies the parameters best?
+#   bio-sbi -m +experiment=design_comparison
+defaults:
+  - override /budget: dev
+budget:
+  simulations: 20000   # 50k did not improve recovery over 20k (b_row experiment)
+  sbc_cases: 200
+  ppc_samples: 200
+info:
+  title: "Design comparison: one vs three endpoints, 128 vs 384 clones"
+  question: |
+    Planned wet-lab designs: a single endpoint (generation 12, ~day 10) with 128
+    clones, or three endpoints (generations 4, 8, 12) with 128 clones each.
+    `single_384` is a control with the same total clones as `three_128`, separating
+    the value of extra time points from the value of extra clones. Each design is
+    inferred with all transitions free (`two_type`) and with B divisions fixed to 0
+    (`reversible_ab`), over 5 seeds (5 reference datasets). Key outputs: per-parameter
+    contraction and error (especially `B.to_A`, poorly recovered at 3 x 32 clones),
+    SBC calibration and the posterior-predictive check.
+hydra:
+  sweeper:
+    params:
+      design: single_128,three_128,single_384
+      law: two_type,reversible_ab
+      seed: 0,1,2,3,4

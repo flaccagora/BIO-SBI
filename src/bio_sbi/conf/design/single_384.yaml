@@ -1,0 +1,6 @@
+# One endpoint at generation 12 with the same total clone count as three_128 (384):
+# separates the value of extra time points from the value of extra clones.
+_target_: bio_sbi.design.Design
+name: single_384
+horizons: [12]
+clones: 384

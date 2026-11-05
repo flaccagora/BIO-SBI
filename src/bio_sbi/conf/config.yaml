@@ -12,6 +12,7 @@ defaults:
   - summary: moments           # summary statistic: moments | means
   - inference: npe             # sbi method: npe | nle | nre
   - budget: dev                # compute budget: smoke | dev | full
+  - design: default            # endpoints x clones: default | single_128 | three_128 | single_384
   - simulator@data.simulator: ${simulator}       # data-generating model (default: same)
   - law@data.law: ${law}
   - observation@data.observation: ${observation}
@@ -23,19 +24,22 @@ workers: 4           # threads for simulating independent datasets
 torch_threads: 4     # torch intra-op threads (0 = torch default)
 save_training_data: false   # store theta/x of all simulations in training_data.npz
 
-# Experimental design: endpoints (simulator time unit) and clones per endpoint.
-design:
-  _target_: bio_sbi.design.Design
-  horizons: ${simulator.horizons}
-  clones: 32         # int, or one int per horizon
-
 # Generating parameters of the reference ("pseudo-observed") dataset (data model).
 truth:
   source: reference  # reference: data.law.reference + data.simulator.reference (+ values)
                      # prior: one draw from the data model's prior
   values: null       # nested overrides, e.g. 'truth.values={A: {death: 0.1, div_AA: 0.48}}'
 
+# Description of a multirun, written to <sweep dir>/info.md (set by experiment presets).
+info:
+  title: null        # e.g. "Design comparison"
+  question: null     # what the sweep tests
+  notes: null
+
 hydra:
+  callbacks:
+    experiment_info:
+      _target_: bio_sbi.callbacks.ExperimentInfo
   job:
     chdir: false
   run:

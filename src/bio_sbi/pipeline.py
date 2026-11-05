@@ -222,7 +222,11 @@ def run_experiment(cfg: DictConfig, out: str | Path) -> dict:
         "inference": cfg.inference.name,
         "rounds": comp.method.rounds,
         "simulations": int(cfg.budget.simulations),
-        "design": {"horizons": list(gen.design.horizons), "clones": list(gen.design.clones)},
+        "design": {
+            "name": gen.design.name,
+            "horizons": list(gen.design.horizons),
+            "clones": list(gen.design.clones),
+        },
         "n_free_parameters": int(sim.theta_dim),
         "x_dim": int(fitted.feature_mask.sum()),
         "training": fitted.history,

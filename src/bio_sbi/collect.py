@@ -42,6 +42,7 @@ def collect(root: str | Path) -> tuple[pd.DataFrame, pd.DataFrame]:
             "n_free_parameters": m.get("n_free_parameters"),
             "rounds": m["rounds"],
             "simulations": m["simulations"],
+            "design": m["design"].get("name", "custom"),
             "horizons": " ".join(f"{h:g}" for h in m["design"]["horizons"]),
             "clones": " ".join(str(c) for c in m["design"]["clones"]),
             "mean_abs_error": m["recovery"]["mean_abs_error"],

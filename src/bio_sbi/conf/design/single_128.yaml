@@ -1,0 +1,6 @@
+# One endpoint at generation 12 (~day 10 at 20 h/generation), 128 clones.
+# Galton-Watson time unit (generations); for Bellman-Harris override horizons in hours.
+_target_: bio_sbi.design.Design
+name: single_128
+horizons: [12]
+clones: 128

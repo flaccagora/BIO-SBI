@@ -1,0 +1,5 @@
+# Three endpoints (generations 4, 8, 12), 128 clones each (384 clones in total).
+_target_: bio_sbi.design.Design
+name: three_128
+horizons: [4, 8, 12]
+clones: 128
