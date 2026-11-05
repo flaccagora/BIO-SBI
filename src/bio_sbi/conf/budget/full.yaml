@@ -1,0 +1,8 @@
+# Production-quality posteriors and calibration.
+simulations: 50000
+max_epochs: 500
+posterior_samples: 10000
+sbc_cases: 1000
+sbc_samples: 500
+mcmc_chains: 50
+mcmc_warmup: 200

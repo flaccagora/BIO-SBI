@@ -1,0 +1,3 @@
+[submodule "submodules/GW"]
+	path = submodules/GW
+	url = https://github.com/flaccagora/GW.git

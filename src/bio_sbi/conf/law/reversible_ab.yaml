@@ -1,0 +1,28 @@
+# Reversible two-type law (former "GW9"): six A outcomes, three B outcomes,
+# nine probabilities / seven free coordinates. Offspring lists are [n_A, n_B].
+name: reversible_ab
+types: [A, B]
+founder: [1.0, 0.0]           # P(founder type) at seeding, before any clone selection
+outcomes:
+  A:
+    death: [0, 0]
+    persist: [1, 0]           # survives the generation without dividing
+    switch: [0, 1]            # single-cell A -> B conversion
+    asymmetric: [1, 1]
+    self_renew: [2, 0]
+    sym_diff: [0, 2]
+  B:
+    death: [0, 0]
+    persist: [0, 1]
+    switch: [1, 0]            # B -> A feedback edge
+concentration: null           # Dirichlet alphas per type in outcome order; null = uniform
+reference:                    # outcome probabilities of the reference dataset
+  A.death: 0.03
+  A.persist: 0.03
+  A.switch: 0.05
+  A.asymmetric: 0.05
+  A.self_renew: 0.55
+  A.sym_diff: 0.29
+  B.death: 0.10
+  B.persist: 0.10
+  B.switch: 0.80

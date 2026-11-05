@@ -1,0 +1,22 @@
+# Minimal reversible law (former "discrete" model): A always divides or dies,
+# B never divides or dies and switches back to A with probability B.switch.
+name: minimal_ab
+types: [A, B]
+founder: [1.0, 0.0]
+outcomes:
+  A:
+    self_renew: [2, 0]
+    asymmetric: [1, 1]
+    sym_diff: [0, 2]
+    death: [0, 0]
+  B:
+    persist: [0, 1]
+    switch: [1, 0]
+concentration: null
+reference:
+  A.self_renew: 0.45
+  A.asymmetric: 0.25
+  A.sym_diff: 0.15
+  A.death: 0.15
+  B.persist: 0.7
+  B.switch: 0.3

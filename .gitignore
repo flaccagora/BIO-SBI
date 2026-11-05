@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+
+# Experiment results (Hydra run/multirun dirs, sbi tensorboard logs).
+outputs/
+multirun/
+sbi-logs/
+wandb/

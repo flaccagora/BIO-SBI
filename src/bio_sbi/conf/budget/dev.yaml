@@ -1,0 +1,8 @@
+# Minutes on a laptop: exploratory comparisons.
+simulations: 5000
+max_epochs: 200
+posterior_samples: 2000
+sbc_cases: 200
+sbc_samples: 200
+mcmc_chains: 20
+mcmc_warmup: 100

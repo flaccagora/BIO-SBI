@@ -1,0 +1,22 @@
+# Neural likelihood estimation (sbi NLE) + MCMC posterior sampling.
+name: nle
+method:
+  _target_: bio_sbi.inference.NLE
+  rounds: 1
+  estimator: nsf
+  network:
+    hidden_features: 64
+    num_transforms: 5
+    z_score_x: independent
+  training:
+    training_batch_size: 128
+    learning_rate: 5.0e-4
+    validation_fraction: 0.1
+    stop_after_epochs: 20
+    max_num_epochs: ${budget.max_epochs}
+  sampling:                    # sbi MCMCPosteriorParameters
+    method: slice_np_vectorized
+    num_chains: ${budget.mcmc_chains}
+    warmup_steps: ${budget.mcmc_warmup}
+    thin: 1
+    init_strategy: resample

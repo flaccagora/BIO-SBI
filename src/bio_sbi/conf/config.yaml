@@ -1,0 +1,36 @@
+# Root config. Every group below can be swapped from the command line, e.g.
+#   bio-sbi simulator=bellman_harris inference=nle observation=noisy budget=smoke
+defaults:
+  - simulator: galton_watson   # generative model: galton_watson | bellman_harris
+  - law: reversible_ab         # type graph + Dirichlet prior: reversible_ab | hierarchy_ab | minimal_ab
+  - observation: perfect       # measurement model: perfect | noisy | all_clones
+  - summary: moments           # summary statistic: moments | means
+  - inference: npe             # sbi method: npe | nle | nre
+  - budget: dev                # compute budget: smoke | dev | full
+  - _self_
+
+seed: 0              # root seed; every stochastic stage derives a keyed stream from it
+device: cpu          # torch device for training (cpu | cuda)
+workers: 4           # threads for simulating independent datasets
+torch_threads: 4     # torch intra-op threads (0 = torch default)
+save_training_data: false   # store theta/x of all simulations in training_data.npz
+
+# Experimental design: endpoints (simulator time unit) and clones per endpoint.
+design:
+  _target_: bio_sbi.design.Design
+  horizons: ${simulator.horizons}
+  clones: 32         # int, or one int per horizon
+
+# Generating parameters of the reference ("pseudo-observed") dataset.
+truth:
+  source: reference  # reference: law.reference + simulator.reference (+ values); prior: one prior draw
+  values: null       # e.g. {A.death: 0.1}; overrides on top of the reference
+
+hydra:
+  job:
+    chdir: false
+  run:
+    dir: outputs/${simulator.name}-${law.name}-${inference.name}/${now:%Y-%m-%d_%H-%M-%S}
+  sweep:
+    dir: multirun/${now:%Y-%m-%d_%H-%M-%S}
+    subdir: ${hydra.job.num}_${hydra.job.override_dirname}

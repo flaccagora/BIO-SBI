@@ -1,0 +1,10 @@
+# @package _global_
+# Effect of capture efficiency on identifiability.
+#   bio-sbi -m +experiment=noise_sensitivity
+defaults:
+  - override /observation: noisy
+  - override /budget: dev
+hydra:
+  sweeper:
+    params:
+      observation.capture: "[1.0,1.0],[0.9,0.9],[0.7,0.7],[0.5,0.5]"

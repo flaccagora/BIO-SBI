@@ -1,0 +1,209 @@
+"""Common training loop shared by all sbi inference methods.
+
+:class:`InferenceMethod` implements single-round (amortised) and multi-round
+(sequential) training against a simulation callback. Subclasses only decide how the
+sbi trainer is constructed, how simulations are appended and how a posterior is built.
+
+The result is a :class:`FittedPosterior`, a picklable wrapper that applies the same
+feature mask used in training and returns samples in inference coordinates ``theta``.
+"""
+
+from __future__ import annotations
+
+import time
+from abc import ABC, abstractmethod
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+import torch
+
+from ..rng import seed_for, seed_torch
+
+#: ``simulate(theta, round_index) -> x`` with NaN rows for invalid datasets.
+SimulateFn = Callable[[np.ndarray, int], np.ndarray]
+
+
+@dataclass
+class FittedPosterior:
+    """Trained sbi posterior plus the preprocessing needed to condition it.
+
+    Attributes:
+        posterior: The sbi ``NeuralPosterior``.
+        feature_mask: Boolean mask of summary features used in training (features
+            constant over the training set are dropped, which matters for NLE).
+        method: Name of the inference method.
+        amortized: ``True`` if trained on prior simulations only (valid for any ``x``).
+        history: Per-round training diagnostics.
+    """
+
+    posterior: Any
+    feature_mask: np.ndarray
+    method: str
+    amortized: bool
+    history: list[dict] = field(default_factory=list)
+
+    def condition(self, x: np.ndarray) -> torch.Tensor:
+        """Apply the feature mask and convert a summary vector (or batch) to a tensor."""
+        x = np.atleast_2d(np.asarray(x, dtype=np.float32))[:, self.feature_mask]
+        return torch.as_tensor(x)
+
+    def sample(self, x: np.ndarray, n: int, seed: int = 0) -> np.ndarray:
+        """Draw ``n`` posterior samples of ``theta`` given one summary vector ``x``."""
+        seed_torch(seed)
+        with torch.no_grad():
+            samples = self.posterior.sample((n,), x=self.condition(x), show_progress_bars=False)
+        return samples.cpu().numpy()
+
+    def log_prob(self, theta: np.ndarray, x: np.ndarray) -> np.ndarray:
+        """Posterior log-density (normalised for NPE; unnormalised for NLE/NRE)."""
+        with torch.no_grad():
+            values = self.posterior.log_prob(
+                torch.as_tensor(theta, dtype=torch.float32), x=self.condition(x)
+            )
+        return values.cpu().numpy()
+
+    def save(self, path: str | Path) -> None:
+        """Pickle the posterior with ``torch.save`` (load only trusted files)."""
+        torch.save(self, path)
+
+    @staticmethod
+    def load(path: str | Path) -> FittedPosterior:
+        """Load a posterior written by :meth:`save` (uses pickle: trusted files only)."""
+        return torch.load(path, weights_only=False, map_location="cpu")
+
+
+class InferenceMethod(ABC):
+    """Base class for sbi methods.
+
+    Args:
+        rounds: ``1`` = amortised training on prior simulations. ``> 1`` = sequential
+            training where rounds ``2..R`` simulate from the current posterior at the
+            reference observation (more simulation-efficient, but valid only for that
+            observation, so SBC is skipped).
+        estimator: Network family passed to the sbi builder (e.g. ``"nsf"``, ``"maf"``,
+            ``"resnet"``).
+        network: Extra keyword arguments for the sbi network builder.
+        training: Keyword arguments forwarded to ``trainer.train`` (batch size,
+            learning rate, epochs, early stopping, ...).
+        sampling: Keyword arguments forwarded to ``trainer.build_posterior``.
+        device: Torch device for training.
+        seed: Root seed for torch stages.
+    """
+
+    name: str = "base"
+
+    def __init__(
+        self,
+        rounds: int = 1,
+        estimator: str = "nsf",
+        network: Mapping[str, Any] | None = None,
+        training: Mapping[str, Any] | None = None,
+        sampling: Mapping[str, Any] | None = None,
+        device: str = "cpu",
+        seed: int = 0,
+    ) -> None:
+        if rounds < 1:
+            raise ValueError("rounds must be >= 1")
+        self.rounds = int(rounds)
+        self.estimator = estimator
+        self.network = dict(network or {})
+        self.training = dict(training or {})
+        self.sampling = dict(sampling or {})
+        self.device = device
+        self.seed = seed
+
+    # ------------------------------------------------------------------ hooks
+    @abstractmethod
+    def make_trainer(self, prior: torch.distributions.Distribution, tracker: Any) -> Any:
+        """Construct the sbi trainer object (``tracker`` logs training curves or is None)."""
+
+    def append(self, trainer: Any, theta: torch.Tensor, x: torch.Tensor, proposal: Any) -> None:
+        """Add one round of simulations (NPE overrides this to pass the proposal)."""
+        trainer.append_simulations(theta, x)
+
+    def build_posterior(self, trainer: Any, estimator: Any) -> Any:
+        """Build the sbi posterior object from a trained estimator."""
+        return trainer.build_posterior(estimator, **self.sampling)
+
+    # ------------------------------------------------------------------ loop
+    def split_budget(self, simulations: int) -> list[int]:
+        """Split a total simulation budget into equal rounds (remainder to round 1)."""
+        per = simulations // self.rounds
+        if per < 16:
+            raise ValueError("Need at least 16 simulations per round")
+        return [simulations - per * (self.rounds - 1)] + [per] * (self.rounds - 1)
+
+    def fit(
+        self,
+        prior: torch.distributions.Distribution,
+        simulate: SimulateFn,
+        simulations: int,
+        x_observed: np.ndarray | None = None,
+        log_dir: str | Path | None = None,
+    ) -> FittedPosterior:
+        """Train the estimator, simulating each round's parameters on the fly.
+
+        Args:
+            prior: Prior over ``theta``.
+            simulate: Callback returning summaries for a ``(N, d)`` theta batch.
+            simulations: Total simulation budget across all rounds.
+            x_observed: Reference summary; required for sequential rounds.
+            log_dir: Optional TensorBoard directory for sbi's training curves.
+
+        Returns:
+            The fitted posterior wrapper.
+        """
+        if self.rounds > 1 and x_observed is None:
+            raise ValueError("Sequential inference needs a reference observation")
+        writer = tracker = None
+        if log_dir is not None:
+            from sbi.utils.tracking import TensorBoardTracker
+            from torch.utils.tensorboard import SummaryWriter
+
+            writer = SummaryWriter(log_dir=str(log_dir))
+            tracker = TensorBoardTracker(writer)
+        trainer = self.make_trainer(prior, tracker)
+        proposal, mask, posterior, history = prior, None, None, []
+        for r, n in enumerate(self.split_budget(simulations)):
+            seed_torch(seed_for(self.seed, "proposal", r))
+            start = time.perf_counter()
+            options = {} if r == 0 else {"show_progress_bars": False}
+            theta = proposal.sample((n,), **options).cpu().numpy()
+            x = simulate(theta, r)
+            sim_seconds = time.perf_counter() - start
+            valid = np.all(np.isfinite(x), axis=1)
+            if valid.sum() < 16:
+                raise RuntimeError(f"Only {valid.sum()} valid simulations in round {r}")
+            if mask is None:
+                mask = x[valid].std(0) > 1e-8
+            self.append(
+                trainer,
+                torch.as_tensor(theta[valid], dtype=torch.float32),
+                torch.as_tensor(x[valid][:, mask]),
+                proposal,
+            )
+            seed_torch(seed_for(self.seed, "train", r))
+            start = time.perf_counter()
+            estimator = trainer.train(**self.training)
+            posterior = self.build_posterior(trainer, estimator)
+            summary = trainer._summary
+            history.append(
+                {
+                    "round": r,
+                    "simulations": int(n),
+                    "valid_simulations": int(valid.sum()),
+                    "simulation_seconds": sim_seconds,
+                    "training_seconds": time.perf_counter() - start,
+                    "epochs": int(trainer.epoch),
+                    "best_validation_loss": float(summary["best_validation_loss"][-1]),
+                }
+            )
+            if r + 1 < self.rounds:
+                x_o = torch.as_tensor(np.asarray(x_observed, np.float32)[None, mask])
+                proposal = posterior.set_default_x(x_o)
+        if writer is not None:
+            writer.close()
+        return FittedPosterior(posterior, mask, self.name, self.rounds == 1, history)

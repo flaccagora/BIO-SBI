@@ -1,0 +1,22 @@
+# Neural ratio estimation (sbi NRE-C by default) + MCMC posterior sampling.
+name: nre
+method:
+  _target_: bio_sbi.inference.NRE
+  variant: C                   # C = contrastive NRE (Miller et al. 2022); B = SRE
+  rounds: 1
+  estimator: resnet            # resnet | mlp
+  network:
+    hidden_features: 64
+    z_score_x: independent
+  training:
+    training_batch_size: 128
+    learning_rate: 5.0e-4
+    validation_fraction: 0.1
+    stop_after_epochs: 20
+    max_num_epochs: ${budget.max_epochs}
+  sampling:                    # sbi MCMCPosteriorParameters
+    method: slice_np_vectorized
+    num_chains: ${budget.mcmc_chains}
+    warmup_steps: ${budget.mcmc_warmup}
+    thin: 1
+    init_strategy: resample

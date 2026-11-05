@@ -1,0 +1,7 @@
+# Imperfect assay with known error rates (edit to match your protocol).
+_target_: bio_sbi.observation.ObservationModel
+capture: [0.9, 0.8]            # per-type detection probability
+confusion: [[0.97, 0.03], [0.05, 0.95]]   # row k: P(labelled j | true type k)
+selection: detected
+exact_detection: true
+max_attempts_per_clone: 1000

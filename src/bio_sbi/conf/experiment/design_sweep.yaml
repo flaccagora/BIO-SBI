@@ -1,0 +1,10 @@
+# @package _global_
+# How do clone numbers and endpoints shrink the posterior? (experiment planning)
+#   bio-sbi -m +experiment=design_sweep
+defaults:
+  - override /budget: dev
+hydra:
+  sweeper:
+    params:
+      design.clones: 8,16,32,64,128
+      design.horizons: "[12],[6,12],[4,8,12]"

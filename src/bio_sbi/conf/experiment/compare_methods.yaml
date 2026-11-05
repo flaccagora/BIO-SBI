@@ -1,0 +1,11 @@
+# @package _global_
+# NPE vs NLE vs NRE on both simulators at a fixed budget, 3 seeds.
+#   bio-sbi -m +experiment=compare_methods
+defaults:
+  - override /budget: dev
+hydra:
+  sweeper:
+    params:
+      simulator: galton_watson,bellman_harris
+      inference: npe,nle,nre
+      seed: 0,1,2

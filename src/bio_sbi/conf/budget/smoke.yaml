@@ -1,0 +1,9 @@
+# Seconds: checks that the pipeline runs, not that inference is accurate.
+# NLE/NRE sample with MCMC, so each SBC case costs one MCMC run: keep sbc_cases small.
+simulations: 256
+max_epochs: 5
+posterior_samples: 100
+sbc_cases: 10
+sbc_samples: 50
+mcmc_chains: 10
+mcmc_warmup: 10

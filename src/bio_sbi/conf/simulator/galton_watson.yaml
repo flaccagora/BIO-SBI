@@ -1,0 +1,13 @@
+# Discrete-generation multi-type Galton-Watson process (bio_sbi.simulators.GaltonWatson).
+# Every living cell has exactly one event per generation. Horizons are generations.
+name: galton_watson
+horizons: [4, 8, 12]           # default design endpoints (generations)
+reference: {}                  # no parameters beyond the law's outcome probabilities
+model:
+  _target_: bio_sbi.simulators.GaltonWatson
+  types: ${law.types}
+  outcomes: ${law.outcomes}
+  concentration: ${law.concentration}
+  founder: ${law.founder}
+  max_cells: 100000            # per-clone cap; larger clones invalidate the dataset
+  max_events: 5000000

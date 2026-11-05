@@ -1,0 +1,17 @@
+# Neural posterior estimation (sbi NPE; sequential rounds use NPE-C / APT).
+name: npe
+method:
+  _target_: bio_sbi.inference.NPE
+  rounds: 1                    # 1 = amortised; >1 = sequential at the reference data
+  estimator: nsf               # nsf | maf | mdn | made
+  network:
+    hidden_features: 64
+    num_transforms: 5
+    z_score_x: independent
+  training:
+    training_batch_size: 128
+    learning_rate: 5.0e-4
+    validation_fraction: 0.1
+    stop_after_epochs: 20
+    max_num_epochs: ${budget.max_epochs}
+  sampling: {}                 # DirectPosterior needs no sampler settings
