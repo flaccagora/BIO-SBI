@@ -301,8 +301,10 @@ for each parameter?
       Question: are identifiability findings method-independent, and does the
       flagged/silent pattern change (support mass is NPE-specific; MCMC methods fail
       with confident posteriors inside the prior)?
-- [ ] **X2 – Seeds**: with P1, separate the dataset spread (5 `data_seed` × 1 `seed`)
-      from the training spread (1 × 5) for the final configuration.
+- [x] **X2 – Seeds** (`results/x2/`, 10 × 2 arms × GW/BH): training noise ≈ 20% of the
+      posterior sd; training ≈ half (GW) to 70% (BH) of the seed-to-seed variance;
+      quote posterior sd, not seed sd. The BH ridge bias is identical across datasets
+      and training seeds.
 - [ ] **X3 – Model**: GW vs BH on the same question. Can a GW fit describe BH data?
       This needs a GW ↔ hours mapping, because the two must share a time unit; it is
       currently not possible without a code change.
