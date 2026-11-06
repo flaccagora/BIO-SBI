@@ -525,6 +525,7 @@ Priors (inference only) & uniform Dirichlet; Jeffreys (all concentrations 0.5); 
 Seeds / runs & 5 / 125 per law (250: 150 reference + 100 biological) \\
 Folder & \res{results/x5/a_two_type/}, \res{results/x5/a_reversible_ab/}, biological priors in \res{a_two_type_bio/}, \res{a_reversible_ab_bio/} (pooled \res{x5a_groups.csv}, \res{x5a_runs.csv} in the first two) \\
 \end{setup}
+\figorpending{x5a_priors}{0.66}{The five X5a priors compared (inference model; exact Beta marginals of the Dirichlet priors). (a, b) B$\to$A with B divisions free / fixed; (c) total probability that B divides (B$\to$AA + AB + BB), B divisions free; (d) A$\to$AA, identical for both laws. Curves that coincide are drawn on top of each other: bio-B (dashed) = bio in (a--c); uniform = flat B$\to$A = bio-B in (d). Dotted: truths used in X5a (B$\to$A 0.1--0.9; B divisions 0; A$\to$AA 0.55). Densities clipped at 5. Beta parameters, quantiles and tail probabilities: \res{tables/x5a_priors.csv}.}{X5a priors figure.}
 \Result
 \figorpending{x5a}{0.9}{X5a: B$\to$A posterior mean (mean over 5 seeds) $\pm$ mean posterior sd against the true B$\to$A, one line per prior (slightly offset). Top: reference priors; bottom: biological priors bio-B and bio, with the uniform and flat-B$\to$A means as thin reference lines. Dashed: identity (perfect recovery). Dotted: uniform-prior mean (1/6 left, 1/3 right).}{X5a figure.}
 \begin{center}\footnotesize

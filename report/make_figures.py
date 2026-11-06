@@ -1004,6 +1004,100 @@ def fig_x5a():
     table(pd.concat(rows, ignore_index=True), "x5a")
 
 
+#: Dirichlet concentrations of the X5a priors (inference model), per law, as in the
+#: preset header of conf/experiment/x5a_truth_position.yaml. Missing entries = 1.
+X5A_CONC = {
+    "a_two_type": {
+        "uniform (1)": {},
+        "all 0.5": {f"{r}.{o}": 0.5 for r, outs in
+                    (("A", ("death", "persist", "to_B", "div_AA", "div_AB", "div_BB")),
+                     ("B", ("death", "persist", "to_A", "div_AA", "div_AB", "div_BB")))
+                    for o in outs},  # fmt: skip
+        "flat B.to_A": {f"B.{o}": 0.2 for o in ("death", "persist", "div_AA", "div_AB", "div_BB")},
+        "bio-B": {"B.death": 1.5, "B.persist": 1.5, "B.to_A": 1.5,
+                  "B.div_AA": 0.2, "B.div_AB": 0.2, "B.div_BB": 0.2},  # fmt: skip
+    },
+    "a_reversible_ab": {
+        "uniform (1)": {},
+        "all 0.5": {**{f"A.{o}": 0.5 for o in ("death", "persist", "to_B", "div_AA", "div_AB",
+                                                "div_BB")},
+                    **{f"B.{o}": 0.5 for o in ("death", "persist", "to_A")}},
+        "flat B.to_A": {"B.death": 0.5, "B.persist": 0.5},
+        "bio-B": {"B.death": 1.5, "B.persist": 1.5, "B.to_A": 1.5},
+    },
+}
+_BIO_A = {"A.death": 0.5, "A.persist": 0.5, "A.to_B": 0.5, "A.div_AA": 2.0, "A.div_AB": 1.0,
+          "A.div_BB": 1.5}
+for _law in X5A_CONC.values():
+    _law["bio (A+B)"] = {**_law["bio-B"], **_BIO_A}
+X5A_ROWS = {
+    "a_two_type": {"A": ("death", "persist", "to_B", "div_AA", "div_AB", "div_BB"),
+                   "B": ("death", "persist", "to_A", "div_AA", "div_AB", "div_BB")},
+    "a_reversible_ab": {"A": ("death", "persist", "to_B", "div_AA", "div_AB", "div_BB"),
+                        "B": ("death", "persist", "to_A")},
+}
+
+
+def _beta_marginal(law: str, prior: str, row: str, outcomes: tuple[str, ...]) -> tuple[float, float]:
+    """Beta(a, b) marginal of the summed ``outcomes`` of ``row`` under a Dirichlet prior."""
+    conc = X5A_CONC[law][prior]
+    alpha = {o: conc.get(f"{row}.{o}", 1.0) for o in X5A_ROWS[law][row]}
+    a = sum(alpha[o] for o in outcomes)
+    return a, sum(alpha.values()) - a
+
+
+def fig_x5a_priors():
+    """The five X5a priors side by side: marginal densities of the quantities that matter.
+
+    Dirichlet marginals are exact Betas: one outcome (or a sum of outcomes) of a row with
+    concentrations alpha is Beta(sum of its alphas, rest of the row).
+    """
+    from scipy import stats
+
+    panels = [
+        ("a_two_type", "B", ("to_A",), "a  B→A — B divisions free", (0.1, 0.3, 0.5, 0.7, 0.9)),
+        ("a_reversible_ab", "B", ("to_A",), "b  B→A — B divisions fixed", (0.1, 0.3, 0.5, 0.7, 0.9)),
+        ("a_two_type", "B", ("div_AA", "div_AB", "div_BB"),
+         "c  B divides (total) — B divisions free", (0.0,)),
+        ("a_two_type", "A", ("div_AA",), "d  A→AA self-renewal — both laws", (0.55,)),
+    ]
+    # bio drawn before bio-B so the dashed bio-B stays visible where they coincide
+    styles = [(k, lab, c, "-") for k, lab, c in X5_PRIORS] + [
+        ("bio (A+B)", "bio (A + B rows)", GREEN, "-"),
+        ("bio-B", "bio-B (B row only)", VIOLET, (0, (3, 1.5))),
+    ]
+    x = np.linspace(0.0005, 0.9995, 800)
+    fig, axes = plt.subplots(2, 2, figsize=(W_FULL, 4.2), sharey=True,
+                             gridspec_kw=dict(wspace=0.1, hspace=0.42))
+    rows = []
+    for ax, (law, row, outs, title, truths) in zip(axes.flat, panels, strict=True):
+        for key, lab, c, ls in styles:
+            a, b = _beta_marginal(law, key, row, outs)
+            ax.plot(x, stats.beta.pdf(x, a, b), color=c, ls=ls, lw=1.3 if ls == "-" else 1.1,
+                    label=lab)
+            q05, q50, q95 = stats.beta.ppf([0.05, 0.5, 0.95], a, b)
+            rows.append({"panel": title[3:], "prior": key, "beta_a": round(a, 3),
+                         "beta_b": round(b, 3), "mean": round(a / (a + b), 3),
+                         "q05": round(q05, 3), "median": round(q50, 3), "q95": round(q95, 3),
+                         **{f"P(>{t:g})": round(float(stats.beta.sf(t, a, b)), 5)
+                            for t in truths if t > 0}})  # fmt: skip
+        for t in truths:
+            ax.axvline(t, color=INK, lw=0.6, ls=":", zorder=0)
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 5)
+        ax.set_title(title, fontsize=7.2)
+    for ax in axes[1]:
+        ax.set_xlabel("probability")
+    for ax in axes[:, 0]:
+        ax.set_ylabel("prior density")
+    handles, labels = axes[0, 0].get_legend_handles_labels()
+    order = [0, 1, 2, 4, 3]  # legend: reference priors, then bio-B, bio
+    axes[0, 0].legend([handles[i] for i in order], [labels[i] for i in order], fontsize=6.2,
+                      loc="upper right")
+    save(fig, "x5a_priors")
+    table(pd.DataFrame(rows), "x5a_priors")
+
+
 X5B_ARMS = [("b_vague", "vague\n10–80 h", MUTED), ("b_right", "right\n±25%", BLUE),
             ("b_wrong", "wrong\n+50%", RED)]
 X5B_BOUNDS = {"b_vague": (10, 80), "b_right": (16, 25), "b_wrong": (24, 37.5)}
@@ -1422,7 +1516,7 @@ FIGURES = [
     # pending sweeps: built only once complete
     fig_e4_gw, fig_e1c_gw, fig_e1a_number_gw, fig_e2_gw, fig_e2c_model, fig_e2c_traj,
     fig_e2c_arms, fig_detectability_gw,
-    fig_e2c_prior, fig_x5a, fig_x5b, fig_x5c, fig_x5d,
+    fig_e2c_prior, fig_x5a_priors, fig_x5a, fig_x5b, fig_x5c, fig_x5d,
 ]
 
 

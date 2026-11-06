@@ -1,0 +1,21 @@
+panel,prior,beta_a,beta_b,mean,q05,median,q95,P(>0.1),P(>0.3),P(>0.5),P(>0.7),P(>0.9),P(>0.55)
+B→A — B divisions free,uniform (1),1,5,0.167,0.01,0.129,0.451,0.5905,0.1681,0.03125,0.00243,1e-05,
+B→A — B divisions free,all 0.5,0.5,2.5,0.167,0.001,0.096,0.569,0.4896,0.2031,0.07559,0.01893,0.00111,
+B→A — B divisions free,flat B.to_A,1,1,0.5,0.05,0.5,0.95,0.9,0.7,0.5,0.3,0.1,
+B→A — B divisions free,bio (A+B),1.5,3.6,0.294,0.045,0.266,0.641,0.8476,0.4349,0.1512,0.027,0.00057,
+B→A — B divisions free,bio-B,1.5,3.6,0.294,0.045,0.266,0.641,0.8476,0.4349,0.1512,0.027,0.00057,
+B→A — B divisions fixed,uniform (1),1,2,0.333,0.025,0.293,0.776,0.81,0.49,0.25,0.09,0.01,
+B→A — B divisions fixed,all 0.5,0.5,1,0.333,0.002,0.25,0.902,0.6838,0.4523,0.2929,0.1633,0.05132,
+B→A — B divisions fixed,flat B.to_A,1,1,0.5,0.05,0.5,0.95,0.9,0.7,0.5,0.3,0.1,
+B→A — B divisions fixed,bio (A+B),1.5,3,0.333,0.053,0.307,0.704,0.8777,0.5122,0.2155,0.05196,0.0021,
+B→A — B divisions fixed,bio-B,1.5,3,0.333,0.053,0.307,0.704,0.8777,0.5122,0.2155,0.05196,0.0021,
+B divides (total) — B divisions free,uniform (1),3,3,0.5,0.189,0.5,0.811,,,,,,
+B divides (total) — B divisions free,all 0.5,1.5,1.5,0.5,0.097,0.5,0.903,,,,,,
+B divides (total) — B divisions free,flat B.to_A,0.6,1.4,0.3,0.005,0.227,0.823,,,,,,
+B divides (total) — B divisions free,bio (A+B),0.6,4.5,0.118,0.001,0.071,0.394,,,,,,
+B divides (total) — B divisions free,bio-B,0.6,4.5,0.118,0.001,0.071,0.394,,,,,,
+A→AA self-renewal — both laws,uniform (1),1,5,0.167,0.01,0.129,0.451,,,,,,0.01845
+A→AA self-renewal — both laws,all 0.5,0.5,2.5,0.167,0.001,0.096,0.569,,,,,,0.05639
+A→AA self-renewal — both laws,flat B.to_A,1,5,0.167,0.01,0.129,0.451,,,,,,0.01845
+A→AA self-renewal — both laws,bio (A+B),2,4,0.333,0.076,0.314,0.657,,,,,,0.1312
+A→AA self-renewal — both laws,bio-B,1,5,0.167,0.01,0.129,0.451,,,,,,0.01845
