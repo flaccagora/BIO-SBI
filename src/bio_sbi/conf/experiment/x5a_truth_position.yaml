@@ -9,6 +9,16 @@
 #   bio-sbi -m +experiment=x5a_truth_position law=reversible_ab \
 #     '++law.concentration={},{A:{death:0.5,persist:0.5,to_B:0.5,div_AA:0.5,div_AB:0.5,div_BB:0.5},B:{death:0.5,persist:0.5,to_A:0.5}},{B:{death:0.5,persist:0.5}}' \
 #     hydra.sweep.dir=results/x5/a_reversible_ab
+# Biological priors (added later, separate sweep folders *_bio):
+#   bio-B (B row only): B death/persist/to_A 1.5, B divisions 0.2 each (two_type);
+#     B death/persist/to_A 1.5 (reversible_ab: B divisions already fixed)
+#   bio (A and B rows): bio-B plus A death/persist/to_B 0.5, div_AA 2, div_AB 1, div_BB 1.5
+#   bio-sbi -m +experiment=x5a_truth_position law=two_type \
+#     '++law.concentration={B:{death:1.5,persist:1.5,to_A:1.5,div_AA:0.2,div_AB:0.2,div_BB:0.2}},{A:{death:0.5,persist:0.5,to_B:0.5,div_AA:2,div_AB:1,div_BB:1.5},B:{death:1.5,persist:1.5,to_A:1.5,div_AA:0.2,div_AB:0.2,div_BB:0.2}}' \
+#     hydra.sweep.dir=results/x5/a_two_type_bio
+#   bio-sbi -m +experiment=x5a_truth_position law=reversible_ab \
+#     '++law.concentration={B:{death:1.5,persist:1.5,to_A:1.5}},{A:{death:0.5,persist:0.5,to_B:0.5,div_AA:2,div_AB:1,div_BB:1.5},B:{death:1.5,persist:1.5,to_A:1.5}}' \
+#     hydra.sweep.dir=results/x5/a_reversible_ab_bio
 # Priors: {} = uniform Dirichlet; all 0.5 = Jeffreys Dirichlet; last = B.to_A marginal
 # uniform (concentration 1 for to_A, the other free B outcomes summing to 1).
 # 5 truths x 3 priors x 5 seeds = 75 runs per law (150 in total).

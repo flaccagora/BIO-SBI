@@ -3,7 +3,8 @@
 Groups runs by prior (law.concentration override) and true B.to_A; reports B.to_A
 posterior mean / sd / coverage / contraction, run-level MAE, support, PPC and SBC.
 
-Usage: uv run python scripts/analyse_x5a.py results/x5/a_reversible_ab
+Usage: uv run python scripts/analyse_x5a.py results/x5/a_reversible_ab [results/x5/a_reversible_ab_bio ...]
+(several folders of the same law are pooled; tables are written to the first one).
 """
 
 from __future__ import annotations
@@ -24,6 +25,10 @@ def sbc_error(cal: dict) -> float:
 
 def prior_label(overrides: str) -> str:
     conc = next((o.split("=", 1)[1] for o in overrides.splitlines() if "law.concentration=" in o), "{}")
+    if "div_AA:2" in conc:
+        return "bio (A+B)"
+    if "to_A:1.5" in conc:
+        return "bio-B"
     if conc.strip() == "{}":
         return "uniform (1)"
     if "to_B:0.5" in conc or "div_AA:0.5,div_AB:0.5" in conc:
@@ -31,9 +36,10 @@ def prior_label(overrides: str) -> str:
     return "flat B.to_A"
 
 
-def main(root: Path) -> None:
+def main(roots: list[Path]) -> None:
+    root = roots[0]
     rows = []
-    for path in sorted(root.glob("*/metrics.json")):
+    for path in sorted(p for r in roots for p in r.glob("*/metrics.json")):
         m = json.loads(path.read_text())
         per = {r["parameter"]: r for r in m["recovery"]["per_parameter"]}
         b = per["B.to_A"]
@@ -61,4 +67,4 @@ def main(root: Path) -> None:
 
 
 if __name__ == "__main__":
-    main(Path(sys.argv[1]))
+    main([Path(a) for a in sys.argv[1:]])
