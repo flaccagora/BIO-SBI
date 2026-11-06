@@ -282,3 +282,13 @@ def test_data_section_from_runs(tmp_path):
     write_data_section(tmp_path)  # idempotent: replaced, not duplicated
     assert (tmp_path / "info.md").read_text().splitlines().count("## Data") == 1
     assert upsert_section("# x\n", "## Data\n\nd\n").endswith("## Data\n\nd\n")
+
+
+def test_prior_truth_records_draws_and_expected_counts(tmp_path):
+    cfg = config(
+        "truth.source=prior", "budget.sbc_cases=0", "budget.ppc_samples=0", "budget.simulations=64"
+    )
+    metrics = run_experiment(cfg, tmp_path)
+    assert metrics["truth_draws"] >= 1
+    counts = metrics["reference_expected_counts"]
+    assert set(counts) == {"4", "8", "12"} and set(counts["12"]) == {"A", "B"}

@@ -111,16 +111,21 @@ def is_well_specified(cfg: DictConfig) -> bool:
                OmegaConf.to_container(cfg[k], resolve=True) for k in keys)  # fmt: skip
 
 
-def reference_parameters(cfg: DictConfig, simulator: BranchingSimulator) -> np.ndarray:
+def reference_parameters(
+    cfg: DictConfig, simulator: BranchingSimulator, attempt: int = 0
+) -> np.ndarray:
     """Physical parameters of the reference dataset under the data model ``simulator``.
 
     ``truth.source=reference`` merges ``data.law.reference``, ``data.simulator.reference``
     (entries for types the law lacks are ignored) and ``truth.values``, later winning;
     fixed values of the data law fill in automatically. ``truth.source=prior`` draws
-    one sample from the data model's prior, seeded by :func:`data_seed`.
+    one sample from the data model's prior, seeded by :func:`data_seed`; ``attempt > 0``
+    gives the next independent draw (used when a draw cannot produce a reference
+    dataset, see :func:`run_experiment`).
     """
     if cfg.truth.source == "prior":
-        seed_torch(seed_for(data_seed(cfg), "truth"))
+        keys = ("truth",) if attempt == 0 else ("truth", attempt)  # attempt 0: as before
+        seed_torch(seed_for(data_seed(cfg), *keys))
         return simulator.decode(simulator.prior().sample((1,)).numpy()[0])
     if cfg.truth.source != "reference":
         raise ValueError("truth.source must be 'reference' or 'prior'")
@@ -157,12 +162,32 @@ def run_experiment(cfg: DictConfig, out: str | Path) -> dict:
     prior = sim.prior()
     well_specified = is_well_specified(cfg)
 
-    # 1. Reference ("observed") dataset from the data model.
-    truth = reference_parameters(cfg, data_gen.simulator)
-    detection: list[dict] = []
-    reference = data_gen.dataset(truth, "reference", stats=detection)
+    # 1. Reference ("observed") dataset from the data model. A prior-drawn truth can be
+    # unusable (clones never detected, or above the simulation limits): redraw it,
+    # reproducibly from data_seed, up to truth.max_draws times and record the count.
+    max_draws = int(cfg.truth.get("max_draws", 50)) if cfg.truth.source == "prior" else 1
+    for attempt in range(max_draws):
+        truth = reference_parameters(cfg, data_gen.simulator, attempt)
+        detection: list[dict] = []
+        reference = data_gen.dataset(truth, "reference", stats=detection)
+        if reference is not None:
+            break
     if reference is None:
-        raise RuntimeError("Reference parameters exceed simulation limits; adjust truth/limits")
+        raise RuntimeError(
+            f"No usable reference dataset after {max_draws} truth draw(s): the parameters "
+            "exceed the simulation limits or no clone is detectable; adjust truth/limits"
+        )
+    truth_draws = attempt + 1
+    # Expected living cells per TRUE type (incl. types the markers cannot see), per horizon.
+    expected_counts = {}
+    for horizon in data_gen.design.horizons:
+        try:
+            counts = data_gen.simulator.expected_counts(truth, horizon)
+            expected_counts[f"{horizon:g}"] = dict(
+                zip(data_gen.simulator.types, map(float, counts), strict=True)
+            )
+        except NotImplementedError:
+            break
     x_obs = gen.summarize(reference)
     np.savez_compressed(
         out / "reference.npz",
@@ -259,6 +284,8 @@ def run_experiment(cfg: DictConfig, out: str | Path) -> dict:
             "clones": list(gen.design.clones),
         },
         "reference_detection": detection,
+        "truth_draws": truth_draws,
+        "reference_expected_counts": expected_counts or None,
         "n_free_parameters": int(sim.theta_dim),
         "x_dim": int(fitted.feature_mask.sum()),
         "training": fitted.history,

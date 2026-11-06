@@ -1,0 +1,44 @@
+# @package _global_
+# E2c rerun with truths in the prior bulk: the original E2c truth (A->AA 0.79-0.905,
+# B persist 0.9) lies ~1e-6 deep in the 10-outcome Dirichlet tail, so even the true data
+# model failed (results/e2c). Here every dataset's truth is DRAWN from the three-type
+# prior (data_seed = seed; 10 truths), shared by the three inference arms and q values.
+# Three arms, run separately (as e2c_third_type):
+#   bio-sbi -m +experiment=e2c_prior_truth hydra.sweep.dir=results/e2c_prior/ignore_c
+#   bio-sbi -m +experiment=e2c_prior_truth law=three_type observation=three_split \
+#       hydra.sweep.dir=results/e2c_prior/model_c_free
+#   bio-sbi -m +experiment=e2c_prior_truth law=three_type_traj observation=three_split \
+#       hydra.sweep.dir=results/e2c_prior/model_c_traj
+# 3 q x 10 truths = 30 runs per arm (90 in total).
+defaults:
+  - override /law: reversible_ab          # arm "ignore C": two-type inference model
+  - override /design: real_like
+  - override /budget: dev
+  - override /law@data.law: three_type
+  - override /observation@data.observation: three_split
+observation:
+  q: ${data.observation.q}   # three_split inference arms assume the true split is known
+data:
+  observation:
+    q: 0.5
+truth:
+  source: prior              # one truth per data_seed from the three-type prior
+info:
+  title: "E2c rerun: hidden third type, truths drawn from the prior"
+  question: |
+    With truths in the prior bulk (drawn from the three-type prior), does ignoring a
+    hidden third type C (read as A with probability q, as B with 1 - q) bias the A/B
+    rows or get flagged (PPC, support mass), and does modelling C (free, or
+    trajectory-constrained C -> B) restore recovery? Same datasets across arms and q.
+  notes: |
+    Truths are random biology (any transition allowed), so the C fraction varies per
+    draw: metrics.json records reference_expected_counts per true type (GW expected
+    counts) and truth_draws (unusable draws are redrawn reproducibly). three_type_traj
+    fixes C transitions that a random truth may use; that arm is therefore itself
+    misspecified for many draws (compare by whether the draw respects its zeros). The
+    "ignore C" arm has no truth for C parameters; compare A/B rows across arms.
+hydra:
+  sweeper:
+    params:
+      data.observation.q: 0,0.5,1
+      seed: 0,1,2,3,4,5,6,7,8,9
