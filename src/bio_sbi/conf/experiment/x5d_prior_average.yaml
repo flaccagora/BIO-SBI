@@ -1,0 +1,28 @@
+# @package _global_
+# X5d: performance averaged over plausible truths. Truths drawn from the data model's
+# prior (data_seed = seed, 30 truths), reversible_ab, real-like design; run per simulator:
+#   bio-sbi -m +experiment=x5d_prior_average simulator=galton_watson \
+#       hydra.sweep.dir=results/x5/d_gw
+#   bio-sbi -m +experiment=x5d_prior_average simulator=bellman_harris \
+#       hydra.sweep.dir=results/x5/d_bh
+# 30 runs per simulator (60 in total).
+defaults:
+  - override /law: reversible_ab
+  - override /design: real_like
+  - override /budget: dev
+truth:
+  source: prior
+info:
+  title: "X5d: recovery averaged over prior-drawn truths"
+  question: |
+    All other experiments use one hand-picked truth (partly in the prior tail). How
+    good is recovery on average over truths drawn from the prior (error, contraction,
+    coverage), and how much does it vary between truths? GW vs BH.
+  notes: |
+    reversible_ab, real-like design, NPE 5k, one truth per seed (unusable draws are
+    redrawn; metrics.truth_draws). Coverage across truths approximates calibration
+    (complements SBC); error per truth shows where recovery fails.
+hydra:
+  sweeper:
+    params:
+      seed: 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29

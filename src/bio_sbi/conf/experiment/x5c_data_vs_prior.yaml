@@ -1,0 +1,28 @@
+# @package _global_
+# X5c: how many organoids overrule a misleading prior? Tail truth B.to_A = 0.9 with all
+# transitions free, uniform Dirichlet vs flat B.to_A prior, clones per endpoint
+# {32, 128, 512} (generations 6 and 10).
+#   bio-sbi -m +experiment=x5c_data_vs_prior hydra.sweep.dir=results/x5/c_data_vs_prior
+# 3 clone counts x 2 priors x 5 seeds = 30 runs.
+defaults:
+  - override /simulator: galton_watson
+  - override /law: two_type
+  - override /design: real_like
+  - override /budget: dev
+truth:
+  values:
+    B: {death: 0.05, persist: 0.05, to_A: 0.9}
+info:
+  title: "X5c: data vs prior at a tail truth"
+  question: |
+    With a truth in the prior tail (B.to_A = 0.9, P < 1e-8 under the uniform
+    Dirichlet marginal Beta(1, 5)), how many organoids per endpoint are needed for the
+    data to overrule the prior, compared with a flat prior on B.to_A?
+  notes: |
+    Galton-Watson, two_type law (10 free parameters), generations 6 and 10, NPE 5k.
+hydra:
+  sweeper:
+    params:
+      design.clones: 32,128,512
+      ++law.concentration: "{},{B:{death:0.2,persist:0.2,div_AA:0.2,div_AB:0.2,div_BB:0.2}}"
+      seed: 0,1,2,3,4

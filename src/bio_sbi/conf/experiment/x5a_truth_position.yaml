@@ -1,0 +1,39 @@
+# @package _global_
+# X5a (role of the prior, E0 extension): how does recovery of B's switch-back B.to_A
+# depend on where the truth sits in the prior, and on the prior's shape?
+# Truth B.to_A in {0.1, 0.3, 0.5, 0.7, 0.9} (B death = B persist = (1 - B.to_A)/2) x
+# prior (inference model only) x 5 seeds; run once per law (priors are law-specific):
+#   bio-sbi -m +experiment=x5a_truth_position law=two_type \
+#     '++law.concentration={},{A:{death:0.5,persist:0.5,to_B:0.5,div_AA:0.5,div_AB:0.5,div_BB:0.5},B:{death:0.5,persist:0.5,to_A:0.5,div_AA:0.5,div_AB:0.5,div_BB:0.5}},{B:{death:0.2,persist:0.2,div_AA:0.2,div_AB:0.2,div_BB:0.2}}' \
+#     hydra.sweep.dir=results/x5/a_two_type
+#   bio-sbi -m +experiment=x5a_truth_position law=reversible_ab \
+#     '++law.concentration={},{A:{death:0.5,persist:0.5,to_B:0.5,div_AA:0.5,div_AB:0.5,div_BB:0.5},B:{death:0.5,persist:0.5,to_A:0.5}},{B:{death:0.5,persist:0.5}}' \
+#     hydra.sweep.dir=results/x5/a_reversible_ab
+# Priors: {} = uniform Dirichlet; all 0.5 = Jeffreys Dirichlet; last = B.to_A marginal
+# uniform (concentration 1 for to_A, the other free B outcomes summing to 1).
+# 5 truths x 3 priors x 5 seeds = 75 runs per law (150 in total).
+defaults:
+  - override /simulator: galton_watson
+  - override /design: real_like
+  - override /budget: dev
+truth:
+  values:            # default entry so the sweep below can override truth.values.B
+    B: {death: 0.1, persist: 0.1, to_A: 0.8}
+info:
+  title: "X5a: truth position vs prior (B.to_A)"
+  question: |
+    How does recovery of B.to_A depend on the truth's position in the prior
+    (B.to_A from 0.1 to 0.9) and on the prior's shape (uniform Dirichlet, Jeffreys
+    Dirichlet(1/2), flat marginal on B.to_A), with all transitions free (two_type) or
+    B divisions fixed to 0 (reversible_ab)? Where does the prior start to dominate?
+  notes: |
+    Galton-Watson, real-like design (generations 6 and 10; 165/101 clones), NPE 5k.
+    Data law = inference law option; the prior (law.concentration) changes only the
+    inference model. Other parameters at the reference truth.
+hydra:
+  sweeper:
+    params:
+      truth.values.B: "{death:0.45,persist:0.45,to_A:0.1},{death:0.35,persist:0.35,to_A:0.3},\
+        {death:0.25,persist:0.25,to_A:0.5},{death:0.15,persist:0.15,to_A:0.7},\
+        {death:0.05,persist:0.05,to_A:0.9}"
+      seed: 0,1,2,3,4

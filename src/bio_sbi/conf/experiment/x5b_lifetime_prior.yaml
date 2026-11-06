@@ -1,0 +1,33 @@
+# @package _global_
+# X5b: what if the (literature) lifetime prior is wrong? BH with the inference
+# model's log-uniform lifetime prior vague (default [10, 80] h), narrow and centred on
+# the truth (A 20 h, B 30 h: +-25%), or narrow and centred 50% too high (truth outside).
+# Three arms, run separately (a list default cannot be swept into a per-type dict):
+#   bio-sbi -m +experiment=x5b_lifetime_prior hydra.sweep.dir=results/x5/b_vague
+#   bio-sbi -m +experiment=x5b_lifetime_prior '~simulator.model.lifetime_mean_bounds' \
+#     '+simulator.model.lifetime_mean_bounds={A:[16,25],B:[24,37.5]}' \
+#     hydra.sweep.dir=results/x5/b_right
+#   bio-sbi -m +experiment=x5b_lifetime_prior '~simulator.model.lifetime_mean_bounds' \
+#     '+simulator.model.lifetime_mean_bounds={A:[24,37.5],B:[36,56.25]}' \
+#     hydra.sweep.dir=results/x5/b_wrong
+# 3 priors x 5 seeds = 15 runs.
+defaults:
+  - override /simulator: bellman_harris
+  - override /law: reversible_ab
+  - override /design: real_like
+  - override /budget: dev
+info:
+  title: "X5b: informative lifetime prior, right vs wrong"
+  question: |
+    Fixing or informing lifetimes resolves the BH lifetime/self-renewal ridge
+    (results/bh_ridge). What happens if the informative lifetime prior is centred on
+    the truth vs 50% too high (truth outside the prior)? Are the other parameters
+    biased, and is the error detectable (PPC, support mass)?
+  notes: |
+    Inference-model change only (simulator.model.lifetime_mean_bounds); data lifetimes
+    A 20 h, B 30 h. Vague = [10, 80]; right = A [16, 25], B [24, 37.5];
+    wrong = A [24, 37.5], B [36, 56.25] (centred on 30 h / 45 h).
+hydra:
+  sweeper:
+    params:
+      seed: 0,1,2,3,4
