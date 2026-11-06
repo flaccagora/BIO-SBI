@@ -440,17 +440,32 @@ def _epochs(run_dirs) -> pd.Series:
 
 
 def fig_e4_budget():
-    """5k vs 20k training simulations at 4096 clones per endpoint, best design per
-    simulator, same five datasets (paired by seed)."""
-    cases = [("gw", "[4,6,10]", "GW {4,6,10}"), ("bh", "[96,144,240]", "BH {96,144,240} h")]
+    """5k vs 20k training simulations on the same datasets (paired by seed): BH at the
+    real-like design, at 512 and at 4096 clones per endpoint (days 4/6/10), and GW at
+    4096 (generations 4/6/10)."""
+    def by(hs=None, clones=None):
+        def keep(r):
+            k = pd.Series(True, index=r.index)
+            if hs is not None:
+                k &= ov(r, "design.horizons").str.replace(" ", "") == hs
+            if clones is not None:
+                k &= ov(r, "design.clones") == str(clones)
+            return k
+        return keep
+    # (label, 5k folder, expected, filter, 20k folder, expected, filter)
+    cases = [
+        ("BH real-like", "x5/b_vague", 5, by(), "e4/bh_real_20k", 5, by()),
+        ("BH 512 ×3", "e4/bh", 120, by("[96,144,240]", 512), "e4/bh_512_20k", 5, by()),
+        ("BH 4096 ×3", "e4/bh_xxl", 20, by("[96,144,240]"), "e4/bh_xxl_20k", 5, by()),
+        ("GW 4096 ×3", "e4/gw_xxl", 20, by("[4,6,10]"), "e4/gw_xxl_20k", 5, by()),
+    ]
     runs_all, par_all = [], []
-    for sim, hs, lab in cases:
-        require(f"e4/{sim}_xxl", 20)
-        require(f"e4/{sim}_xxl_20k", 5)
-        for rel, bud in [(f"e4/{sim}_xxl", "5k"), (f"e4/{sim}_xxl_20k", "20k")]:
+    for lab, rel5, n5, f5, rel20, n20, f20 in cases:
+        require(rel5, n5)
+        require(rel20, n20)
+        for rel, keep, bud in [(rel5, f5, "5k"), (rel20, f20, "20k")]:
             r, q = load(rel)
-            keep = ov(r, "design.horizons").str.replace(" ", "") == hs
-            r = r[keep].assign(case=lab, budget=bud)
+            r = r[keep(r)].assign(case=lab, budget=bud)
             r["epochs"] = r.run.map(_epochs(r.run))
             q = q[q.run.isin(r.run)].assign(case=lab, budget=bud)
             runs_all.append(r)
@@ -458,55 +473,67 @@ def fig_e4_budget():
     runs = pd.concat(runs_all, ignore_index=True)
     par = pd.concat(par_all, ignore_index=True)
     par = par[par.inferred.astype(bool)]
-    panels = [("BH {96,144,240} h", "A.div_AA", "posterior mean", 0.55),
-              ("BH {96,144,240} h", "A.mean_lifetime", "posterior mean", 20.0),
-              ("GW {4,6,10}", "B.to_A", "abs_error", None),
-              ("GW {4,6,10}", None, "sbc_mean_abs_coverage_error", None)]
-    fig, axes = plt.subplots(1, 4, figsize=(W_FULL, 1.9), gridspec_kw=dict(wspace=0.55))
+    bh_cases = ["BH real-like", "BH 512 ×3", "BH 4096 ×3"]
+    bh_titles = {"BH real-like": "BH real-like\n165/101, days 6/10",
+                 "BH 512 ×3": "BH 512 clones × 3\ndays 4/6/10",
+                 "BH 4096 ×3": "BH 4096 clones × 3\ndays 4/6/10"}
+    # rows: A->AA, A lifetime; columns: three BH designs + GW
+    panels = [[(c, "A.div_AA", "mean", 0.55) for c in bh_cases]
+              + [("GW 4096 ×3", "B.to_A", "abs_error", None)],
+              [(c, "A.mean_lifetime", "mean", 20.0) for c in bh_cases]
+              + [("GW 4096 ×3", None, "sbc_mean_abs_coverage_error", None)]]
+    fig, axes = plt.subplots(2, 4, figsize=(W_FULL, 3.7),
+                             gridspec_kw=dict(wspace=0.55, hspace=0.7))
     xs = {"5k": 0, "20k": 1}
-    for ax, (case, par_name, what, tv) in zip(axes, panels, strict=True):
-        if par_name is None:
-            d = runs[runs.case == case][["seed", "budget", what]].rename(columns={what: "y"})
-            d["e"] = 0.0
-            title, ylab = "GW: SBC coverage error", "mean |coverage error|"
-        else:
-            q = par[(par.case == case) & (par.parameter == par_name)]
-            if what == "abs_error":
+    for i, row in enumerate(panels):
+        for j, (case, par_name, what, tv) in enumerate(row):
+            ax = axes[i, j]
+            if par_name is None:
+                d = runs[runs.case == case][["seed", "budget", what]].rename(columns={what: "y"})
+                d["e"] = 0.0
+                title, ylab = "GW 4096 × 3\nSBC coverage error", "mean |coverage error|"
+            elif what == "abs_error":
+                q = par[(par.case == case) & (par.parameter == par_name)]
                 d = q[["seed", "budget", "abs_error"]].rename(columns={"abs_error": "y"})
                 d["e"] = 0.0
-                title, ylab = f"GW: {PRETTY[par_name]} error", "|posterior mean − truth|"
+                title, ylab = f"GW 4096 × 3\n{PRETTY[par_name]} error", "|posterior mean − truth|"
             else:
+                q = par[(par.case == case) & (par.parameter == par_name)]
                 d = q[["seed", "budget", "posterior_mean", "posterior_std", "covered"]].rename(
                     columns={"posterior_mean": "y", "posterior_std": "e"})
-                title = f"BH: {PRETTY[par_name]}"
-                ylab = "posterior mean ± sd"
-        for k, (seed, t) in enumerate(d.groupby("seed")):
-            t = t.assign(x=t.budget.map(xs)).sort_values("x")
-            off = 0.05 * (k - 2)
-            ax.plot(t.x + off, t.y, color=AXIS, lw=0.7, zorder=1)
-            ax.errorbar(t.x + off, t.y, yerr=t.e, fmt="none", ecolor=MUTED, elinewidth=0.6,
-                        zorder=2)
-            for _, row in t.iterrows():
-                filled = bool(row.get("covered", True))
-                c = BLUE if row.budget == "5k" else ORANGE
-                ax.scatter(row.x + off, row.y, s=16, zorder=3, lw=0.8, ec=c,
-                           color=c if filled else "white")
-        m = d.groupby("budget").y.mean()
-        for b, x in xs.items():
-            ax.plot([x - 0.18, x + 0.18], [m[b], m[b]], color=INK, lw=1.4, zorder=4)
-        if tv is not None:
-            truth_line(ax, tv)
-        ax.set_xticks([0, 1], ["5k sims", "20k sims"])
-        ax.set_xlim(-0.45, 1.45)
-        ax.grid(axis="x", visible=False)
-        ax.set_title(title, fontsize=7.2)
-        ax.set_ylabel(ylab, fontsize=6.5)
-        if what in ("abs_error", "sbc_mean_abs_coverage_error"):
-            ax.set_ylim(bottom=0)
+                title = bh_titles[case] if i == 0 else ""
+                ylab = (f"{PRETTY[par_name]}\nposterior mean ± sd" if j == 0 else "")
+            for k, (seed, t) in enumerate(d.groupby("seed")):
+                t = t.assign(x=t.budget.map(xs)).sort_values("x")
+                off = 0.05 * (k - 2)
+                ax.plot(t.x + off, t.y, color=AXIS, lw=0.7, zorder=1)
+                ax.errorbar(t.x + off, t.y, yerr=t.e, fmt="none", ecolor=MUTED, elinewidth=0.6,
+                            zorder=2)
+                for _, rr in t.iterrows():
+                    filled = bool(rr.get("covered", True))
+                    c = BLUE if rr.budget == "5k" else ORANGE
+                    ax.scatter(rr.x + off, rr.y, s=14, zorder=3, lw=0.8, ec=c,
+                               color=c if filled else "white")
+            m = d.groupby("budget").y.mean()
+            for b, x in xs.items():
+                ax.plot([x - 0.18, x + 0.18], [m[b], m[b]], color=INK, lw=1.4, zorder=4)
+            if tv is not None:
+                truth_line(ax, tv)
+            ax.set_xticks([0, 1], ["5k sims", "20k sims"], fontsize=6.3)
+            ax.set_xlim(-0.45, 1.45)
+            ax.grid(axis="x", visible=False)
+            ax.set_title(title, fontsize=6.6)
+            ax.set_ylabel(ylab, fontsize=6.5)
+            if par_name == "A.div_AA":
+                ax.set_ylim(0.1, 0.72)
+            elif par_name == "A.mean_lifetime":
+                ax.set_ylim(11, 22.5)
+            else:
+                ax.set_ylim(bottom=0)
     save(fig, "e4_budget")
     # comparison table (means over the 5 seeds)
     rows = []
-    for case in [c[2] for c in cases]:
+    for case in [c[0] for c in cases]:
         for bud in ["5k", "20k"]:
             r = runs[(runs.case == case) & (runs.budget == bud)]
             q = par[(par.case == case) & (par.budget == bud)]
@@ -518,7 +545,7 @@ def fig_e4_budget():
                        sbc_error=r.sbc_mean_abs_coverage_error.mean(),
                        support=r.posterior_support_mass.mean(),
                        epochs_max=r.epochs.max(), epochs_mean=r.epochs.mean())
-            for pn in ["B.to_A", "A.div_AA", "A.mean_lifetime", "B.mean_lifetime"]:
+            for pn in ["B.to_A", "A.div_AA", "A.div_AB", "A.mean_lifetime", "B.mean_lifetime"]:
                 t = q[q.parameter == pn]
                 if len(t):
                     row[f"{pn}_mean"] = t.posterior_mean.mean()
@@ -1336,6 +1363,138 @@ def fig_x5d():
 
 
 # ------------------------------------------------------------------- E3a
+def fig_x2():
+    """X2: sd of posterior means across 10 runs, training arm (one dataset, training
+    seeds 0-9) vs data arm (datasets 0-9, one training seed), relative to the mean
+    posterior sd, per parameter; GW and BH."""
+    for sim in ("gw", "bh"):
+        for arm in ("training", "data"):
+            require(f"x2/{sim}_{arm}", 10)
+    d = pd.read_csv(RES / "x2" / "x2_spread.csv")
+    d["train_ratio"] = d.sd_training / d.post_sd
+    d["data_ratio"] = d.sd_data / d.post_sd
+    order = P_ROWS + ["A.mean_lifetime", "B.mean_lifetime"]
+    fig, axes = plt.subplots(1, 2, figsize=(W_FULL, 2.5), sharex=True,
+                             gridspec_kw=dict(wspace=0.45))
+    for ax, sim, lab in [(axes[0], "gw", "Galton–Watson"), (axes[1], "bh", "Bellman–Harris")]:
+        t = d[d.simulator == sim].set_index("parameter")
+        pars = [p for p in order if p in t.index][::-1]
+        y = np.arange(len(pars))
+        tr, da = t.loc[pars, "train_ratio"].values, t.loc[pars, "data_ratio"].values
+        for yi, a, b in zip(y, tr, da, strict=True):
+            ax.plot([a, b], [yi, yi], color=AXIS, lw=1.0, zorder=1)
+        ax.scatter(tr, y, s=18, color=BLUE, zorder=3, lw=0.5, ec="white",
+                   label="training arm (1 dataset, 10 training seeds)")
+        ax.scatter(da, y, s=18, color=ORANGE, zorder=3, lw=0.5, ec="white",
+                   label="data arm (10 datasets, 1 training seed)")
+        med = np.median(tr)
+        ax.axvline(med, color=BLUE, lw=0.7, ls=":", zorder=0)
+        ax.text(med, len(pars) - 0.35, f" median {med:.2f}", color=BLUE, fontsize=6,
+                va="bottom", ha="left")
+        ax.set_yticks(y, [PRETTY[p] for p in pars], fontsize=6.5)
+        ax.set_ylim(-0.6, len(pars) - 0.1 + 0.6)
+        ax.set_xlim(0, 0.9)
+        ax.grid(axis="y", visible=False)
+        ax.set_xlabel("sd of posterior means / mean posterior sd")
+        ax.set_title(lab)
+    h, lab = axes[0].get_legend_handles_labels()
+    fig.legend(h, lab, loc="lower center", ncol=2, bbox_to_anchor=(0.5, 0.98), fontsize=6.5)
+    save(fig, "x2")
+    cols = ["simulator", "parameter", "truth", "post_sd", "sd_training", "sd_data",
+            "train_ratio", "data_ratio", "training_share", "mean_training", "mean_data",
+            "cov_training", "cov_data"]
+    table(d[cols], "x2")
+
+
+def fig_e0_large():
+    """E0 revisited at 4096 clones x 3 endpoints: B->A and the posterior mass on B
+    divisions per seed, all transitions free (two_type, 5k and 20k simulations) vs B
+    divisions fixed (reversible_ab, 20k); GW and BH."""
+    arms = [("gw", "free, 5k", "e4/gw_xxl_two_type_5k", None),
+            ("gw", "free, 20k", "e4/gw_xxl_two_type_20k", None),
+            ("gw", "fixed, 20k", "e4/gw_xxl_20k", None),
+            ("bh", "free, 5k", "e4/bh_xxl_two_type_5k", None),
+            ("bh", "free, 20k", "e4/bh_xxl_two_type_20k", None),
+            ("bh", "fixed, 20k", "e4/bh_xxl_20k", None)]
+    rows, per_seed = [], []
+    for sim, arm, rel, _ in arms:
+        require(rel, 5)
+        r, q = load(rel)
+        q = q[q.inferred.astype(bool)]
+        piv = q.pivot_table(index="seed", columns="parameter", values="posterior_mean")
+        bdiv = [c for c in ("B.div_AA", "B.div_AB", "B.div_BB") if c in piv.columns]
+        mass = piv[bdiv].sum(axis=1) if bdiv else pd.Series(0.0, index=piv.index)
+        b = q[q.parameter == "B.to_A"].set_index("seed").sort_index()
+        for seed in b.index:
+            per_seed.append(dict(sim=sim, arm=arm, seed=seed, to_A=b.loc[seed, "posterior_mean"],
+                                 to_A_sd=b.loc[seed, "posterior_std"],
+                                 covered=bool(b.loc[seed, "covered"]),
+                                 bdiv_mass=float(mass.loc[seed]), free=bool(bdiv)))
+        ep = r.run.map(_epochs(r.run))
+        row = dict(simulator=sim, arm=arm, runs=len(r), B_to_A_mean=b.posterior_mean.mean(),
+                   B_to_A_post_sd=b.posterior_std.mean(), B_to_A_covered=int(b.covered.sum()),
+                   B_to_A_contraction=b.contraction.mean(),
+                   B_div_mass=float(mass.mean()) if bdiv else 0.0,
+                   mae_probabilities=r.mae_probabilities.mean(),
+                   coverage_run=r.coverage90_reference.mean(),
+                   support=r.posterior_support_mass.mean(),
+                   ppc=r.ppc_fraction_outside_95.mean(),
+                   sbc_error=r.sbc_mean_abs_coverage_error.mean(), epochs_mean=ep.mean())
+        for pn in ("B.div_AA", "A.persist", "A.div_AA", "A.div_BB", "A.mean_lifetime"):
+            t = q[q.parameter == pn]
+            if len(t):
+                row[f"{pn}_mean"] = t.posterior_mean.mean()
+                row[f"{pn}_covered"] = int(t.covered.sum())
+        rows.append(row)
+    s = pd.DataFrame(per_seed)
+    fig, axes = plt.subplots(1, 2, figsize=(W_FULL, 2.3),
+                             gridspec_kw=dict(wspace=0.3, width_ratios=[3, 2.2]))
+    color = {"free, 5k": ORANGE, "free, 20k": RED, "fixed, 20k": BLUE}
+    xa = [(sim, arm) for sim, arm, _, _ in arms]
+    for i, (sim, arm) in enumerate(xa):
+        t = s[(s.sim == sim) & (s.arm == arm)].sort_values("seed")
+        xs = i + np.linspace(-0.22, 0.22, len(t))
+        axes[0].errorbar(xs, t.to_A, yerr=t.to_A_sd, fmt="none", ecolor=MUTED,
+                         elinewidth=0.7, zorder=2)
+        for x, (_, rr) in zip(xs, t.iterrows(), strict=True):
+            c = color[arm]
+            axes[0].scatter(x, rr.to_A, s=16, color=c if rr.covered else "white", ec=c,
+                            lw=0.8, zorder=3)
+        axes[0].plot([i - 0.3, i + 0.3], [t.to_A.mean()] * 2, color=INK, lw=1.3, zorder=4)
+    truth_line(axes[0], 0.8)
+    axes[0].axhline(1 / 6, color=MUTED, lw=0.8, ls=":")
+    axes[0].text(2.0, 1 / 6 + 0.015, "prior mean\n(free)", fontsize=6, color=MUTED, ha="center",
+                 va="bottom", linespacing=0.9)
+    axes[0].set_xticks(range(len(xa)), [a.replace(", ", "\n") for _, a in xa], fontsize=6.3)
+    axes[0].axvline(2.5, color=AXIS, lw=0.6)
+    axes[0].text(1, 1.02, "GW, gen. 4/6/10", ha="center", fontsize=7, color=INK2)
+    axes[0].text(4, 1.02, "BH, days 4/6/10", ha="center", fontsize=7, color=INK2)
+    axes[0].set_ylim(-0.02, 1.08)
+    axes[0].set_xlim(-0.55, 5.55)
+    axes[0].grid(axis="x", visible=False)
+    axes[0].set_ylabel("B→A posterior mean ± sd")
+    axes[0].set_title("B→A (truth 0.80); filled = covered", fontsize=7.2)
+    xb = [(sim, arm) for sim, arm in xa if not arm.startswith("fixed")]
+    for i, (sim, arm) in enumerate(xb):
+        t = s[(s.sim == sim) & (s.arm == arm)].sort_values("seed")
+        xs = i + np.linspace(-0.2, 0.2, len(t))
+        axes[1].scatter(xs, t.bdiv_mass, s=16, color=color[arm], ec="white", lw=0.4, zorder=3)
+        axes[1].plot([i - 0.28, i + 0.28], [t.bdiv_mass.mean()] * 2, color=INK, lw=1.3, zorder=4)
+    axes[1].axhline(0.5, color=MUTED, lw=0.8, ls=":")
+    axes[1].text(3.5, 0.485, "prior mean 0.5\n(3 of 6 outcomes)", fontsize=6, color=MUTED,
+                 ha="right", va="top", linespacing=0.9)
+    truth_line(axes[1], 0.0)
+    axes[1].set_xticks(range(len(xb)), [f"{sim.upper()}\n{a}" for sim, a in xb], fontsize=6.3)
+    axes[1].axvline(1.5, color=AXIS, lw=0.6)
+    axes[1].set_ylim(-0.03, 0.75)
+    axes[1].set_xlim(-0.55, 3.55)
+    axes[1].grid(axis="x", visible=False)
+    axes[1].set_ylabel("B→AA + B→AB + B→BB")
+    axes[1].set_title("posterior mass on B divisions (truth 0)", fontsize=7.2)
+    save(fig, "e0_large")
+    table(pd.DataFrame(rows), "e0_large")
+
+
 def fig_e3a():
     require("e3a", 60)
     runs, params = load("e3a")
@@ -1638,6 +1797,7 @@ FIGURES = [
     fig_e4_gw, fig_e4_budget, fig_e1c_gw, fig_e1a_number_gw, fig_e2_gw, fig_e2c_model, fig_e2c_traj,
     fig_e2c_arms, fig_detectability_gw,
     fig_e2c_prior, fig_x5a_priors, fig_x5a, fig_x5b, fig_x5c, fig_x5d,
+    fig_x2, fig_e0_large,
 ]
 
 

@@ -10,10 +10,11 @@ pointing forward.
 | `report.tex` | the report: executive summary (in narrative order), roadmap (dependency graph + experiment index with section numbers here and in `report/report.pdf`), methods, Parts I–V, appendices (device benchmark, reproducibility, glossary) |
 | `report.pdf` | compiled report |
 
-Order: I identifiability and the prior (E0, X5a, X5c) → II design and amount of data
+Order: methodological check (X2) → I identifiability and the prior (E0, X5a, X5c, E0 at
+4096 clones) → II design and amount of data
 (design comparison, E4 GW, E4 BH) → III BH timing (BH ridge, X5d, X5b, E3a, E3b, E3c) →
 IV misspecified biology and assay (E1a type, E1a number BH/GW, E1b, E1c BH/GW, E2a/b BH/GW,
-E2c, E2c modelled, E2c rerun, detectability synthesis) → V planned (X2, X1/X3/X4/R/P0).
+E2c, E2c modelled, E2c rerun, detectability synthesis) → V planned (X1/X3/X4/R/P0, measurements).
 
 ## Dependency on `../report/`
 
