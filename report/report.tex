@@ -85,7 +85,7 @@
 \vspace{1.5cm}
 \begin{tabular}{ll}
 Status of results & 6 November 2026 \\
-Repository & \code{BIO-SBI}, branch \code{main}, commit \code{d403cac} \\
+Repository & \code{BIO-SBI}, branch \code{main}, commit \code{7f4a11f} \\
 Data & synthetic only (no measured data used) \\
 Audience & group planning the wet-lab organoid experiments \\
 \end{tabular}
@@ -103,7 +103,7 @@ Parameters: A$\to$AA etc.\ are outcome probabilities per cell event; \tA, \tB{} 
 \section*{Executive summary}\label{sec:summary}
 \addcontentsline{toc}{section}{Executive summary}
 
-\textbf{Scope.} All simulation sweeps of E0--E4 are finished (966 runs), all on synthetic data from one reference parameter vector $\theta^\star$ (Table~\ref{tab:truth}), 5 seeds per setting. Two later experiments test the role of the prior with truths swept or drawn from the prior: the E2c rerun (90 runs, \S\ref{sec:e2cprior}) and X5 (255 runs, \S\ref{sec:x5}). Galton--Watson (GW, time in generations; mapping to days nominal) and Bellman--Harris (BH, time in hours; real-like design = days 6 and 10 = 144/240\,h with 165/101 organoids). Every error is compared with the well-specified control of the same sweep.
+\textbf{Scope.} All simulation sweeps of E0--E4 are finished (966 runs), all on synthetic data from one reference parameter vector $\theta^\star$ (Table~\ref{tab:truth}), 5 seeds per setting. Two later experiments test the role of the prior with truths swept or drawn from the prior: the E2c rerun (90 runs, \S\ref{sec:e2cprior}) and X5 (355 runs, \S\ref{sec:x5}). Galton--Watson (GW, time in generations; mapping to days nominal) and Bellman--Harris (BH, time in hours; real-like design = days 6 and 10 = 144/240\,h with 165/101 organoids). Every error is compared with the well-specified control of the same sweep.
 
 \subsection*{Key findings}
 \begin{enumerate}[leftmargin=1.4em]
@@ -123,7 +123,7 @@ Parameters: A$\to$AA etc.\ are outcome probabilities per cell event; \tA, \tB{} 
 \item \textbf{Founder composition}: founder type not learnable in BH (contraction $\le 0.12$), partly in GW (0.68 for truth 0.5); inferring it removes no shift. Founder size: stays at prior in BH; in GW it tracks the truth (0.71 for $p_1=0.6$) and inferring it removes the misfit and halves the shifts.
 \item \textbf{Observed-organoid fraction} (detected/seeded): 0.94--0.95 at $\theta^\star$; dominated by A death (0.3 $\Rightarrow$ 0.54--0.58); GW exact and BH simulated agree to 0.02 on average; A and B death trade off (one constraint, not two).
 \item \textbf{Hidden third type (GW, E2c): resolved by the rerun with prior-drawn truths} (\S\ref{sec:e2cprior}). The original failure of even the true model (support $\approx 0$) was the tail truth (prior probability $10^{-6}$--$10^{-10}$), not the method. In the prior bulk, ignoring C is flagged when C is read as B (9/10 runs at $q=0$, 7/10 at $q=0.5$) but \emph{not} when C reads as A (2/10 at $q=1$, while A/B MAE 0.18 and coverage 0.42 at contraction 0.86: silent confident bias). Modelling C (free or trajectory-constrained) is calibrated (PPC 0, coverage 0.92--0.93) but not identifiable at this design: contraction 0.16--0.20, A/B MAE 0.055--0.059 = prior-mean baseline 0.057; the wrong trajectory constraint is not detected.
-\item \textbf{Role of the prior (X5, \S\ref{sec:x5})}: (i) averaged over truths drawn from the prior, GW and BH are calibrated (90\% coverage, SBC $\approx 0.03$; contraction 0.68 GW vs 0.51 BH) --- single-truth failures are about truths and priors, not broken inference. (ii) The B-row failure is structural: with B divisions free no prior (uniform, Jeffreys, flat) and no sample size (up to 1024 organoids) recovers B$\to$A; with them fixed every truth 0.1--0.9 is recovered under every prior. Constraints, not priors or more organoids. (iii) The BH ridge is a tail-truth effect; a right literature lifetime prior ($\pm 25\%$) moves A$\to$AA 0.32 $\to$ 0.46 (MAE 0.109 $\to$ 0.068). (iv) A lifetime prior 50\% too long is detected (support $\approx 0$, PPC 0.27).
+\item \textbf{Role of the prior (X5, \S\ref{sec:x5})}: (i) averaged over truths drawn from the prior, GW and BH are calibrated (90\% coverage, SBC $\approx 0.03$; contraction 0.68 GW vs 0.51 BH) --- single-truth failures are about truths and priors, not broken inference. (ii) The B-row failure is structural: with B divisions free no prior (uniform, Jeffreys, flat) and no sample size (up to 1024 organoids) recovers B$\to$A; with them fixed every truth 0.1--0.9 is recovered under every prior. Constraints, not priors or more organoids. A weak biological prior (A mostly divides, B rarely) is the best soft option (B-division mass 0.54 $\to$ 0.11, lowest error, calibrated) but recovers B$\to$A only partly (0.59 at truth 0.9; constraint 0.79). (iii) The BH ridge is a tail-truth effect; a right literature lifetime prior ($\pm 25\%$) moves A$\to$AA 0.32 $\to$ 0.46 (MAE 0.109 $\to$ 0.068). (iv) A lifetime prior 50\% too long is detected (support $\approx 0$, PPC 0.27).
 \end{enumerate}
 
 \subsection*{Recommendations for the wet-lab design}
@@ -139,7 +139,7 @@ Parameters: A$\to$AA etc.\ are outcome probabilities per cell event; \tA, \tB{} 
   \item \emph{founder type} and \emph{quiescence} (e.g.\ Ki67) if they matter biologically --- the counts cannot provide them;
   \item \emph{apoptosis} only if death rates are to be fixed; otherwise keep them free (a value too high biases B$\to$A; in BH silently).
   \end{enumerate}
-\item \textbf{Biological constraints help more than data}: B divisions = 0 (if KRT20$^+$ cells do not divide) is what makes B$\to$A identifiable; neither a different prior nor 1024 organoids replaces it (X5a, X5c).
+\item \textbf{Biological constraints help more than data}: B divisions = 0 (if KRT20$^+$ cells do not divide) is what makes B$\to$A identifiable; neither a different prior nor 1024 organoids replaces it (X5a, X5c). A soft biological prior (``B rarely divides'') helps but does not replace it; with the constraint keep B's prior near-uniform (an informative symmetric one shrinks B$\to$A toward 1/3).
 \item \textbf{Literature division times} can enter as an informative lifetime prior ($\pm 25\%$ gets most of the benefit of fixing them, X5b); check PPC and support mass for conflict (a prior that is too long is flagged; too-short lifetimes bias silently, E3a).
 \item \textbf{Hidden third type}: endpoint counts of two labels cannot identify a three-type model (E2c rerun). If C may exist, find out how it is labelled: read as B, ignoring it is usually flagged; read as A, it biases the A/B rows silently. Modelling it needs a C-specific marker, trajectory data that justify constraints, or much richer designs --- a free C model returns the prior.
 \end{itemize}
@@ -1020,7 +1020,7 @@ Posterior correlations (free arm): corr(A persist, \tA) $\approx -0.6$; corr(A$\
 % ---------------------------------------------------------------------- X5
 \needspace{12\baselineskip}
 \section{X5 --- Role of the prior (GW and BH)}\label{sec:x5}
-Several earlier failures (E0 B row, BH ridge, original E2c) involved truths in the prior tail. X5 separates what is the prior from what is the data in four parts. Common to all: synthetic data, real-like design (GW generations 6/10 or BH 144/240\,h; 165/101 clones unless swept), perfect observation, one A founder, NPE 5k (\code{budget=dev}), SBC 200, PPC 200; 255 runs in total. Folder \res{results/x5/} (overview \res{info.md}, per-part tables \res{x5*_findings.md}).
+Several earlier failures (E0 B row, BH ridge, original E2c) involved truths in the prior tail. X5 separates what is the prior from what is the data in four parts. Common to all: synthetic data, real-like design (GW generations 6/10 or BH 144/240\,h; 165/101 clones unless swept), perfect observation, one A founder, NPE 5k (\code{budget=dev}), SBC 200, PPC 200; 355 runs in total (X5a 250, X5b 15, X5c 30, X5d 60). Folder \res{results/x5/} (overview \res{info.md}, per-part tables \res{x5*_findings.md}).
 
 \needspace{12\baselineskip}
 \subsection{X5a --- Truth position $\times$ prior shape (GW)}\label{sec:x5a}
@@ -1029,12 +1029,12 @@ Several earlier failures (E0 B row, BH ridge, original E2c) involved truths in t
 \begin{setup}
 Data model & GW; B$\to$A $\in \{0.1, 0.3, 0.5, 0.7, 0.9\}$, B death = B persist = $(1-\text{B}\to\text{A})/2$; other parameters $\theta^\star$ \\
 Laws (data = inference) & \code{two_type} (B divisions free, 10 free) and \code{reversible_ab} (B divisions fixed to 0, 7 free). Prior P(B$\to$A $>0.9$): $10^{-5}$ resp.\ 0.01 \\
-Priors (inference only) & uniform Dirichlet; Jeffreys (all concentrations 0.5); flat marginal on B$\to$A (Beta(1,1): concentration 0.2 on B's 5 other outcomes in \code{two_type}, 0.5 on death/persist in \code{reversible_ab}) \\
-Seeds / runs & 5 / 75 per law (150) \\
-Folder & \res{results/x5/a_two_type/}, \res{results/x5/a_reversible_ab/} (\res{x5a_groups.csv}, \res{x5a_runs.csv}) \\
+Priors (inference only) & uniform Dirichlet; Jeffreys (all concentrations 0.5); flat marginal on B$\to$A (Beta(1,1): concentration 0.2 on B's 5 other outcomes in \code{two_type}, 0.5 on death/persist in \code{reversible_ab}). \emph{Biological} (Dirichlet pseudo-counts per type, each row sums to 1; total $\approx$\,5--6 = weakly informative): \textbf{bio-B} = B row only, death/persist/to\_A 1.5 and B divisions 0.2 each (\code{two_type}; fixed in \code{reversible_ab}), A row uniform; \textbf{bio} = bio-B plus A row death/persist/to\_B 0.5, div\_AA 2, div\_AB 1, div\_BB 1.5. Rationale: encode the biology without the answer --- A (stem-like) mostly divides, self-renewal most likely; B (differentiated) rarely divides but may die, persist or switch back. bio-B vs bio separates B's prior from A's \\
+Seeds / runs & 5 / 125 per law (250: 150 reference + 100 biological) \\
+Folder & \res{results/x5/a_two_type/}, \res{results/x5/a_reversible_ab/}, biological priors in \res{a_two_type_bio/}, \res{a_reversible_ab_bio/} (pooled \res{x5a_groups.csv}, \res{x5a_runs.csv} in the first two) \\
 \end{setup}
 \Result
-\figorpending{x5a}{1.0}{X5a: B$\to$A posterior mean (mean over 5 seeds) $\pm$ mean posterior sd against the true B$\to$A, one line per prior (slightly offset). Dashed: identity (perfect recovery). Dotted: uniform-prior mean (1/6 left, 1/3 right).}{X5a figure.}
+\figorpending{x5a}{0.9}{X5a: B$\to$A posterior mean (mean over 5 seeds) $\pm$ mean posterior sd against the true B$\to$A, one line per prior (slightly offset). Top: reference priors; bottom: biological priors bio-B and bio, with the uniform and flat-B$\to$A means as thin reference lines. Dashed: identity (perfect recovery). Dotted: uniform-prior mean (1/6 left, 1/3 right).}{X5a figure.}
 \begin{center}\footnotesize
 \begin{tabular}{@{}rllllll@{}}\toprule
  & \multicolumn{3}{c}{B divisions free (\code{two_type})} & \multicolumn{3}{c}{B divisions fixed (\code{reversible_ab})} \\\cmidrule(lr){2-4}\cmidrule(l){5-7}
@@ -1047,7 +1047,21 @@ Truth & uniform & Jeffreys & flat B$\to$A & uniform & Jeffreys & flat B$\to$A \\
 SBC error & 0.037 & 0.054 & 0.080 & 0.032 & 0.056 & 0.037 \\\bottomrule
 \end{tabular}
 
-B$\to$A posterior mean (seeds covered by the 90\% interval). Numbers: \res{tables/x5a.csv}.
+\medskip
+\begin{tabular}{@{}rllll@{}}\toprule
+ & \multicolumn{2}{c}{B divisions free (\code{two_type})} & \multicolumn{2}{c}{B divisions fixed (\code{reversible_ab})} \\\cmidrule(lr){2-3}\cmidrule(l){4-5}
+Truth & bio-B & bio (A+B) & bio-B & bio (A+B) \\\midrule
+0.1 & 0.10 (5/5) & 0.09 (5/5) & 0.16 (4/5) & 0.14 (5/5) \\
+0.3 & 0.24 (5/5) & 0.25 (5/5) & 0.37 (4/5) & 0.33 (5/5) \\
+0.5 & 0.26 (1/5) & 0.28 (1/5) & 0.42 (5/5) & 0.38 (4/5) \\
+0.7 & 0.40 (2/5) & 0.47 (3/5) & 0.63 (5/5) & 0.61 (4/5) \\
+0.9 & 0.54 (1/5) & 0.59 (1/5) & 0.73 (1/5) & 0.75 (3/5) \\\midrule
+run MAE & 0.05--0.09 & 0.03--0.07 & 0.03--0.06 & 0.03--0.05 \\
+SBC error & 0.052 & 0.055 & 0.033 & 0.041 \\
+B-division mass & 0.21 & 0.11 & --- & --- \\\bottomrule
+\end{tabular}
+
+B$\to$A posterior mean (seeds covered by the 90\% interval). Run MAE = range over truths of the mean per-run MAE (all free parameters); B-division mass = posterior total of B$\to$AA/AB/BB (truth 0; 0.54 under the uniform and flat priors). Reference priors, run MAE: free 0.12--0.15 (uniform), 0.10--0.16 (flat); fixed 0.02--0.06 (uniform). Numbers: \res{tables/x5a.csv}.
 \end{center}
 \Comment
 \begin{itemize}
@@ -1055,6 +1069,7 @@ B$\to$A posterior mean (seeds covered by the 90\% interval). Numbers: \res{table
 \item A flat prior on B$\to$A tracks better (0.12 $\to$ 0.54) but still shrinks heavily and costs calibration (SBC 0.080) and coverage of the other parameters (run coverage 0.62--0.87).
 \item \textbf{B divisions fixed: every truth is recovered under every prior} (B$\to$A contraction 0.73--0.94; the three priors differ by $\le 0.06$, mild shrinkage at the extremes). The prior only matters once the model is structurally confounded.
 \item Conclusion for E0 (\S\ref{sec:e0}): the B-row failure is structural (switching vs division), not a bad truth position; a prior cannot substitute for the constraint.
+\item \textbf{Biological priors.} \emph{B divisions free}: the soft ``B rarely divides'' prior cuts the posterior B-division mass from 0.54 to 0.21 (bio-B) and 0.11 (bio); B$\to$A tracks like the flat prior (0.54--0.59 at truth 0.9) but with better calibration (SBC 0.05 vs 0.08) and the lowest error of any free-B prior (run MAE 0.03--0.07 for bio; the A-row prior gives most of this gain). It is still far from the hard constraint (0.79, 5/5 at truth 0.9): truths $\ge 0.5$ are mostly not covered. \emph{B divisions fixed}: the symmetric 1.5 prior on B's three outcomes (mean 1/3) shrinks B$\to$A toward 1/3, and truth 0.9 is covered in only 1/5 (bio-B) and 3/5 (bio) seeds; the A-row prior lowers the error and raises support mass (0.79--0.89 vs 0.64--0.79 uniform). A soft biological prior helps but does not replace the constraint; with the constraint, keep B's prior near-uniform.
 \end{itemize}
 
 \needspace{12\baselineskip}
@@ -1262,7 +1277,7 @@ E2c ignore C & \code{19a10ea} & \code{+experiment=e2c_third_type} \\
 E2c C modelled & free \code{d46b4c2}; traj.\ \code{12c0827} & \code{+experiment=e2c_third_type law=three_type|three_type_traj observation=three_split} \\
 E3a / E3b / E3c & \code{27b1d61}--\code{c919397} & \code{e3a_lifetime_free}, \code{e3a_lifetime_fixed}, \code{e3b_desync}, \code{e3c_persist} \\
 E2c rerun (prior truths) & \code{36d7b07} & ignore C: \code{+experiment=e2c_prior_truth}\newline C free: \code{+experiment=e2c_prior_truth law=three_type observation=three_split}\newline C traj.: \code{+experiment=e2c_prior_truth law=three_type_traj observation=three_split}\newline (folders \code{results/e2c_prior/<arm>}) \\
-X5a & \code{d403cac} & \code{+experiment=x5a_truth_position law=two_type|reversible_ab '++law.concentration={},<Jeffreys>,<flat B.to_A>'} (exact lists in the preset header and \code{results/x5/a_*/info.md}) \\
+X5a & \code{d403cac}; bio \code{7f4a11f} & \code{+experiment=x5a_truth_position law=two_type|reversible_ab '++law.concentration={},<Jeffreys>,<flat B.to_A>'}\newline biological priors: same with \code{'++law.concentration=<bio-B>,<bio>'} (folders \code{results/x5/a_*_bio})\newline (exact lists in the preset header and \code{results/x5/a_*/info.md}) \\
 X5b & \code{d403cac} & vague: \code{+experiment=x5b_lifetime_prior}\newline right / wrong: add \code{'~simulator.model.lifetime_mean_bounds'} and\newline \code{'+simulator.model.lifetime_mean_bounds={A:[16,25],B:[24,37.5]}'}\newline resp.\ \code{{A:[24,37.5],B:[36,56.25]}} \\
 X5c & \code{d403cac} & \code{+experiment=x5c_data_vs_prior} \\
 X5d & \code{d403cac} & \code{+experiment=x5d_prior_average}\newline \code{simulator=galton_watson|bellman_harris} \\\bottomrule

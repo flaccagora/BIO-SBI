@@ -938,38 +938,68 @@ def fig_e2c_prior():
 # ------------------------------------------------------------------- X5
 X5_PRIORS = [("uniform (1)", "uniform Dirichlet", BLUE), ("all 0.5", "Jeffreys (all 0.5)", AQUA),
              ("flat B.to_A", "flat on B→A", ORANGE)]
+X5_BIO = [("bio-B", "bio-B (B row only)", VIOLET, "s"), ("bio (A+B)", "bio (A + B rows)", GREEN, "D")]
+X5A_LAWS = [("a_two_type", "B divisions free (two_type, 10 free)", 1 / 6),
+            ("a_reversible_ab", "B divisions fixed to 0 (reversible_ab, 7 free)", 1 / 3)]
+
+
+def _x5a_groups(r: pd.DataFrame, key: str) -> pd.DataFrame:
+    return r[r.prior == key].groupby("truth_to_A").agg(
+        mean=("to_A_mean", "mean"), seed_sd=("to_A_mean", "std"),
+        post_sd=("to_A_sd", "mean"), covered=("to_A_covered", "sum"),
+        n=("seed", "size")).reset_index()
 
 
 def fig_x5a():
-    """B->A posterior mean vs truth (0.1-0.9) per prior; B divisions free vs fixed."""
-    require("x5/a_two_type", 75)
-    require("x5/a_reversible_ab", 75)
-    fig, axes = plt.subplots(1, 2, figsize=(W_FULL, 2.5), sharey=True,
-                             gridspec_kw=dict(wspace=0.12))
+    """B->A posterior mean vs truth (0.1-0.9) per prior; B divisions free vs fixed.
+
+    Top row: reference priors (uniform, Jeffreys, flat B.to_A). Bottom row: the two
+    biological priors (bio-B, bio), with uniform and flat B.to_A as thin reference lines.
+    ``x5a_runs.csv`` is the pooled table of ``scripts/analyse_x5a.py`` over the
+    reference folder and its ``*_bio`` companion.
+    """
+    for sub, _, _ in X5A_LAWS:
+        require(f"x5/{sub}", 75)
+        require(f"x5/{sub}_bio", 50)
+    fig, axes = plt.subplots(2, 2, figsize=(W_FULL, 4.7), sharex=True, sharey=True,
+                             gridspec_kw=dict(wspace=0.12, hspace=0.32))
     rows = []
-    for ax, (sub, title, pm) in zip(axes, [
-            ("a_two_type", "B divisions free (two_type, 10 free)", 1 / 6),
-            ("a_reversible_ab", "B divisions fixed to 0 (reversible_ab, 7 free)", 1 / 3)],
-            strict=True):
+    for col, (sub, title, pm) in enumerate(X5A_LAWS):
         r = pd.read_csv(RES / "x5" / sub / "x5a_runs.csv")
-        ax.plot([0, 1], [0, 1], color=INK, lw=0.8, ls=(0, (4, 2)), zorder=1)
-        ax.axhline(pm, color=MUTED, lw=0.8, ls=":", zorder=1)  # uniform-prior mean
+        if not set(k for k, *_ in X5_BIO) <= set(r.prior):
+            raise FileNotFoundError(f"x5/{sub}/x5a_runs.csv lacks the bio priors "
+                                    "(rerun scripts/analyse_x5a.py with the _bio folder)")
+        groups = {k: _x5a_groups(r, k) for k in r.prior.unique()}
+        for ax in axes[:, col]:
+            ax.plot([0, 1], [0, 1], color=INK, lw=0.8, ls=(0, (4, 2)), zorder=1)
+            ax.axhline(pm, color=MUTED, lw=0.8, ls=":", zorder=1)  # uniform-prior mean
+            ax.set_xlim(0, 1)
+            ax.set_ylim(-0.02, 1.02)
+            ax.set_xticks([0.1, 0.3, 0.5, 0.7, 0.9])
+        top, bot = axes[0, col], axes[1, col]
         for j, (key, lab, c) in enumerate(X5_PRIORS):
-            g = r[r.prior == key].groupby("truth_to_A").agg(
-                mean=("to_A_mean", "mean"), seed_sd=("to_A_mean", "std"),
-                post_sd=("to_A_sd", "mean"), covered=("to_A_covered", "sum"),
-                n=("seed", "size")).reset_index()
-            x = g.truth_to_A + (j - 1) * 0.018
-            ax.errorbar(x, g["mean"], yerr=g.post_sd, fmt="o-", color=c, ms=3.5, lw=1.0,
-                        elinewidth=0.8, capsize=0, mec="white", mew=0.4, label=lab)
+            g = groups[key]
+            top.errorbar(g.truth_to_A + (j - 1) * 0.018, g["mean"], yerr=g.post_sd, fmt="o-",
+                         color=c, ms=3.5, lw=1.0, elinewidth=0.8, capsize=0, mec="white",
+                         mew=0.4, label=lab)
             rows.append(g.assign(law=sub.removeprefix("a_"), prior=key))
-        ax.set_title(title, fontsize=7.2)
-        ax.set_xlim(0, 1)
-        ax.set_ylim(-0.02, 1.02)
-        ax.set_xticks([0.1, 0.3, 0.5, 0.7, 0.9])
-        ax.set_xlabel("true B→A")
-    axes[0].set_ylabel("B→A posterior mean ± posterior sd")
-    axes[0].legend(fontsize=6.2, loc="upper left")
+        for key, lab, c in (X5_PRIORS[0], X5_PRIORS[2]):  # faint references
+            g = groups[key]
+            bot.plot(g.truth_to_A, g["mean"], color=c, lw=0.9, alpha=0.45, zorder=2,
+                     label=f"{lab} (ref.)")
+        for j, (key, lab, c, m) in enumerate(X5_BIO):
+            g = groups[key]
+            bot.errorbar(g.truth_to_A + (j - 0.5) * 0.022, g["mean"], yerr=g.post_sd,
+                         fmt=m + "-", color=c, ms=3.4, lw=1.1, elinewidth=0.8, capsize=0,
+                         mec="white", mew=0.4, label=lab, zorder=3)
+            rows.append(g.assign(law=sub.removeprefix("a_"), prior=key))
+        top.set_title(title, fontsize=7.2)
+        bot.set_title(title.split(" (")[0] + ": biological priors", fontsize=7.2)
+        bot.set_xlabel("true B→A")
+    for ax in axes[:, 0]:
+        ax.set_ylabel("B→A posterior mean ± sd")
+    axes[0, 0].legend(fontsize=6.2, loc="upper left")
+    axes[1, 0].legend(fontsize=6.0, loc="upper left")
     save(fig, "x5a")
     table(pd.concat(rows, ignore_index=True), "x5a")
 
