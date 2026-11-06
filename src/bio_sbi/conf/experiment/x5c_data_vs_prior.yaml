@@ -15,7 +15,7 @@ truth:
 info:
   title: "X5c: data vs prior at a tail truth"
   question: |
-    With a truth in the prior tail (B.to_A = 0.9, P < 1e-8 under the uniform
+    With a truth in the prior tail (B.to_A = 0.9, P = 1e-5 under the uniform
     Dirichlet marginal Beta(1, 5)), how many organoids per endpoint are needed for the
     data to overrule the prior, compared with a flat prior on B.to_A?
   notes: |

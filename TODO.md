@@ -229,6 +229,13 @@ the `A.to_C` / `A.div_AC` reference values, about 5% and 15% of cells).
   the A/B estimates change?), and whether C is identifiable at all without its own
   marker, or only with the trajectory constraint.
 
+Status: DONE. Original truth (`results/e2c/`) was in the three-type prior tail, so even
+the true model failed. Rerun with 10 truths drawn from the prior
+(`results/e2c_prior/`, `+experiment=e2c_prior_truth`): ignoring C is flagged at q = 0
+(9/10) and q = 0.5 (7/10) but not at q = 1 (2/10, confident bias); modelling C is
+calibrated but uninformative (A/B error = prior-mean baseline); the trajectory
+constraint is violated by every prior truth and still undetected.
+
 ---
 
 ## E3. Measurement error: division times and desynchronisation (BH only)
@@ -295,6 +302,12 @@ for each parameter?
 - [ ] **X4 – Combined errors**: the realistic combination (organoid death + `e` + C +
       lifetime CV) at the real design, `budget=full`, 5 seeds. This is the error budget
       to quote alongside the real-data fit.
+- [x] **X5 – Role of the prior** (`results/x5/`): truth position × prior shape (X5a),
+      informative lifetime prior right/wrong (X5b), organoids needed to overrule a
+      tail prior (X5c), prior-averaged calibration GW/BH (X5d). Methods calibrated on
+      average; the B-row failure is structural (constraints fix it, priors and more
+      organoids do not); the BH ridge is a tail-truth effect, helped by a correct
+      lifetime prior; a too-long lifetime prior is detected.
 
 ---
 

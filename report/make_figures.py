@@ -865,6 +865,231 @@ def fig_e2c_arms():
     table(pd.concat(rows), "e2c_arms")
 
 
+# ------------------------------------------------------- E2c rerun (prior truths)
+E2CP_ARMS = [("ignore_c", "ignore\nC"), ("model_c_free", "C\nfree"),
+             ("model_c_traj", "C\ntraj.")]
+Q_COLORS = {0.0: BLUE, 0.5: AQUA, 1.0: ORANGE}
+
+
+def fig_e2c_prior():
+    """E2c rerun with 10 prior-drawn truths x q x 3 arms: per-run support mass and PPC
+    (flag thresholds), A/B MAE vs the prior-mean baseline, and contraction."""
+    for a, _ in E2CP_ARMS:
+        require(f"e2c_prior/{a}", 30)
+    r = pd.read_csv(RES / "e2c_prior" / "e2c_prior_runs.csv")
+    s = pd.read_csv(RES / "e2c_prior" / "e2c_prior_shared_parameters.csv")
+    tr = s.drop_duplicates(["seed", "parameter"])
+    baseline = float((tr.truth - 0.1).abs().mean())  # three-type Dirichlet mean = 1/10
+    r["usable"] = r.samples >= 100
+    r["flagged"] = (r.support_mass < 0.1) | (r.ppc_out95 > 0.05)
+    fig, axes = plt.subplots(1, 4, figsize=(W_FULL, 2.3), gridspec_kw=dict(wspace=0.5))
+    for k, (arm, _) in enumerate(E2CP_ARMS):
+        for j, q in enumerate([0.0, 0.5, 1.0]):
+            u = r[(r.arm == arm) & (r.q == q)].sort_values("seed")
+            x = k + (j - 1) * 0.25 + np.linspace(-0.07, 0.07, len(u))
+            ok = u.usable.values
+            kw = dict(s=9, lw=0)
+            axes[0].scatter(x, u.support_mass, color=Q_COLORS[q], label=f"q = {q:g}"
+                            if k == 0 else None, **kw)
+            axes[2].scatter(x[ok], u.shared_mae[ok], color=Q_COLORS[q], **kw)
+            for ax, col in [(axes[1], "ppc_out95"), (axes[3], "all_contraction")]:
+                ax.scatter(x[ok], u[col][ok], color=Q_COLORS[q], **kw)
+                # fewer than 100 posterior samples: shown open, not an estimate
+                ax.scatter(x[~ok], u[col][~ok], facecolor="none", edgecolor=Q_COLORS[q],
+                           s=9, lw=0.6)
+    for ax, title in zip(axes, ["support mass", "PPC outside 95%", "A/B MAE (9 shared)",
+                                "contraction (all free)"], strict=True):
+        ax.set_xticks(range(3), [lab for _, lab in E2CP_ARMS], fontsize=6.2)
+        ax.set_xlim(-0.5, 2.5)
+        ax.set_title(title, fontsize=7.2)
+        ax.grid(axis="x", visible=False)
+    axes[0].axhline(0.1, color=RED, lw=0.7, ls=":")
+    axes[0].set_ylim(-0.02, 1)
+    h, lab = axes[0].get_legend_handles_labels()
+    axes[2].legend(h, lab, fontsize=6, loc="upper right", handletextpad=0.2,
+                   title="C read as A w.p.", title_fontsize=6)
+    axes[1].axhline(0.05, color=RED, lw=0.7, ls=":")
+    axes[1].set_ylim(-0.02, 1)
+    axes[2].axhline(baseline, color=INK, lw=0.8, ls=(0, (4, 2)))
+    axes[2].text(1.5, 0.105, f"dashed: prior-mean\nbaseline {baseline:.3f}", fontsize=5.8,
+                 color=INK2, ha="center", va="bottom")
+    axes[2].set_ylim(0, 0.3)
+    axes[3].set_ylim(-0.05, 1.02)
+    save(fig, "e2c_prior")
+    g = r.groupby(["arm", "q"])
+    # as scripts/analyse_e2c_prior.py: A/B recovery only from usable runs (>= 100
+    # samples); PPC and contraction over every run that has them
+    use = r[r.usable].groupby(["arm", "q"])
+    agg = pd.DataFrame({
+        "runs": g.size(), "usable": g.usable.sum(), "flagged": g.flagged.sum(),
+        "support_median": g.support_mass.median(), "ppc_out95": g.ppc_out95.mean(),
+        "sbc_cov_err": g.sbc_cov_err.mean(), "ab_mae": use.shared_mae.mean(),
+        "ab_cov90": use.shared_cov90.mean(), "contraction": g.all_contraction.mean(),
+    }).reset_index()
+    pooled = r.groupby("arm")[["shared_mae", "shared_cov90", "all_contraction"]].mean()
+    pooled = pooled.reset_index().assign(q="all")
+    pooled = pooled.rename(columns={"shared_mae": "ab_mae", "shared_cov90": "ab_cov90",
+                                    "all_contraction": "contraction"})
+    out = pd.concat([agg, pooled], ignore_index=True)
+    out["prior_mean_baseline"] = baseline
+    table(out, "e2c_prior")
+
+
+# ------------------------------------------------------------------- X5
+X5_PRIORS = [("uniform (1)", "uniform Dirichlet", BLUE), ("all 0.5", "Jeffreys (all 0.5)", AQUA),
+             ("flat B.to_A", "flat on B→A", ORANGE)]
+
+
+def fig_x5a():
+    """B->A posterior mean vs truth (0.1-0.9) per prior; B divisions free vs fixed."""
+    require("x5/a_two_type", 75)
+    require("x5/a_reversible_ab", 75)
+    fig, axes = plt.subplots(1, 2, figsize=(W_FULL, 2.5), sharey=True,
+                             gridspec_kw=dict(wspace=0.12))
+    rows = []
+    for ax, (sub, title, pm) in zip(axes, [
+            ("a_two_type", "B divisions free (two_type, 10 free)", 1 / 6),
+            ("a_reversible_ab", "B divisions fixed to 0 (reversible_ab, 7 free)", 1 / 3)],
+            strict=True):
+        r = pd.read_csv(RES / "x5" / sub / "x5a_runs.csv")
+        ax.plot([0, 1], [0, 1], color=INK, lw=0.8, ls=(0, (4, 2)), zorder=1)
+        ax.axhline(pm, color=MUTED, lw=0.8, ls=":", zorder=1)  # uniform-prior mean
+        for j, (key, lab, c) in enumerate(X5_PRIORS):
+            g = r[r.prior == key].groupby("truth_to_A").agg(
+                mean=("to_A_mean", "mean"), seed_sd=("to_A_mean", "std"),
+                post_sd=("to_A_sd", "mean"), covered=("to_A_covered", "sum"),
+                n=("seed", "size")).reset_index()
+            x = g.truth_to_A + (j - 1) * 0.018
+            ax.errorbar(x, g["mean"], yerr=g.post_sd, fmt="o-", color=c, ms=3.5, lw=1.0,
+                        elinewidth=0.8, capsize=0, mec="white", mew=0.4, label=lab)
+            rows.append(g.assign(law=sub.removeprefix("a_"), prior=key))
+        ax.set_title(title, fontsize=7.2)
+        ax.set_xlim(0, 1)
+        ax.set_ylim(-0.02, 1.02)
+        ax.set_xticks([0.1, 0.3, 0.5, 0.7, 0.9])
+        ax.set_xlabel("true B→A")
+    axes[0].set_ylabel("B→A posterior mean ± posterior sd")
+    axes[0].legend(fontsize=6.2, loc="upper left")
+    save(fig, "x5a")
+    table(pd.concat(rows, ignore_index=True), "x5a")
+
+
+X5B_ARMS = [("b_vague", "vague\n10–80 h", MUTED), ("b_right", "right\n±25%", BLUE),
+            ("b_wrong", "wrong\n+50%", RED)]
+X5B_BOUNDS = {"b_vague": (10, 80), "b_right": (16, 25), "b_wrong": (24, 37.5)}
+
+
+def fig_x5b():
+    """BH, informative lifetime prior: A->AA and tau_A per seed for each prior arm."""
+    for a, _, _ in X5B_ARMS:
+        require(f"x5/{a}", 5)
+    fig, axes = plt.subplots(1, 3, figsize=(W_FULL, 2.0), gridspec_kw=dict(wspace=0.5))
+    rows = []
+    for k, (arm, lab, c) in enumerate(X5B_ARMS):
+        runs, p = load(f"x5/{arm}")
+        for ax, par in [(axes[0], "A.div_AA"), (axes[1], "A.mean_lifetime")]:
+            u = p[p.parameter == par].sort_values("seed")
+            x = k + np.linspace(-0.15, 0.15, len(u))
+            ax.errorbar(x, u.posterior_mean, yerr=u.posterior_std, fmt="o", color=c, ms=3.5,
+                        elinewidth=0.8, capsize=0, mec="white", mew=0.4)
+            rows.append(dict(arm=arm, parameter=par, truth=u.truth.iloc[0],
+                             mean=u.posterior_mean.mean(), post_sd=u.posterior_std.mean(),
+                             covered=int(u.covered.astype(str).str.lower().isin(["true", "1", "1.0"]).sum()),
+                             n=len(u)))
+        lo, hi = X5B_BOUNDS[arm]
+        axes[1].fill_between([k - 0.3, k + 0.3], lo, min(hi, 40), color=c, alpha=0.12, lw=0)
+        axes[2].scatter(np.full(len(runs), k) + np.linspace(-0.15, 0.15, len(runs)),
+                        runs.ppc_fraction_outside_95, s=10, color=c, lw=0)
+        rows.append(dict(arm=arm, parameter="support_mass",
+                         mean=runs.posterior_support_mass.mean()))
+        rows.append(dict(arm=arm, parameter="ppc_out95", mean=runs.ppc_fraction_outside_95.mean()))
+    truth_line(axes[0], 0.55)
+    truth_line(axes[1], 20)
+    axes[0].set_title("A→AA (truth 0.55)", fontsize=7.2)
+    axes[1].set_title(r"$\tau_A$ (h; truth 20, band = prior)", fontsize=7.2)
+    axes[1].set_ylim(10, 40)
+    axes[2].set_title("PPC outside 95%", fontsize=7.2)
+    axes[2].axhspan(0, 0.03, color=GRID, lw=0, zorder=0)
+    axes[2].set_ylim(-0.02, 0.4)
+    for ax in axes:
+        ax.set_xticks(range(3), [lab for _, lab, _ in X5B_ARMS], fontsize=6.2)
+        ax.set_xlim(-0.5, 2.5)
+        ax.grid(axis="x", visible=False)
+    save(fig, "x5b")
+    table(pd.DataFrame(rows), "x5b")
+
+
+def fig_x5c():
+    """Tail truth B->A = 0.9 with all B outcomes free: B->A and B->AA vs clones."""
+    require("x5/c_data_vs_prior", 30)
+    r = pd.read_csv(RES / "x5" / "c_data_vs_prior" / "x5c_runs.csv")
+    g = r.groupby(["prior", "clones"]).agg(
+        to_A=("to_A", "mean"), to_A_post_sd=("to_A_sd", "mean"),
+        to_A_covered=("to_A_covered", "sum"), to_A_contraction=("to_A_contraction", "mean"),
+        B_div_AA=("B_div_AA", "mean"), mae=("mae", "mean"), support=("support", "mean"),
+        ppc=("ppc_out95", "mean"), sbc=("sbc", "mean"), n=("seed", "size")).reset_index()
+    fig, axes = plt.subplots(1, 2, figsize=(W_FULL * 0.72, 2.1), gridspec_kw=dict(wspace=0.35))
+    for j, (key, lab, c) in enumerate([("uniform", "uniform Dirichlet", BLUE),
+                                       ("flat B.to_A", "flat on B→A", ORANGE)]):
+        u = g[g.prior == key].sort_values("clones")
+        x = u.clones * (1 + (j - 0.5) * 0.12)
+        axes[0].errorbar(x, u.to_A, yerr=u.to_A_post_sd, fmt="o-", color=c, ms=3.5, lw=1.0,
+                         elinewidth=0.8, capsize=0, mec="white", mew=0.4, label=lab)
+        axes[1].plot(x, u.B_div_AA, "o-", color=c, ms=3.5, lw=1.0, mec="white", mew=0.4)
+    truth_line(axes[0], 0.9, "truth")
+    truth_line(axes[1], 0.0, "truth")
+    axes[0].set_title("B→A (mean ± posterior sd)", fontsize=7.2)
+    axes[1].set_title("B→AA posterior mean", fontsize=7.2)
+    for ax in axes:
+        ax.set_xscale("log")
+        ax.set_xticks([32, 128, 512], ["32", "128", "512"])
+        ax.minorticks_off()
+        ax.set_xlabel("clones per endpoint (2 endpoints)")
+        ax.set_ylim(-0.03, 1.0)
+    h, lab = axes[0].get_legend_handles_labels()
+    axes[1].legend(h, lab, fontsize=6.2, loc="upper right")
+    save(fig, "x5c")
+    table(g, "x5c")
+
+
+def fig_x5d():
+    """Prior-averaged recovery (30 truths from the prior): contraction and MAE per
+    parameter, GW vs BH, with the prior-mean MAE baseline."""
+    require("x5/d_gw", 30)
+    require("x5/d_bh", 30)
+    d = {s: pd.read_csv(RES / "x5" / f"d_{s}" / "prior_average_parameters.csv").set_index(
+        "parameter") for s in ("gw", "bh")}
+    pars = [p for p in P_ROWS if p in d["gw"].index]
+    allp = pars + ["A.mean_lifetime", "B.mean_lifetime"]
+    fig, axes = plt.subplots(1, 2, figsize=(W_FULL, 2.3),
+                             gridspec_kw=dict(width_ratios=[1.25, 1], wspace=0.25))
+    xs = np.arange(len(allp))
+    for j, (s, lab, c) in enumerate([("gw", "GW", BLUE), ("bh", "BH", ORANGE)]):
+        v = d[s].contraction.reindex(allp)
+        axes[0].bar(xs + (j - 0.5) * 0.38, v, width=0.36, color=c, label=lab, lw=0)
+        e = d[s].abs_error.reindex(pars)
+        b = d[s].prior_mean_error.reindex(pars)
+        x = np.arange(len(pars)) + (j - 0.5) * 0.38
+        axes[1].bar(x, e, width=0.36, color=c, label=f"{lab} posterior mean", lw=0)
+        axes[1].scatter(x, b, marker="_", s=40, color=INK, lw=1.0,
+                        label="prior-mean baseline" if j == 0 else None, zorder=3)
+    axes[0].set_xticks(xs, [PRETTY[p].replace(" (h)", "") for p in allp], rotation=45,
+                       ha="right", fontsize=6.2)
+    axes[0].set_title("contraction (mean over 30 prior truths)", fontsize=7.2)
+    axes[0].axhline(0.5, color=AXIS, lw=0.7, ls=":")
+    axes[0].legend(fontsize=6.2, loc="upper right", ncol=2)
+    axes[0].set_ylim(0, 1.05)
+    axes[1].set_xticks(np.arange(len(pars)), [PRETTY[p] for p in pars], rotation=45,
+                       ha="right", fontsize=6.2)
+    axes[1].set_title("absolute error (probabilities)", fontsize=7.2)
+    axes[1].legend(fontsize=5.8, loc="upper left")
+    for ax in axes:
+        ax.grid(axis="x", visible=False)
+    save(fig, "x5d")
+    t = pd.concat([d[s].reset_index().assign(simulator=s.upper()) for s in d], ignore_index=True)
+    table(t, "x5d")
+
+
 # ------------------------------------------------------------------- E3a
 def fig_e3a():
     require("e3a", 60)
@@ -1167,6 +1392,7 @@ FIGURES = [
     # pending sweeps: built only once complete
     fig_e4_gw, fig_e1c_gw, fig_e1a_number_gw, fig_e2_gw, fig_e2c_model, fig_e2c_traj,
     fig_e2c_arms, fig_detectability_gw,
+    fig_e2c_prior, fig_x5a, fig_x5b, fig_x5c, fig_x5d,
 ]
 
 

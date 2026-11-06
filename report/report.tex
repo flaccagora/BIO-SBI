@@ -85,7 +85,7 @@
 \vspace{1.5cm}
 \begin{tabular}{ll}
 Status of results & 6 November 2026 \\
-Repository & \code{BIO-SBI}, branch \code{main}, commit \code{12c0827} \\
+Repository & \code{BIO-SBI}, branch \code{main}, commit \code{d403cac} \\
 Data & synthetic only (no measured data used) \\
 Audience & group planning the wet-lab organoid experiments \\
 \end{tabular}
@@ -103,14 +103,14 @@ Parameters: A$\to$AA etc.\ are outcome probabilities per cell event; \tA, \tB{} 
 \section*{Executive summary}\label{sec:summary}
 \addcontentsline{toc}{section}{Executive summary}
 
-\textbf{Scope.} All simulation sweeps of E0--E4 are finished (966 runs), all on synthetic data from one reference parameter vector $\theta^\star$ (Table~\ref{tab:truth}), 5 seeds per setting. Galton--Watson (GW, time in generations; mapping to days nominal) and Bellman--Harris (BH, time in hours; real-like design = days 6 and 10 = 144/240\,h with 165/101 organoids). Every error is compared with the well-specified control of the same sweep.
+\textbf{Scope.} All simulation sweeps of E0--E4 are finished (966 runs), all on synthetic data from one reference parameter vector $\theta^\star$ (Table~\ref{tab:truth}), 5 seeds per setting. Two later experiments test the role of the prior with truths swept or drawn from the prior: the E2c rerun (90 runs, \S\ref{sec:e2cprior}) and X5 (255 runs, \S\ref{sec:x5}). Galton--Watson (GW, time in generations; mapping to days nominal) and Bellman--Harris (BH, time in hours; real-like design = days 6 and 10 = 144/240\,h with 165/101 organoids). Every error is compared with the well-specified control of the same sweep.
 
 \subsection*{Key findings}
 \begin{enumerate}[leftmargin=1.4em]
 \item \textbf{The well-specified GW model is recovered}: at the real-like design MAE 0.033 over the 9 outcome probabilities, contraction 0.89, A$\to$AA 0.52 (truth 0.55); across all E4 designs A$\to$AA 0.47--0.54 --- provided B's divisions are fixed to 0 (E0).
-\item \textbf{B's row is prior-dominated if all transitions are free} (E0): B$\to$A = 0.20 vs truth 0.80 at 5k--50k simulations, every design (uniform Dirichlet puts 0.03\% mass above 0.8; a flat prior gives 0.53).
+\item \textbf{B's row is prior-dominated if all transitions are free} (E0): B$\to$A = 0.20 vs truth 0.80 at 5k--50k simulations, every design (uniform Dirichlet puts 0.03\% mass above 0.8; a flat prior gives 0.53). X5 shows this is structural, not a tail effect: the estimate barely follows the truth (0.04 $\to$ 0.22 for truths 0.1 $\to$ 0.9) and 1024 organoids do not fix it.
 \item \textbf{Endpoints matter more than organoids, in both simulators} (E4): days/generations \{4,6,10\} beat every other set at every size; one late endpoint plateaus; a late extra endpoint (\{6,10,14\}) adds little. GW: contraction 0.80 $\to$ 0.95, MAE 0.052 $\to$ 0.023 (16 $\to$ 512 organoids/endpoint), every probability recovered by $\approx$\,128 (A$\to$AB: 512). BH: 0.50 $\to$ 0.79, MAE 0.114 $\to$ 0.060.
-\item \textbf{BH baseline bias = lifetime/self-renewal ridge.} Well-specified BH gives A$\to$AA $\approx$ 0.32 and \tA{} $\approx$ 16\,h (truth 0.55, 20\,h), 0/5 covered, at every design. Fixing lifetimes to the truth gives 0.51 (5/5), MAE 0.109 $\to$ 0.059 (\S\ref{sec:ridge}). More organoids do not help.
+\item \textbf{BH baseline bias = lifetime/self-renewal ridge.} Well-specified BH gives A$\to$AA $\approx$ 0.32 and \tA{} $\approx$ 16\,h (truth 0.55, 20\,h), 0/5 covered, at every design. Fixing lifetimes to the truth gives 0.51 (5/5), MAE 0.109 $\to$ 0.059 (\S\ref{sec:ridge}). More organoids do not help. Averaged over the prior A$\to$AA is learned well (X5d): the bias is specific to this tail truth.
 \item \textbf{A free time scale hides errors} (Figs.~\ref{fig:detectability}, \ref{fig:detectability_gw}). In BH the PPC stays $\le 0.033$ for every error except both deaths fixed wrong (0.096) and a global lifetime longer than A's (0.35--0.51). GW, without lifetimes, flags more: A death fixed too high (support $\approx 0$), B death fixed at 4$\times$ truth (support 0.13--0.33), 40\% multi-cell founders (PPC 0.12, support 0.16). Still silent in GW: wrong founder type, B death at 2$\times$ truth (B$\to$A 0/5 covered), ignored mis-typing up to 2 posterior sd.
 \item \textbf{Size of the tested errors (vs paired control; BH | GW):}
   \begin{itemize}
@@ -122,7 +122,8 @@ Parameters: A$\to$AA etc.\ are outcome probabilities per cell event; \tA, \tB{} 
   \end{itemize}
 \item \textbf{Founder composition}: founder type not learnable in BH (contraction $\le 0.12$), partly in GW (0.68 for truth 0.5); inferring it removes no shift. Founder size: stays at prior in BH; in GW it tracks the truth (0.71 for $p_1=0.6$) and inferring it removes the misfit and halves the shifts.
 \item \textbf{Observed-organoid fraction} (detected/seeded): 0.94--0.95 at $\theta^\star$; dominated by A death (0.3 $\Rightarrow$ 0.54--0.58); GW exact and BH simulated agree to 0.02 on average; A and B death trade off (one constraint, not two).
-\item \textbf{Hidden third type (GW, E2c): unresolved.} Ignoring C is flagged (PPC 0.17--0.41, support $\approx 0$), but modelling C --- even with the true data model --- fails worse (support $\approx 0$, PPC 0.26--0.84): the truth (A$\to$AA 0.79--0.905) has prior probability $10^{-6}$--$10^{-10}$ under the three-type prior. The misfit is a prior-tail effect and cannot be attributed to C.
+\item \textbf{Hidden third type (GW, E2c): resolved by the rerun with prior-drawn truths} (\S\ref{sec:e2cprior}). The original failure of even the true model (support $\approx 0$) was the tail truth (prior probability $10^{-6}$--$10^{-10}$), not the method. In the prior bulk, ignoring C is flagged when C is read as B (9/10 runs at $q=0$, 7/10 at $q=0.5$) but \emph{not} when C reads as A (2/10 at $q=1$, while A/B MAE 0.18 and coverage 0.42 at contraction 0.86: silent confident bias). Modelling C (free or trajectory-constrained) is calibrated (PPC 0, coverage 0.92--0.93) but not identifiable at this design: contraction 0.16--0.20, A/B MAE 0.055--0.059 = prior-mean baseline 0.057; the wrong trajectory constraint is not detected.
+\item \textbf{Role of the prior (X5, \S\ref{sec:x5})}: (i) averaged over truths drawn from the prior, GW and BH are calibrated (90\% coverage, SBC $\approx 0.03$; contraction 0.68 GW vs 0.51 BH) --- single-truth failures are about truths and priors, not broken inference. (ii) The B-row failure is structural: with B divisions free no prior (uniform, Jeffreys, flat) and no sample size (up to 1024 organoids) recovers B$\to$A; with them fixed every truth 0.1--0.9 is recovered under every prior. Constraints, not priors or more organoids. (iii) The BH ridge is a tail-truth effect; a right literature lifetime prior ($\pm 25\%$) moves A$\to$AA 0.32 $\to$ 0.46 (MAE 0.109 $\to$ 0.068). (iv) A lifetime prior 50\% too long is detected (support $\approx 0$, PPC 0.27).
 \end{enumerate}
 
 \subsection*{Recommendations for the wet-lab design}
@@ -138,19 +139,20 @@ Parameters: A$\to$AA etc.\ are outcome probabilities per cell event; \tA, \tB{} 
   \item \emph{founder type} and \emph{quiescence} (e.g.\ Ki67) if they matter biologically --- the counts cannot provide them;
   \item \emph{apoptosis} only if death rates are to be fixed; otherwise keep them free (a value too high biases B$\to$A; in BH silently).
   \end{enumerate}
-\item \textbf{Biological constraints help more than data}: B divisions = 0 (if KRT20$^+$ cells do not divide) is what makes B$\to$A identifiable.
-\item \textbf{Hidden third type}: no recommendation yet; E2c must be repeated with a truth inside the prior bulk (or an informative prior) first.
+\item \textbf{Biological constraints help more than data}: B divisions = 0 (if KRT20$^+$ cells do not divide) is what makes B$\to$A identifiable; neither a different prior nor 1024 organoids replaces it (X5a, X5c).
+\item \textbf{Literature division times} can enter as an informative lifetime prior ($\pm 25\%$ gets most of the benefit of fixing them, X5b); check PPC and support mass for conflict (a prior that is too long is flagged; too-short lifetimes bias silently, E3a).
+\item \textbf{Hidden third type}: endpoint counts of two labels cannot identify a three-type model (E2c rerun). If C may exist, find out how it is labelled: read as B, ignoring it is usually flagged; read as A, it biases the A/B rows silently. Modelling it needs a C-specific marker, trajectory data that justify constraints, or much richer designs --- a free C model returns the prior.
 \end{itemize}
 
 \subsection*{Methodological lessons}
 \begin{itemize}
-\item \textbf{Prior tails}: a truth with $<$\,2\% prior mass (B$\to$A = 0.8, A$\to$AA = 0.55 under uniform Dirichlet) is pulled to the prior; with $10^{-6}$ or less (E2c three-type) amortised NPE extrapolates outside the prior support. SBC still looks fine. Report prior quantiles of the truth; check prior sensitivity.
+\item \textbf{Prior tails}: a truth with $<$\,2\% prior mass is pulled to the prior only where the data are weak or confounded along a ridge (A$\to$AA = 0.55 in BH); where the model is identifiable the data win at every truth position (X5a, B divisions fixed: B$\to$A 0.1--0.9 recovered under every prior). Where it is structurally confounded (B divisions free) the prior decides at every position, and neither a flat prior nor more organoids fixes it. With $10^{-6}$ or less (original E2c) amortised NPE extrapolates outside the prior support, while the same model is calibrated for truths in the bulk. SBC and prior-averaged coverage (X5d) look fine in all these cases: report prior quantiles of the truth, check prior sensitivity, and compare hand-picked truths with prior-drawn ones.
 \item \textbf{Ridges and free time scales}: endpoint counts fix the growth rate; lifetime, self-renewal and quiescence trade off along it (posterior corr.\ $+0.7$, $-0.6$). The prior picks the point, and the free lifetime also absorbs (hides) errors that GW detects (E1a number, E1c).
 \item \textbf{Compare with paired controls}, not with the truth (BH baseline is biased); 5 seeds resolve shifts of $\approx$\,0.02--0.03 (probabilities) and 0.5--1.5\,h.
 \item \textbf{Diagnostics}: SBC checks the inference model only; PPC and support mass are relative checks and vary between well-specified GW runs (support 0.07--0.89, PPC up to 0.10); support mass $\approx 0$ = the model cannot explain the data (numbers from such runs are not estimates).
 \end{itemize}
 
-\textbf{Planned, never run} (Part~\ref{part:pending}): X2 seed spread; X1 methods comparison, X3 GW fit to BH data, X4 combined errors, R real CRC0322 data, P0 BH timing; also E2c with a truth inside the prior bulk and asymmetric mis-typing.
+\textbf{Planned, never run} (Part~\ref{part:pending}): X2 seed spread; X1 methods comparison, X3 GW fit to BH data, X4 combined errors, R real CRC0322 data, P0 BH timing; also asymmetric mis-typing.
 
 \figorpending{detectability}{0.6}{Detectability of BH misspecifications. Each point is one misspecified setting (mean of 5 seeds): largest shift of a posterior mean from its paired well-specified control, in units of the control's posterior sd, against the PPC. Grey band = PPC range of well-specified runs. Crosses: global lifetime $T>\tau_A$ (support mass $\approx 0$).}{Detectability scatter.}
 \figorpending{detectability_gw}{0.8}{Detectability of GW misspecifications (E1a type and number, E1c, E2b): largest shift from the paired control in control posterior sd, against the PPC (left) and the posterior support mass (right). Grey bands = well-specified ranges. GW flags more errors than BH (no free time scale), but several shifts of 1--3 sd remain inside the well-specified bands.}{GW detectability.}
@@ -287,6 +289,7 @@ Recovered (TODO criterion) & contraction $>0.5$, $|$error$|<0.05$, coverage $\ge
 \part{Finished experiments}\label{part:finished}
 
 % ---------------------------------------------------------------------- E0
+\needspace{12\baselineskip}
 \section{E0 --- Identifiability of B's row (GW)}\label{sec:e0}
 \Q
 With all transitions free, B$\to$A (true 0.80) came out at $\approx$\,0.2. Is this under-training, one bad dataset, miscalibration, a prior-tail effect, or non-identifiability (switching vs division)?
@@ -326,12 +329,13 @@ Law & Training & B$\to$A mean & post.\ sd & contraction & covered & MAE (all) \\
 \Comment
 \begin{itemize}
 \item Under-training, dataset and calibration are ruled out: 10$\times$ more simulations, 5 datasets, SBC all unchanged.
-\item Main cause = prior tail: B$\to$A $\sim$ Beta(1,5), P($>0.8$) = 0.03\% ($\approx$\,15 of 50k training simulations). SNPE cannot help: round 0 is already prior-like.
+\item Main cause = prior tail: B$\to$A $\sim$ Beta(1,5), P($>0.8$) = 0.03\% ($\approx$\,15 of 50k training simulations). SNPE cannot help: round 0 is already prior-like. \emph{Revised by X5 (\S\ref{sec:x5a}, \S\ref{sec:x5c})}: with B divisions free B$\to$A is not recovered at any truth $\ge 0.5$ (bulk included) nor with 1024 organoids, so the confounding below is the root cause and the tail only makes it visible.
 \item Data weakly confound switching with division: even with a flat prior the posterior is wide (sd 0.21) and anti-correlated with B$\to$AA. They differ only in clone-size variability; 128--512 clones/endpoint make moderate differences detectable.
 \item Consequence: fix what biology allows (B divisions = 0 $\Rightarrow$ B$\to$A $\approx$ 0.70, contraction 0.7); otherwise report prior sensitivity. All later experiments use \code{reversible_ab}.
 \end{itemize}
 
 % ---------------------------------------------------------------------- design
+\needspace{12\baselineskip}
 \section{Design comparison --- one vs three endpoints (GW)}\label{sec:design}
 \Q Which planned design identifies the model best, and is it the number of time points or the number of organoids that matters?
 \Setup
@@ -366,6 +370,7 @@ Design (\code{reversible_ab}) & organoids & MAE & contraction & 90\% cov. & B$\t
 \end{itemize}
 
 % ---------------------------------------------------------------------- E4 BH
+\needspace{12\baselineskip}
 \section{E4 --- Amount of data: organoids and endpoints (BH)}\label{sec:e4}
 \Q How do contraction and error depend on organoids per endpoint (16--512) and on the measured days? What is the minimum number to recover each parameter?
 \Setup
@@ -404,6 +409,7 @@ A$\to$AA, A persist, B persist, B$\to$A & --- & --- & --- & --- \\
 \end{itemize}
 
 % ---------------------------------------------------------------------- E4 GW
+\needspace{12\baselineskip}
 \section{E4 --- Amount of data (GW) and comparison with BH}\label{sec:e4gw}
 \Q Same as \S\ref{sec:e4} for Galton--Watson: minimum organoids per endpoint and best endpoint set when there is no lifetime ridge.
 \Setup
@@ -454,6 +460,7 @@ Support mass / PPC (well specified, per run) & 0.52--0.92 / $\le 0.042$ & 0.07--
 \end{itemize}
 
 % ---------------------------------------------------------------------- ridge
+\needspace{12\baselineskip}
 \section{BH ridge --- lifetime vs self-renewal}\label{sec:ridge}
 \Q Is the BH baseline bias (A$\to$AA $\approx$ 0.32, \tA{} $\approx$ 16\,h) a ridge on which endpoint counts fix only a combination of lifetime and self-renewal, with the prior picking the point?
 \Setup
@@ -485,10 +492,11 @@ SBC error / PPC / support & 0.025 / 0.008 / n/r & 0.031 / 0.025 / 0.65 & 0.079 /
 \item Ridge confirmed: posterior corr(A$\to$AA, \tA) $\approx +0.7$ (E3c). Removing the lifetime degree of freedom recovers self-renewal and halves the error.
 \item The prior chose the point: only 1.8\% of uniform-Dirichlet mass lies above 0.55. A flat prior re-centres (5/5 covered) but stays wide, degrades B$\to$A and calibration: not a fix.
 \item GW has no lifetimes and no ridge: the GW control at the same design gives A$\to$AA 0.52 (\S\ref{sec:e1a}), and 0.47--0.54 at every E4 design (\S\ref{sec:e4gw}).
-\item Consequence: measure A's division time (live imaging) or use it as an informative prior; otherwise report BH results with prior sensitivity.
+\item Consequence: measure A's division time (live imaging) or use it as an informative prior; otherwise report BH results with prior sensitivity. X5 tested both: a right $\pm 25\%$ lifetime prior gives A$\to$AA 0.46, MAE 0.068 (\S\ref{sec:x5b}); averaged over prior-drawn truths A$\to$AA is learned well (contraction 0.82, \S\ref{sec:x5d}), so the ridge bites at tail truths such as $\theta^\star$.
 \end{itemize}
 
 % ---------------------------------------------------------------------- E1a type
+\needspace{12\baselineskip}
 \section{E1a --- Wrong founder type (organoid death as initial conditions; BH and GW)}\label{sec:e1a}
 \Q If some organoids are founded by B cells (fraction $1-f$) but the model assumes A founders, are the dynamics (A, B rows) biased? Does inferring the founder mix help?
 \Setup
@@ -532,6 +540,7 @@ support mass & n/r & n/r & n/r & n/r & 0.67 & 0.69 & 0.69 & 0.72 \\\midrule
 \end{itemize}
 
 % ---------------------------------------------------------------------- E1a number
+\needspace{12\baselineskip}
 \section{E1a --- Wrong number of founder cells (BH)}\label{sec:e1anum}
 \Q If some organoids start from 2--3 A cells (P(1 cell) $=p_1$) but the model assumes single-cell seeding, are the dynamics biased? Can the founder size be inferred?
 \Setup
@@ -564,6 +573,7 @@ Arm, $p_1$ & A$\to$AB (.05) & B death (.10) & B$\to$A (.80) & \tA{} (20\,h) & \c
 \end{itemize}
 
 % ---------------------------------------------------------------------- E1a number GW
+\needspace{12\baselineskip}
 \section{E1a --- Wrong number of founder cells (GW)}\label{sec:e1agw}
 \Q As \S\ref{sec:e1anum} for Galton--Watson: are the dynamics biased by multi-cell founders, can the founder size be inferred, and does the answer depend on the time model?
 \Setup
@@ -597,6 +607,7 @@ Arm, $p_1$ & A$\to$AA (.55) & B persist (.10) & B$\to$A (.80) & \code{founder_si
 \end{itemize}
 
 % ---------------------------------------------------------------------- E1b
+\needspace{12\baselineskip}
 \section{E1b --- Death rates and the observed-organoid fraction (BH and GW)}\label{sec:e1b}
 \Q How strongly do A death and B death change the fraction of seeded organoids still detected at the endpoints? Is it an informative extra datum?
 \Setup
@@ -632,6 +643,7 @@ Folder & \res{results/e1b/bh}, \res{results/e1b/gw} \\
 \end{itemize}
 
 % ---------------------------------------------------------------------- E1c
+\needspace{12\baselineskip}
 \section{E1c --- Death rates fixed to wrong values (BH)}\label{sec:e1c}
 \Q If A and B death are fixed (possibly wrongly) and the rest inferred, do other parameters compensate (flat PPC valley = death not identifiable once fixed)?
 \Setup
@@ -670,6 +682,7 @@ Paired SE $\le 0.03$ (probabilities), $\le 0.35$\,h (\tA), $\le 1.6$\,h (\tB).
 \end{itemize}
 
 % ---------------------------------------------------------------------- E1c GW
+\needspace{12\baselineskip}
 \section{E1c --- Death rates fixed to wrong values (GW, 4 $\times$ 4 grid)}\label{sec:e1cgw}
 \Q As \S\ref{sec:e1c}, on a finer grid and without the BH ridge: is there a flat PPC valley across fixed death values?
 \Setup
@@ -709,6 +722,7 @@ A$\to$AA never moves ($|\Delta| \le 0.02$) in an estimable cell. Paired SE $\le 
 \end{itemize}
 
 % ---------------------------------------------------------------------- E2
+\needspace{12\baselineskip}
 \section{E2a / E2b --- A$\leftrightarrow$B mis-typing, known vs ignored (BH)}\label{sec:e2}
 \Q Clustering mislabels cells at rate $e$. If the error is modelled (E2a), do we only lose information? If ignored (E2b), how large is the bias, and is it visible?
 \Setup
@@ -744,6 +758,7 @@ Known: contraction A$\to$AA (0.52) & 0.53 & 0.48 & 0.43 & 0.41 & 0.38 & \\\botto
 \end{itemize}
 
 % ---------------------------------------------------------------------- E2 GW
+\needspace{12\baselineskip}
 \section{E2a / E2b --- A$\leftrightarrow$B mis-typing, known vs ignored (GW)}\label{sec:e2gw}
 \Q As \S\ref{sec:e2} for Galton--Watson: tolerance to known vs ignored mis-typing when the baseline is unbiased and the posteriors are narrower.
 \Setup
@@ -781,6 +796,7 @@ Known: B$\to$A shift & $-0.04$ & $-0.05$ & $-0.05$ & $-0.08$ & $-0.11 \pm$ .03 [
 \end{itemize}
 
 % ---------------------------------------------------------------------- E2c ignore
+\needspace{12\baselineskip}
 \section{E2c --- Hidden third type ignored (GW)}\label{sec:e2c}
 \Q Data contain a third type C (double negative/positive) read as A with prob.\ $q$ and as B with $1-q$. If the model ignores C, are the A and B rows still recovered, and does the PPC flag the two-type model?
 \Setup
@@ -818,6 +834,7 @@ $\approx$5\% & 0 & 0.89 (.905) & 0.03 & 0.03 & 0.37 & 0.31 & 0.39 & 0.15 \\
 \end{itemize}
 
 % ---------------------------------------------------------------------- E2c model C
+\needspace{12\baselineskip}
 \section{E2c --- Third type modelled: three-arm comparison (GW)}\label{sec:e2cmodel}
 \Q When C is modelled (freely, or with the trajectory constraint C$\to$B only), are A and B recovered, is C's row identifiable without its own marker, and is the misfit of \S\ref{sec:e2c} removed?
 \Setup
@@ -849,10 +866,51 @@ Italics: not estimates (support $\approx 0$). SBC coverage error 0.024--0.029 in
 \item \textbf{Modelling C does not remove the misfit --- it makes it worse}: support $\approx 0$ in almost every run (10/30 free and 2/30 trajectory runs drew no posterior sample at all), PPC 0.26--0.84. No A/B bias and nothing about C (e.g.\ C$\to$B 0.01--0.12 vs 0.40) can be read from these arms.
 \item \textbf{The failure is a prior-tail failure, not misspecification}: the free arm \emph{is} the data model. Under a 10-outcome uniform Dirichlet the true A$\to$AA (0.79--0.905) and B persist (0.9) have prior probability $10^{-6}$--$10^{-10}$: no training simulation resembles the data, and amortised NPE extrapolates outside the prior support. SBC is fine because it averages over the prior. The two-type model fits \emph{better} than the true model because its prior has more mass near the truth.
 \item \textbf{Hence the ignore-C flag (PPC 0.17--0.41) cannot be attributed to C}; also within ignore-C the PPC is higher with \emph{less} C. Whether the PPC detects a hidden type is still open. The trajectory constraint helps slightly (fewer empty posteriors; one run with support 0.48).
-\item Next step (not run): repeat with a truth inside the prior bulk of the three-type model (A$\to$AA $\approx$ 0.4--0.5, C fraction via A$\to$C / A$\to$AC) or an informative prior on A's self-renewal and B's persistence, plus a two-type control with the same A row.
+\item Follow-up done: the rerun with truths drawn from the three-type prior (\S\ref{sec:e2cprior}) confirms that this failure was the tail truth, not the method.
+\end{itemize}
+
+% ---------------------------------------------------------------------- E2c rerun
+\needspace{12\baselineskip}
+\section{E2c rerun --- hidden third type, truths from the prior (GW)}\label{sec:e2cprior}
+\Q The original E2c (\S\ref{sec:e2c}, \S\ref{sec:e2cmodel}) used a truth deep in the three-type Dirichlet tail, so even the true model failed. With truths in the prior bulk: (1) is ignoring C detected, and (2) does modelling C (free, or trajectory-constrained) recover the A/B rows?
+\Setup
+\begin{setup}
+Simulator & Galton--Watson \\
+Data model & \code{three_type}, 10 truths \emph{drawn from the three-type prior} (\code{truth.source=prior}, \code{data_seed} = seed 0--9); \code{three_split} with $q \in \{0, 0.5, 1\}$ (C read as A with prob.\ $q$). Same 30 datasets in every arm \\
+Prior-drawn truths & generic biology: C is 21--41\% of cells at generation 10; B divides (B-division mass 0.37--0.84); C makes A (C$\to$A mass 0.19--0.58) \\
+Inference arms & ignore C: \code{reversible_ab} (7 free; also forbids B divisions); C free: \code{three_type} + \code{three_split}, $q$ known (27 free) = \emph{the data model}; C trajectory: \code{three_type_traj} (C never makes A; 23 free). Both constrained arms are misspecified for \emph{every} truth, ignore C doubly so \\
+Scored & the 9 A/B parameters present in every arm; ``flagged'' = support mass $<0.1$ or PPC $>0.05$; ``usable'' = at least 100 posterior samples within the 60\,s sampling cap; prior-mean baseline = $|$truth $-$ 0.1$|$ (10-outcome Dirichlet mean) \\
+Design & real-like generations 6/10 $\times$ 165/101 \\
+Inference / budget & NPE amortised, 5k \\
+Seeds / runs & 10 truths $\times$ 3 $q$ $\times$ 3 arms = 90 \\
+Folder & \res{results/e2c_prior/{ignore_c,model_c_free,model_c_traj}} (\res{e2c_prior_runs.csv}, \res{e2c_prior_groups.csv}) \\
+\end{setup}
+\Result
+\figorpending{e2c_prior}{1.0}{E2c rerun, one point per run (10 prior-drawn truths per $q$). Dotted red: flag thresholds (support $<0.1$, PPC $>0.05$). Open circles: fewer than 100 posterior samples (not estimates; A/B MAE not computed). A/B MAE over the 9 shared A/B parameters; dashed = prior-mean baseline. Contraction over all free parameters of each arm.}{E2c rerun figure.}
+\begin{center}\footnotesize\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}llrrrrrrrr@{}}\toprule
+Arm & $q$ & usable & flagged & support (med.) & PPC & SBC err.\ & A/B MAE & A/B cov. & contr. \\\midrule
+ignore C & 0 & 4/10 & \textbf{9/10} & 0.00 & 0.28 & 0.029 & 0.206 & 0.11 & 0.90 \\
+ & 0.5 & 6/10 & \textbf{7/10} & 0.09 & 0.31 & 0.029 & 0.189 & 0.20 & 0.91 \\
+ & 1 & 10/10 & \textbf{2/10} & 0.67 & 0.04 & 0.029 & 0.177 & 0.42 & 0.86 \\
+C free (well specified) & 0--1 & 30/30 & 0 & 0.68--0.70 & 0.00 & 0.026--0.027 & 0.055 & 0.93 & 0.16 \\
+C trajectory & 0--1 & 30/30 & 0 & 0.72--0.78 & 0.00 & 0.024--0.025 & 0.059 & 0.92 & 0.20 \\\midrule
+\multicolumn{7}{@{}l}{Prior-mean baseline (posterior mean replaced by the prior mean 0.1)} & 0.057 & & \\\bottomrule
+\end{tabular}
+\end{center}
+Model-C rows pool the three $q$ (per $q$: MAE 0.054--0.056 free, 0.055--0.062 trajectory; contraction 0.15--0.17 and 0.18--0.22). PPC and contraction for ignore C include runs with fewer than 100 samples. Numbers: \res{tables/e2c_prior.csv}.
+\Comment
+\begin{itemize}
+\item \textbf{Ignoring C is detected when C looks like B, missed when C looks like A.} At $q=0$ 9/10 runs are flagged (support $\approx 0$, PPC up to 0.58; 6/10 runs give no usable posterior). At $q=1$ only 2/10 are flagged, while the A/B rows are still wrong (MAE 0.18, 90\% coverage 0.42) with high contraction (0.86): \emph{confident, silent bias}.
+\item \textbf{Modelling C is calibrated but not informative.} Both model-C arms pass every check (PPC $\approx 0$, SBC 0.024--0.027, A/B coverage 0.92--0.93), but contraction is 0.16--0.20 and the A/B error equals the prior-mean baseline (0.055 / 0.059 vs 0.057). With 23--27 free parameters and two endpoints of two labels the data barely move the posterior: correct, but it is the prior speaking.
+\item \textbf{The trajectory constraint is wrong for every truth and nothing detects it} (C$\to$A mass up to 0.58; PPC 0, support 0.72--0.78): the data are too weak to contradict it.
+\item \textbf{Resolves \S\ref{sec:e2cmodel}}: the ``true model fails'' result there came from the tail truth, not the method. In the prior bulk the well-specified model is calibrated, but a three-type model is not identifiable from two-label endpoint counts at this design.
+\item Caveats: 10 truths, NPE 5k, one design. Prior truths have much more C (21--41\%) than the biological scenario (5--15\%) and B divisions, unlike the original truth; ignore C also forbids B divisions, so its failures are not due to C alone. The A/B ``truth'' for the two-type arm is the three-type value of the same outcome, which a two-type row cannot match exactly (part of its error is projection).
+\item Consequence: if a hidden C is suspected, modelling it needs constraints that are actually true (from trajectory data), a C-specific measurement, or much richer designs. Ignoring it is risky mainly when C is read as A ($q$ near 1).
 \end{itemize}
 
 % ---------------------------------------------------------------------- E3a
+\needspace{12\baselineskip}
 \section{E3a --- Per-type division time vs one global value (BH)}\label{sec:e3a}
 \Q If B divides more slowly than A, can both lifetimes be inferred? What happens if both are fixed to one global (pooled) value, or to a wrong one ($\pm 25\%$)?
 \Setup
@@ -890,6 +948,7 @@ Free arm: \tA{} 17.5 / 15.9 / 15.6\,h and \tB{} 17.5 / 20.2 / 29.3\,h for true \
 \end{itemize}
 
 % ---------------------------------------------------------------------- E3b
+\needspace{12\baselineskip}
 \section{E3b --- Desynchronisation: lifetime CV misspecified (BH)}\label{sec:e3b}
 \Q How biased is the fit when the data's lifetime variability (Gamma shape 1--32, CV 1--0.18, or per type) differs from the assumed shape 8 (CV 0.35)? Does the PPC see it?
 \Setup
@@ -925,6 +984,7 @@ A 4 / B 16; A 16 / B 4 & $\le$ 0.01 & $\le$ 0.03 & $\le$ 0.01 & $\le$ 0.02 & $-0
 \end{itemize}
 
 % ---------------------------------------------------------------------- E3c
+\needspace{12\baselineskip}
 \section{E3c --- Quiescence vs division time (BH)}\label{sec:e3c}
 \Q Are quiescence (A persist) and A's lifetime confounded? What happens if quiescence is fixed to 0 while the data have A persist $\in \{0.03, 0.15, 0.30\}$?
 \Setup
@@ -957,7 +1017,152 @@ Posterior correlations (free arm): corr(A persist, \tA) $\approx -0.6$; corr(A$\
 \item Consequence: fix A persist from independent evidence (Ki67) or report lifetimes and self-renewal conditional on it; measuring A's division time also breaks the confound. Q4 (meaning of ``inattivazione'') open.
 \end{itemize}
 
+% ---------------------------------------------------------------------- X5
+\needspace{12\baselineskip}
+\section{X5 --- Role of the prior (GW and BH)}\label{sec:x5}
+Several earlier failures (E0 B row, BH ridge, original E2c) involved truths in the prior tail. X5 separates what is the prior from what is the data in four parts. Common to all: synthetic data, real-like design (GW generations 6/10 or BH 144/240\,h; 165/101 clones unless swept), perfect observation, one A founder, NPE 5k (\code{budget=dev}), SBC 200, PPC 200; 255 runs in total. Folder \res{results/x5/} (overview \res{info.md}, per-part tables \res{x5*_findings.md}).
+
+\needspace{12\baselineskip}
+\subsection{X5a --- Truth position $\times$ prior shape (GW)}\label{sec:x5a}
+\Q Does recovery of B$\to$A depend on where the truth sits in the prior (0.1--0.9) and on the prior's shape, with B divisions free vs fixed? Is E0's failure a tail-truth effect?
+\Setup
+\begin{setup}
+Data model & GW; B$\to$A $\in \{0.1, 0.3, 0.5, 0.7, 0.9\}$, B death = B persist = $(1-\text{B}\to\text{A})/2$; other parameters $\theta^\star$ \\
+Laws (data = inference) & \code{two_type} (B divisions free, 10 free) and \code{reversible_ab} (B divisions fixed to 0, 7 free). Prior P(B$\to$A $>0.9$): $10^{-5}$ resp.\ 0.01 \\
+Priors (inference only) & uniform Dirichlet; Jeffreys (all concentrations 0.5); flat marginal on B$\to$A (Beta(1,1): concentration 0.2 on B's 5 other outcomes in \code{two_type}, 0.5 on death/persist in \code{reversible_ab}) \\
+Seeds / runs & 5 / 75 per law (150) \\
+Folder & \res{results/x5/a_two_type/}, \res{results/x5/a_reversible_ab/} (\res{x5a_groups.csv}, \res{x5a_runs.csv}) \\
+\end{setup}
+\Result
+\figorpending{x5a}{1.0}{X5a: B$\to$A posterior mean (mean over 5 seeds) $\pm$ mean posterior sd against the true B$\to$A, one line per prior (slightly offset). Dashed: identity (perfect recovery). Dotted: uniform-prior mean (1/6 left, 1/3 right).}{X5a figure.}
+\begin{center}\footnotesize
+\begin{tabular}{@{}rllllll@{}}\toprule
+ & \multicolumn{3}{c}{B divisions free (\code{two_type})} & \multicolumn{3}{c}{B divisions fixed (\code{reversible_ab})} \\\cmidrule(lr){2-4}\cmidrule(l){5-7}
+Truth & uniform & Jeffreys & flat B$\to$A & uniform & Jeffreys & flat B$\to$A \\\midrule
+0.1 & 0.04 (3/5) & 0.04 (5/5) & 0.12 (5/5) & 0.15 (5/5) & 0.16 (4/5) & 0.17 (5/5) \\
+0.3 & 0.11 (1/5) & 0.11 (2/5) & 0.23 (5/5) & 0.37 (5/5) & 0.42 (5/5) & 0.43 (4/5) \\
+0.5 & 0.13 (0/5) & 0.12 (0/5) & 0.23 (2/5) & 0.44 (5/5) & 0.45 (5/5) & 0.49 (5/5) \\
+0.7 & 0.18 (0/5) & 0.20 (0/5) & 0.36 (3/5) & 0.67 (5/5) & 0.70 (5/5) & 0.74 (5/5) \\
+0.9 & 0.22 (0/5) & 0.26 (0/5) & 0.54 (1/5) & 0.79 (5/5) & 0.80 (5/5) & 0.85 (5/5) \\\midrule
+SBC error & 0.037 & 0.054 & 0.080 & 0.032 & 0.056 & 0.037 \\\bottomrule
+\end{tabular}
+
+B$\to$A posterior mean (seeds covered by the 90\% interval). Numbers: \res{tables/x5a.csv}.
+\end{center}
+\Comment
+\begin{itemize}
+\item \textbf{B divisions free: the estimate hardly follows the truth} (0.04 $\to$ 0.22 as the truth goes 0.1 $\to$ 0.9, uniform prior); no truth $\ge 0.5$ is covered under the uniform or Jeffreys prior, and B$\to$A contraction falls to $\le 0$ at 0.9. The data cannot separate switching from division, so the prior sets the answer --- at \emph{every} truth position, not only in the tail.
+\item A flat prior on B$\to$A tracks better (0.12 $\to$ 0.54) but still shrinks heavily and costs calibration (SBC 0.080) and coverage of the other parameters (run coverage 0.62--0.87).
+\item \textbf{B divisions fixed: every truth is recovered under every prior} (B$\to$A contraction 0.73--0.94; the three priors differ by $\le 0.06$, mild shrinkage at the extremes). The prior only matters once the model is structurally confounded.
+\item Conclusion for E0 (\S\ref{sec:e0}): the B-row failure is structural (switching vs division), not a bad truth position; a prior cannot substitute for the constraint.
+\end{itemize}
+
+\needspace{12\baselineskip}
+\subsection{X5b --- Informative lifetime prior, right vs wrong (BH)}\label{sec:x5b}
+\Q Fixing lifetimes resolves the BH ridge (\S\ref{sec:ridge}). What does an informative (literature) lifetime prior do if it is centred on the truth, or 50\% too long (truth outside the prior)?
+\Setup
+\begin{setup}
+Simulator / law & Bellman--Harris shape 8, \code{reversible_ab} (9 free); data $\theta^\star$ (\tA{} 20\,h, \tB{} 30\,h) \\
+Lifetime priors (log-uniform) & vague: [10, 80]\,h for both (= BH ridge control, bit-identical to E3b); right ($\pm 25\%$): A [16, 25], B [24, 37.5]\,h; wrong (+50\%): A [24, 37.5], B [36, 56.25]\,h \\
+Seeds / runs & 5 / 15 \\
+Folder & \res{results/x5/b_vague/}, \res{b_right/}, \res{b_wrong/} (\res{x5b_groups.csv}) \\
+\end{setup}
+\Result
+\figorpending{x5b}{1.0}{X5b: A$\to$AA and \tA{} per seed (posterior mean $\pm$ sd) and PPC per run for the three lifetime priors. Dashed = truth; shaded band = prior range of \tA{} (vague prior extends to 80\,h); grey band in the PPC panel = well-specified range.}{X5b figure.}
+\begin{center}\footnotesize
+\begin{tabular}{@{}llll@{}}\toprule
+Parameter (truth) & vague [10, 80]\,h & right ($\pm$25\%) & wrong (+50\%) \\\midrule
+A$\to$AA (0.55) & 0.32 $\pm$ 0.10, 0/5 & 0.46 $\pm$ 0.05, 2/5 & 0.60 $\pm$ 0.03, 1/5 \\
+A$\to$AB (0.05) & 0.23 $\pm$ 0.12, 3/5 & 0.18 $\pm$ 0.08, 2/5 & 0.20 $\pm$ 0.06, 1/5 \\
+A$\to$BB (0.29) & 0.19 $\pm$ 0.09, 5/5 & 0.19 $\pm$ 0.06, 1/5 & 0.17 $\pm$ 0.04, 1/5 \\
+B$\to$A (0.80) & 0.63 $\pm$ 0.18, 5/5 & 0.69 $\pm$ 0.16, 5/5 & 0.68 $\pm$ 0.14, 5/5 \\
+\tA{} (20\,h) & 15.9 $\pm$ 1.9, 0/5 & 18.1 $\pm$ 1.3, 4/5 & 24.2 $\pm$ 0.2 (prior edge), 0/5 \\
+\tB{} (30\,h) & 20.2 $\pm$ 9.5, 4/5 & 29.5 $\pm$ 3.6, 5/5 & 49 $\pm$ 5.3, 0/5 \\\midrule
+MAE probabilities / rel.\ error lifetimes & 0.109 / 0.26 & \textbf{0.068} / 0.06 & 0.082 / 0.42 \\
+Support mass / PPC outside 95\% & 0.74--0.83 / 0.008 & 0.57--0.72 / 0.000 & \textbf{0.00--0.02 / 0.27} \\
+SBC coverage error & 0.027 & 0.028 & 0.027 \\\bottomrule
+\end{tabular}
+
+Mean over 5 seeds $\pm$ mean posterior sd, seeds covered. Lifetimes fixed exactly (\S\ref{sec:ridge}): A$\to$AA 0.51, MAE 0.059.
+\end{center}
+\Comment
+\begin{itemize}
+\item \textbf{A right literature prior moves along the ridge towards the truth}: A$\to$AA 0.32 $\to$ 0.46, lifetimes about right, MAE 0.109 $\to$ 0.068 --- most of the way to fixing lifetimes exactly (0.51, 0.059).
+\item \textbf{A prior 50\% too long is clearly flagged}: support $\approx 0$, PPC 0.27 (0.17--0.35), A's lifetime pinned at the prior's lower edge (the data push against it). Consistent with E3a, where too-long lifetimes fail visibly and too-short ones bias silently. Probabilities remain off (1/5 covered) despite high contraction.
+\item Caveat: one truth ($\theta^\star$), 5 seeds; a too-short wrong prior was not tested.
+\end{itemize}
+
+\needspace{12\baselineskip}
+\subsection{X5c --- Data vs prior at a tail truth (GW)}\label{sec:x5c}
+\Q With all transitions free and a tail truth (B$\to$A = 0.9, prior P $=10^{-5}$ under Beta(1,5)), how many organoids overrule the prior?
+\Setup
+\begin{setup}
+Data model & GW, \code{two_type}; B: death 0.05, persist 0.05, B$\to$A 0.9 (B divisions 0); A row $\theta^\star$ \\
+Inference & \code{two_type} (10 free), uniform Dirichlet vs flat marginal on B$\to$A (concentration 0.2 on B's other outcomes) \\
+Design & generations 6/10 $\times$ \{32, 128, 512\} clones per endpoint \\
+Seeds / runs & 5 / 30 \\
+Folder & \res{results/x5/c_data_vs_prior/} (\res{x5c_groups.csv}, \res{x5c_runs.csv}) \\
+\end{setup}
+\Result
+\figorpending{x5c}{0.72}{X5c: B$\to$A (mean over 5 seeds $\pm$ mean posterior sd) and B$\to$AA posterior mean against clones per endpoint; dashed = truth.}{X5c figure.}
+\begin{center}\footnotesize
+\begin{tabular}{@{}lrrrrrrrrr@{}}\toprule
+Prior & clones & B$\to$A (0.9) & post.\ sd & cov. & contr. & B$\to$AA (0) & MAE & support & SBC \\\midrule
+uniform & 32 & 0.19 & 0.14 & 0/5 & 0.01 & 0.31 & 0.161 & 0.79 & 0.031 \\
+ & 128 & 0.21 & 0.15 & 0/5 & $-0.10$ & 0.32 & 0.151 & 0.72 & 0.037 \\
+ & 512 & 0.25 & 0.15 & 0/5 & $-0.17$ & 0.29 & 0.139 & 0.55 & 0.044 \\
+flat B$\to$A & 32 & 0.47 & 0.22 & 2/5 & 0.44 & 0.28 & 0.119 & 0.49 & 0.078 \\
+ & 128 & 0.55 & 0.19 & 1/5 & 0.57 & 0.26 & 0.101 & 0.42 & 0.081 \\
+ & 512 & 0.59 & 0.17 & 1/5 & 0.65 & 0.23 & 0.086 & 0.46 & 0.083 \\\bottomrule
+\end{tabular}
+\end{center}
+PPC $\le 0.03$ in every group. Numbers: \res{tables/x5c.csv}.
+\Comment
+\begin{itemize}
+\item \textbf{1024 organoids do not overrule the uniform prior}: B$\to$A moves 0.19 $\to$ 0.25 (truth 0.9), never covered, contraction $\le 0$; the mass goes to B$\to$AA ($\approx$\,0.3, truth 0) --- the switching/division confounding of E0.
+\item A flat prior helps and improves with data (0.47 $\to$ 0.59, contraction up to 0.65) but is still far from 0.9 at 1024 organoids and costs calibration (SBC 0.08).
+\item Endpoint counts of this kind cannot resolve the confounding by sample size at realistic scales; the structural constraint (B divisions fixed, X5a) is what works.
+\end{itemize}
+
+\needspace{12\baselineskip}
+\subsection{X5d --- Performance averaged over the prior (GW and BH)}\label{sec:x5d}
+\Q Every other experiment uses one hand-picked truth, partly in the prior tail. Averaged over truths drawn from the prior, are GW and BH calibrated and informative?
+\Setup
+\begin{setup}
+Data = inference & \code{reversible_ab}, 30 truths drawn from the prior (\code{truth.source=prior}, \code{data_seed} = seed 0--29; no redraws needed); BH lifetime prior log-uniform [10, 80]\,h \\
+Design & real-like: GW generations 6/10, BH 144/240\,h; 165/101 clones \\
+Seeds / runs & 30 per simulator (60) \\
+Prior-mean baseline & error of the uniform Dirichlet mean (1/6 for A's outcomes, 1/3 for B's) \\
+Folder & \res{results/x5/d_gw/}, \res{results/x5/d_bh/} (\res{prior_average_parameters.csv}, \res{prior_average_runs.csv}) \\
+\end{setup}
+\Result
+\figorpending{x5d}{1.0}{X5d: per-parameter contraction (left) and absolute error of the posterior mean (right; black ticks = prior-mean baseline), averaged over 30 truths drawn from the prior; GW vs BH.}{X5d figure.}
+\begin{center}\footnotesize
+\begin{tabular}{@{}lrr@{}}\toprule
+ & GW & BH \\\midrule
+SBC coverage error & 0.032 & 0.028 \\
+90\% coverage across truths & 0.90 & 0.90 \\
+Mean contraction & 0.68 & 0.51 \\
+MAE probabilities (prior-mean baseline) & 0.072 (0.139) & 0.100 (0.129) \\
+A$\to$AA contraction & 0.94 & 0.82 \\
+B$\to$A contraction / coverage & 0.67 / 0.90 & 0.48 / 0.80 \\
+Support mass median (min) & 0.88 (0.54) & 0.89 (0.29) \\
+PPC outside 95\% & 0.006 & 0.003 \\\bottomrule
+\end{tabular}
+
+BH mean contraction includes \tA{} (0.82) and \tB{} (0.53); relative lifetime error 0.21 / 0.35. Numbers: \res{tables/x5d.csv}.
+\end{center}
+\Comment
+\begin{itemize}
+\item \textbf{The methods are calibrated on average}: with truths drawn from the prior both simulators give 90\% coverage and SBC error $\approx 0.03$. Single-truth failures are about specific truths and priors, not broken inference.
+\item GW learns A's divisions well (contraction 0.89--0.94), A's death/persist/switch about halfway ($\approx 0.5$), B's row moderately (0.43--0.71; B death weakest).
+\item \textbf{BH learns less} (contraction 0.51 vs 0.68; MAE 0.100 vs 0.072): the lifetimes absorb information; A persist barely moves (contraction 0.14, error no better than the prior mean) and B death / B persist stay close to the prior-mean baseline (0.142 / 0.160 vs 0.170 / 0.164).
+\item \textbf{The BH ridge is a tail-truth effect}: averaged over the prior A$\to$AA is learned well (contraction 0.82), so the failure at $\theta^\star$ (A$\to$AA 0.55, 0/5 covered, \S\ref{sec:ridge}) is specific to a truth with 1.8\% prior mass above it, where the prior picks the point on the lifetime/self-renewal ridge.
+\item Caveat: X5d uses real-like generations 6/10; the E0/design-comparison single-truth runs used 4/8/12, so they are not directly comparable.
+\end{itemize}
+
 % ---------------------------------------------------------------------- GPU
+\needspace{12\baselineskip}
 \section{Device and batch-size benchmark}\label{sec:gpu}
 \Q Do GPU training and/or a larger batch (512 vs 128) make runs faster without degrading the posterior?
 \Setup
@@ -991,9 +1196,10 @@ SNPE, GPU, 128 & 753 & 3.2 & 226 & 0.129 & --- \\\bottomrule
 % ====================================================================== PART II
 \clearpage
 \part{Planned experiments}\label{part:pending}
-All sweeps of E0--E4 are finished (Part~\ref{part:finished}). The experiments below were never run; no results exist for them.
+All sweeps of E0--E4, the E2c rerun and X5 are finished (Part~\ref{part:finished}). The experiments below were never run; no results exist for them.
 
 % ---------------------------------------------------------------------- X2
+\needspace{12\baselineskip}
 \section{X2 --- Seed spread: dataset vs training}\label{sec:p-x2}
 \Q How much of the seed-to-seed spread comes from the dataset and how much from network training?
 \Setup
@@ -1008,6 +1214,7 @@ Will show the posterior mean and sd per parameter in both arms. If the training 
 \end{pending}
 
 % ---------------------------------------------------------------------- X1/X3/X4/R
+\needspace{12\baselineskip}
 \section{Other planned work (X1, X3, X4, R, P0, follow-ups)}\label{sec:p-other}
 \Q
 \begin{itemize}
@@ -1016,7 +1223,7 @@ Will show the posterior mean and sd per parameter in both arms. If the training 
 \item \textbf{X4 combined errors}: realistic combination (organoid death + mis-typing + C + lifetime CV), real-like design, \code{budget=full}: the error budget to quote with the real-data fit.
 \item \textbf{R real data}: CRC0322, day 6 (165 organoids) and day 10 (101); choose 2D counts vs 3D estimates (Q3); final model, SBC, fit, PPC.
 \item \textbf{P0 BH timing}: seconds per BH run at \code{dev}/\code{smoke} budgets on an idle machine.
-\item \textbf{Follow-ups of finished sweeps}: E2c with a truth inside the prior bulk of the three-type model (or an informative prior) and a two-type control (\S\ref{sec:e2cmodel}); asymmetric mis-typing (E2); E4 GW with \code{law=two_type} at 256--512 clones; observed fraction as a summary (\code{observation=all_clones}, E1b).
+\item \textbf{Follow-ups of finished sweeps}: asymmetric mis-typing (E2); E4 GW with \code{law=two_type} at 256--512 clones; observed fraction as a summary (\code{observation=all_clones}, E1b).
 \end{itemize}
 \Setup
 \begin{setup}
@@ -1035,7 +1242,7 @@ X1: error/contraction/SBC per method. X3: bias of a GW fit to BH data. X4: total
 \section{Reproducibility}\label{sec:repro}
 \textbf{Code versions.} \code{manifest.json} in each run records \code{git_commit} (HEAD at run time; since \code{6b45d23} also the commit of the loaded code). Nearly all runs have \code{git_dirty = true}. Several sweeps span several HEAD values because commits were made while they ran; the loaded code is that of the launch commit (verified for GW E1a: identical networks across settings per seed).
 \begin{center}\footnotesize
-\begin{tabularx}{\linewidth}{@{}p{3.2cm}p{2.7cm}X@{}}\toprule
+\begin{tabularx}{\linewidth}{@{}p{3.2cm}p{2.7cm}Y@{}}\toprule
 Experiment & Launch commit & Command (preset; \code{hydra.sweep.dir=results/...}) \\\midrule
 E0 & \code{194e31f}, \code{b3cbae0} & \code{+experiment=b_row_identifiability law=two_type|reversible_ab}; \code{inference.method.rounds=4}; \code{+experiment=b_row_flat_prior} \\
 Design comparison & \code{b3cbae0} & \code{+experiment=design_comparison} (laws two\_type, reversible\_ab) \\
@@ -1053,7 +1260,12 @@ E1c GW & \code{d46b4c2} & \code{+experiment=e1c_fixed_death} (4 $\times$ 4 grid;
 E2a/E2b GW & \code{12c0827} & \code{+experiment=e2a_typing_known|e2b_typing_ignored simulator=galton_watson} \\
 E2c ignore C & \code{19a10ea} & \code{+experiment=e2c_third_type} \\
 E2c C modelled & free \code{d46b4c2}; traj.\ \code{12c0827} & \code{+experiment=e2c_third_type law=three_type|three_type_traj observation=three_split} \\
-E3a / E3b / E3c & \code{27b1d61}--\code{c919397} & \code{e3a_lifetime_free}, \code{e3a_lifetime_fixed}, \code{e3b_desync}, \code{e3c_persist} \\\bottomrule
+E3a / E3b / E3c & \code{27b1d61}--\code{c919397} & \code{e3a_lifetime_free}, \code{e3a_lifetime_fixed}, \code{e3b_desync}, \code{e3c_persist} \\
+E2c rerun (prior truths) & \code{36d7b07} & ignore C: \code{+experiment=e2c_prior_truth}\newline C free: \code{+experiment=e2c_prior_truth law=three_type observation=three_split}\newline C traj.: \code{+experiment=e2c_prior_truth law=three_type_traj observation=three_split}\newline (folders \code{results/e2c_prior/<arm>}) \\
+X5a & \code{d403cac} & \code{+experiment=x5a_truth_position law=two_type|reversible_ab '++law.concentration={},<Jeffreys>,<flat B.to_A>'} (exact lists in the preset header and \code{results/x5/a_*/info.md}) \\
+X5b & \code{d403cac} & vague: \code{+experiment=x5b_lifetime_prior}\newline right / wrong: add \code{'~simulator.model.lifetime_mean_bounds'} and\newline \code{'+simulator.model.lifetime_mean_bounds={A:[16,25],B:[24,37.5]}'}\newline resp.\ \code{{A:[24,37.5],B:[36,56.25]}} \\
+X5c & \code{d403cac} & \code{+experiment=x5c_data_vs_prior} \\
+X5d & \code{d403cac} & \code{+experiment=x5d_prior_average}\newline \code{simulator=galton_watson|bellman_harris} \\\bottomrule
 \end{tabularx}
 \end{center}
 Every command has the form
@@ -1071,6 +1283,7 @@ cd report && /home/matteo/miniconda3/envs/latex/bin/tectonic report.tex
 \code{make_figures.py} only reads \code{results/}; incomplete sweeps would be skipped and shown as pending boxes.
 Numbers in tables come from the \code{info.md} analyses in \code{results/} (overview: \code{results/overview.md}) or from \code{scripts/summarize.py} functions (\code{mae_probabilities}, per-parameter rows); plotted numbers are in \code{report/tables/}.
 
+\needspace{12\baselineskip}
 \section{Glossary}\label{sec:glossary}
 \begin{center}\footnotesize
 \begin{tabularx}{\linewidth}{@{}p{3.3cm}X@{}}\toprule

@@ -1,0 +1,13 @@
+arm,parameter,truth,mean,post_sd,covered,n
+b_vague,A.div_AA,0.55,0.3241,0.09649,0,5
+b_vague,A.mean_lifetime,20,15.92,1.929,0,5
+b_vague,support_mass,,0.7793,,,
+b_vague,ppc_out95,,0.008333,,,
+b_right,A.div_AA,0.55,0.4608,0.05195,2,5
+b_right,A.mean_lifetime,20,18.08,1.281,4,5
+b_right,support_mass,,0.6526,,,
+b_right,ppc_out95,,0,,,
+b_wrong,A.div_AA,0.55,0.602,0.02531,1,5
+b_wrong,A.mean_lifetime,20,24.2,0.1941,0,5
+b_wrong,support_mass,,0.00692,,,
+b_wrong,ppc_out95,,0.2708,,,
