@@ -294,6 +294,13 @@ for each parameter?
 - [ ] **X1 – Methods**: NPE vs NLE vs NRE (and sequential NPE) at the baseline and at
       the worst realistic error setting (`+experiment=compare_methods`). NLE/NRE with
       `budget.sbc_cases=50`.
+      Proposed scope (2026-11-06; all results so far are amortised NPE): rerun the
+      decisive settings with NPE / SNPE / NLE / NRE, 5 seeds each (~80 runs): E0
+      B divisions free vs fixed, BH ridge reference truth, one silent misspecification
+      (E2c q = 1 or E3a too-short lifetimes), one loud one (X5b wrong lifetime prior).
+      Question: are identifiability findings method-independent, and does the
+      flagged/silent pattern change (support mass is NPE-specific; MCMC methods fail
+      with confident posteriors inside the prior)?
 - [ ] **X2 – Seeds**: with P1, separate the dataset spread (5 `data_seed` × 1 `seed`)
       from the training spread (1 × 5) for the final configuration.
 - [ ] **X3 – Model**: GW vs BH on the same question. Can a GW fit describe BH data?
