@@ -84,8 +84,8 @@
 {\large Two-type branching models (LGR5$^+$ = A, KRT20$^+$ = B),\\ neural posterior estimation, identifiability and robustness\par}
 \vspace{1.5cm}
 \begin{tabular}{ll}
-Status of results & 5 November 2026 \\
-Repository & \code{BIO-SBI}, branch \code{main}, commit \code{5a1b926} \\
+Status of results & 6 November 2026 \\
+Repository & \code{BIO-SBI}, branch \code{main}, commit \code{12c0827} \\
 Data & synthetic only (no measured data used) \\
 Audience & group planning the wet-lab organoid experiments \\
 \end{tabular}
@@ -94,7 +94,7 @@ Audience & group planning the wet-lab organoid experiments \\
 \textbf{How to read this report.} The executive summary (p.~\pageref{sec:summary}) is self-contained.
 Section~\ref{sec:methods} defines the model and every diagnostic.
 Each experiment section has the same four parts: \emph{Question}, \emph{Setup}, \emph{Result}, \emph{Comment}.
-Orange boxes mark experiments whose sweeps are still running or planned.
+Orange boxes mark experiments that were planned but never run.
 Parameters: A$\to$AA etc.\ are outcome probabilities per cell event; \tA, \tB{} are mean cell lifetimes (Bellman--Harris only).
 \end{minipage}
 \end{titlepage}
@@ -103,55 +103,57 @@ Parameters: A$\to$AA etc.\ are outcome probabilities per cell event; \tA, \tB{} 
 \section*{Executive summary}\label{sec:summary}
 \addcontentsline{toc}{section}{Executive summary}
 
-\textbf{Scope.} 15 finished experiments (616 runs), all on synthetic data from one reference parameter vector $\theta^\star$ (Table~\ref{tab:truth}), 5 seeds per setting. Galton--Watson (GW, time in generations) and Bellman--Harris (BH, time in hours; real-like design = days 6 and 10 = 144/240\,h with 165/101 organoids).
+\textbf{Scope.} All simulation sweeps of E0--E4 are finished (966 runs), all on synthetic data from one reference parameter vector $\theta^\star$ (Table~\ref{tab:truth}), 5 seeds per setting. Galton--Watson (GW, time in generations; mapping to days nominal) and Bellman--Harris (BH, time in hours; real-like design = days 6 and 10 = 144/240\,h with 165/101 organoids). Every error is compared with the well-specified control of the same sweep.
 
 \subsection*{Key findings}
 \begin{enumerate}[leftmargin=1.4em]
-\item \textbf{The well-specified GW model is recovered at the real-like design}: MAE 0.033 over the 9 outcome probabilities, mean contraction 0.89, A$\to$AA 0.52 (truth 0.55) --- provided B's divisions are fixed to 0 (\S\ref{sec:e1a}).
-\item \textbf{B's row is prior-dominated if all transitions are free} (E0): B$\to$A = 0.20 vs truth 0.80, contraction $\le 0$, at 5k--50k simulations, every dataset, every design. Cause: the uniform Dirichlet prior puts 0.03\% mass above 0.8; a flat prior gives 0.53 (4/5 covered). Switching and division differ only in clone-size variability: a shift of 0.05 in B$\to$A is detectable at 512 clones per endpoint (C2ST 0.84), not at 32 (0.57).
-\item \textbf{Endpoints matter more than organoids.} GW: 3 endpoints $\times$ 128 halve the error of 1 endpoint $\times$ 384 (MAE 0.028 vs 0.058). BH (E4): days \{4,6,10\} beat every other set at every size; mean contraction 0.50 $\to$ 0.79 at 512 organoids/endpoint; day 10 alone plateaus at 0.50.
-\item \textbf{BH baseline bias = lifetime/self-renewal ridge.} Even well specified, BH estimates A$\to$AA $\approx$ 0.32 (truth 0.55) and \tA{} $\approx$ 16\,h (truth 20\,h), 0/5 covered, at every design from 16 to 512 organoids. Fixing lifetimes to the truth gives 0.51 (5/5), MAE 0.109 $\to$ 0.059 (\S\ref{sec:ridge}). More organoids do not help.
-\item \textbf{Most misspecifications are silent} (Fig.~\ref{fig:detectability}). In all BH error experiments the PPC stays $\le 0.033$ (well-specified: 0--0.008) except two cases: both death rates fixed wrong (0.096) and a global lifetime longer than A's (0.35--0.51, support mass $\approx 0$). Shifts up to $\approx$\,2 posterior sd go unnoticed.
-\item \textbf{Size of the tested errors (BH, vs well-specified control):}
+\item \textbf{The well-specified GW model is recovered}: at the real-like design MAE 0.033 over the 9 outcome probabilities, contraction 0.89, A$\to$AA 0.52 (truth 0.55); across all E4 designs A$\to$AA 0.47--0.54 --- provided B's divisions are fixed to 0 (E0).
+\item \textbf{B's row is prior-dominated if all transitions are free} (E0): B$\to$A = 0.20 vs truth 0.80 at 5k--50k simulations, every design (uniform Dirichlet puts 0.03\% mass above 0.8; a flat prior gives 0.53).
+\item \textbf{Endpoints matter more than organoids, in both simulators} (E4): days/generations \{4,6,10\} beat every other set at every size; one late endpoint plateaus; a late extra endpoint (\{6,10,14\}) adds little. GW: contraction 0.80 $\to$ 0.95, MAE 0.052 $\to$ 0.023 (16 $\to$ 512 organoids/endpoint), every probability recovered by $\approx$\,128 (A$\to$AB: 512). BH: 0.50 $\to$ 0.79, MAE 0.114 $\to$ 0.060.
+\item \textbf{BH baseline bias = lifetime/self-renewal ridge.} Well-specified BH gives A$\to$AA $\approx$ 0.32 and \tA{} $\approx$ 16\,h (truth 0.55, 20\,h), 0/5 covered, at every design. Fixing lifetimes to the truth gives 0.51 (5/5), MAE 0.109 $\to$ 0.059 (\S\ref{sec:ridge}). More organoids do not help.
+\item \textbf{A free time scale hides errors} (Figs.~\ref{fig:detectability}, \ref{fig:detectability_gw}). In BH the PPC stays $\le 0.033$ for every error except both deaths fixed wrong (0.096) and a global lifetime longer than A's (0.35--0.51). GW, without lifetimes, flags more: A death fixed too high (support $\approx 0$), B death fixed at 4$\times$ truth (support 0.13--0.33), 40\% multi-cell founders (PPC 0.12, support 0.16). Still silent in GW: wrong founder type, B death at 2$\times$ truth (B$\to$A 0/5 covered), ignored mis-typing up to 2 posterior sd.
+\item \textbf{Size of the tested errors (vs paired control; BH | GW):}
   \begin{itemize}
-  \item founders 50\% B: A$\to$AB $-0.11$, \tB{} $+4$\,h; 40\% multi-cell clones: \tA{} $-1.8$\,h, B$\to$A $-0.07$;
-  \item death fixed wrong: B death 0.4 (true 0.1) $\Rightarrow$ B$\to$A $-0.19$ (0/5 covered), A$\to$AB $+0.17$;
-  \item mis-typing ignored, $e=0.2$: A$\to$AB $+0.09$, A$\to$AA $-0.06$ ($\le$\,0.7 sd); modelled: no bias, A$\to$AB contraction 0.30 $\to -0.22$;
-  \item lifetime CV 0.18--0.5: harmless ($\le$\,0.035); exponential (CV 1): A$\to$AA $+0.16$, B$\to$A $-0.18$, \tA{} $-3.7$\,h;
-  \item quiescence (A persist) not identifiable: posterior 0.12--0.14 for truths 0.03--0.30.
+  \item founders 50\% B: A$\to$AB $-0.11$, \tB{} $+4$\,h $|$ shifts $\le 0.07$ (silent in both);
+  \item 40\% multi-cell clones: \tA{} $-1.8$\,h, B$\to$A $-0.07$ $|$ A$\to$AA $+0.13$, B$\to$A $-0.25$ (0/5 covered, flagged);
+  \item B death fixed at 0.4 (true 0.1): B$\to$A $-0.19$ $|$ $-0.23$ to $-0.26$; A death fixed at 0.2 (true 0.03): A persist $-0.10$, \tA{} $-2$ to $-3$\,h $|$ no fit; deaths fixed at 0: $\le 0.07$ in both (silent);
+  \item mis-typing ignored, $e=0.2$: A$\to$AB $+0.09$ (0.7 sd) $|$ $+0.15$ (2.1 sd; already 1.4 sd at $e=0.1$); modelled: information loss (A$\to$AB contraction 0.30 $\to -0.22$ $|$ 0.85 $\to$ 0.37);
+  \item BH only: lifetime CV 0.18--0.5 harmless, exponential A$\to$AA $+0.16$, B$\to$A $-0.18$; quiescence (A persist) not identifiable.
   \end{itemize}
-\item \textbf{Founder mix and founder size cannot be learned} from endpoint counts in BH (contraction $\le 0.12$); in GW the founder A share is partly informed but compressed (0.68 for truth 0.5, 0.78 for 1.0).
-\item \textbf{Observed-organoid fraction} (detected/seeded): 0.94--0.95 at $\theta^\star$; dominated by A death (0.3 $\Rightarrow$ 0.54--0.58); GW exact and BH simulated agree within $\approx$\,0.03; A and B death trade off (one constraint, not two).
-\item \textbf{Hidden third type ignored (GW, E2c)}: PPC 0.17--0.41 and support mass 0.01--0.16, i.e.\ flagged --- but this sweep has no well-specified control and its truth lies far in the prior tail, so the flag cannot yet be attributed to C alone.
+\item \textbf{Founder composition}: founder type not learnable in BH (contraction $\le 0.12$), partly in GW (0.68 for truth 0.5); inferring it removes no shift. Founder size: stays at prior in BH; in GW it tracks the truth (0.71 for $p_1=0.6$) and inferring it removes the misfit and halves the shifts.
+\item \textbf{Observed-organoid fraction} (detected/seeded): 0.94--0.95 at $\theta^\star$; dominated by A death (0.3 $\Rightarrow$ 0.54--0.58); GW exact and BH simulated agree to 0.02 on average; A and B death trade off (one constraint, not two).
+\item \textbf{Hidden third type (GW, E2c): unresolved.} Ignoring C is flagged (PPC 0.17--0.41, support $\approx 0$), but modelling C --- even with the true data model --- fails worse (support $\approx 0$, PPC 0.26--0.84): the truth (A$\to$AA 0.79--0.905) has prior probability $10^{-6}$--$10^{-10}$ under the three-type prior. The misfit is a prior-tail effect and cannot be attributed to C.
 \end{enumerate}
 
 \subsection*{Recommendations for the wet-lab design}
 \begin{itemize}
-\item \textbf{Endpoints:} at least 2, preferably 3 including an early one --- e.g.\ days 4, 6, 10. A single day-10 endpoint is the weakest design.
-\item \textbf{Organoids:} $\ge 128$ per endpoint (BH contraction 0.71 at \{4,6,10\}$\times$128; 0.77 at 256). A$\to$BB needs $\ge 64$, B death $\ge 128$, A$\to$AB $\ge 256$ per endpoint (BH, days 4/6/10).
+\item \textbf{Endpoints:} three, including an early one --- e.g.\ days 4, 6, 10 (best in both simulators). A single day-10 endpoint is the weakest design.
+\item \textbf{Organoids:} $\approx$\,128 per endpoint. In GW this recovers every outcome probability with \{4,6,10\} (A$\to$BB from 32, B persist from 64, B$\to$A from 128; A$\to$AB needs 512). In BH it gives contraction 0.71; A$\to$BB and B death need $\ge 128$, A$\to$AB $\ge 256$; self-renewal is not recovered at any size without lifetime information.
 \item \textbf{Measure independently:}
   \begin{enumerate}[label=(\alph*)]
-  \item \emph{A (LGR5$^+$) division time} by live imaging --- the single most valuable measurement; per type, not pooled (a pooled value longer than A's makes the model fail; shorter biases silently);
-  \item \emph{number of organoids seeded per well} (gives the observed fraction, sensitive to A death);
+  \item \emph{A (LGR5$^+$) division time} by live imaging --- the single most valuable measurement (it is what separates BH, MAE 0.109, from the GW target, 0.033); per type, not pooled;
+  \item \emph{seeding}: number of organoids seeded per well (observed fraction, sensitive to A death) and whether wells contain multi-cell seeds ($\gtrsim$\,15\% multi-cell clones bias self-renewal and B$\to$A in GW; then fix or infer the founder-size distribution);
+  \item \emph{mis-typing rate} (2D vs 3D comparison) and pass it to the model: ignored, it is tolerable only up to $e \approx 0.05$ once posteriors are as narrow as in GW;
   \item \emph{cell-cycle variability}: only whether CV is $<0.5$ or near-exponential;
-  \item \emph{mis-typing rate} (2D vs 3D comparison), to pass to the model;
-  \item \emph{founder composition at seeding} and \emph{quiescence} (e.g.\ Ki67) if they matter biologically --- the counts cannot provide them;
-  \item \emph{apoptosis} only if death rates are to be fixed; otherwise keep them free.
+  \item \emph{founder type} and \emph{quiescence} (e.g.\ Ki67) if they matter biologically --- the counts cannot provide them;
+  \item \emph{apoptosis} only if death rates are to be fixed; otherwise keep them free (a value too high biases B$\to$A; in BH silently).
   \end{enumerate}
 \item \textbf{Biological constraints help more than data}: B divisions = 0 (if KRT20$^+$ cells do not divide) is what makes B$\to$A identifiable.
+\item \textbf{Hidden third type}: no recommendation yet; E2c must be repeated with a truth inside the prior bulk (or an informative prior) first.
 \end{itemize}
 
 \subsection*{Methodological lessons}
 \begin{itemize}
-\item \textbf{Prior tails}: a truth with $<$\,2\% prior mass (B$\to$A = 0.8, A$\to$AA = 0.55 under uniform Dirichlet) is pulled to the prior, and SBC still looks fine. Report prior quantiles of the truth; check prior sensitivity.
-\item \textbf{Ridges}: endpoint counts fix the growth rate; lifetime, self-renewal and quiescence trade off along it (posterior corr.\ $+0.7$, $-0.6$). The prior picks the point.
+\item \textbf{Prior tails}: a truth with $<$\,2\% prior mass (B$\to$A = 0.8, A$\to$AA = 0.55 under uniform Dirichlet) is pulled to the prior; with $10^{-6}$ or less (E2c three-type) amortised NPE extrapolates outside the prior support. SBC still looks fine. Report prior quantiles of the truth; check prior sensitivity.
+\item \textbf{Ridges and free time scales}: endpoint counts fix the growth rate; lifetime, self-renewal and quiescence trade off along it (posterior corr.\ $+0.7$, $-0.6$). The prior picks the point, and the free lifetime also absorbs (hides) errors that GW detects (E1a number, E1c).
 \item \textbf{Compare with paired controls}, not with the truth (BH baseline is biased); 5 seeds resolve shifts of $\approx$\,0.02--0.03 (probabilities) and 0.5--1.5\,h.
-\item \textbf{Diagnostics}: SBC checks the inference model only and cannot see misspecification; PPC and support mass are relative checks; support mass $\approx 0$ = the model cannot explain the data (numbers from such runs are not estimates).
+\item \textbf{Diagnostics}: SBC checks the inference model only; PPC and support mass are relative checks and vary between well-specified GW runs (support 0.07--0.89, PPC up to 0.10); support mass $\approx 0$ = the model cannot explain the data (numbers from such runs are not estimates).
 \end{itemize}
 
-\textbf{Still running / planned} (Part~\ref{part:pending}): GW halves of E4, E1c, E1a founder number, E2a/E2b; E2c with C modelled (free / trajectory-constrained); X1 methods comparison, X2 seed spread, X3 GW vs BH, X4 combined errors, R real CRC0322 data.
+\textbf{Planned, never run} (Part~\ref{part:pending}): X2 seed spread; X1 methods comparison, X3 GW fit to BH data, X4 combined errors, R real CRC0322 data, P0 BH timing; also E2c with a truth inside the prior bulk and asymmetric mis-typing.
 
-\figorpending{detectability}{0.78}{Detectability of BH misspecifications. Each point is one misspecified setting (mean of 5 seeds): largest shift of a posterior mean from its paired well-specified control, in units of the control's posterior sd, against the PPC. Grey band = PPC range of well-specified runs. Crosses: global lifetime $T>\tau_A$ (support mass $\approx 0$).}{Detectability scatter.}
+\figorpending{detectability}{0.6}{Detectability of BH misspecifications. Each point is one misspecified setting (mean of 5 seeds): largest shift of a posterior mean from its paired well-specified control, in units of the control's posterior sd, against the PPC. Grey band = PPC range of well-specified runs. Crosses: global lifetime $T>\tau_A$ (support mass $\approx 0$).}{Detectability scatter.}
+\figorpending{detectability_gw}{0.8}{Detectability of GW misspecifications (E1a type and number, E1c, E2b): largest shift from the paired control in control posterior sd, against the PPC (left) and the posterior support mass (right). Grey bands = well-specified ranges. GW flags more errors than BH (no free time scale), but several shifts of 1--3 sd remain inside the well-specified bands.}{GW detectability.}
 
 \clearpage
 {\setcounter{tocdepth}{1}\tableofcontents}
@@ -385,7 +387,7 @@ Folder & \res{results/e4/bh/} \\
 \begin{tabular}{@{}lrrrr@{}}\toprule
 Parameter & day 10 & days 6, 10 & days 6, 10, 14 & days 4, 6, 10 \\\midrule
 A death, A$\to$B (small truths) & 16 & 16 & 16 & 16 \\
-A$\to$BB & --- & 512 & 256 & \textbf{64} \\
+A$\to$BB & --- & 512 & 256 & \textbf{128} \\
 B death & --- & 256 & 256 & \textbf{128} \\
 A$\to$AB & --- & --- & --- & \textbf{256} \\
 A$\to$AA, A persist, B persist, B$\to$A & --- & --- & --- & --- \\
@@ -398,7 +400,57 @@ A$\to$AA, A persist, B persist, B$\to$A & --- & --- & --- & --- \\
 \item With several endpoints more organoids keep helping (MAE 0.114 $\to$ 0.060 for days 4/6/10); B$\to$A rises 0.59 $\to$ 0.73.
 \item A$\to$AA (0.29--0.39) and \tA{} (15--17\,h) are never recovered; coverage falls to 0 as posteriors narrow on the wrong values: the ridge (\S\ref{sec:ridge}), not lack of data.
 \item ``Recovered'' for A death / A$\to$B is easy because the truths are small ($|$error$|<0.05$ is loose there).
-\item Caveat: one truth, perfect assay, single A founders, 5k simulations; GW half pending (\S\ref{sec:p-e4gw}).
+\item Caveat: one truth, perfect assay, single A founders, 5k simulations; GW half and comparison in \S\ref{sec:e4gw}.
+\end{itemize}
+
+% ---------------------------------------------------------------------- E4 GW
+\section{E4 --- Amount of data (GW) and comparison with BH}\label{sec:e4gw}
+\Q Same as \S\ref{sec:e4} for Galton--Watson: minimum organoids per endpoint and best endpoint set when there is no lifetime ridge.
+\Setup
+\begin{setup}
+Simulator & Galton--Watson (endpoints in \emph{generations}; day-mapping nominal) \\
+Law (free) & \code{reversible_ab} (7 probabilities) \\
+Data vs inference & well specified, $\theta^\star$ \\
+Design & clones per endpoint $\in \{16,\dots,512\}$ $\times$ generations \{10\}, \{6,10\}, \{6,10,14\}, \{4,6,10\} \\
+Inference / budget & NPE amortised, 5k \\
+Seeds / runs & 5 / 120 (all with 2\,000 posterior samples, 200 SBC cases) \\
+Folder & \res{results/e4/gw/} \\
+\end{setup}
+\Result
+\figorpending{e4_gw_heat}{1.0}{E4 GW: mean contraction and MAE of the outcome probabilities (mean over 5 seeds); endpoints in generations.}{E4 GW heat map.}
+\figorpending{e4_gw_params}{1.0}{E4 GW: posterior means (mean $\pm$ SE over seeds) vs organoids per endpoint; dashed = truth.}{E4 GW parameter lines.}
+\begin{center}\footnotesize
+\textbf{Minimum organoids per endpoint for ``recovered''} (as in \S\ref{sec:e4}; must hold at every larger size; --- = not reached)\\[2pt]
+\begin{tabular}{@{}lrrrr@{\hspace{12pt}}r@{}}\toprule
+ & \multicolumn{4}{c}{\textbf{GW}, generations} & \textbf{BH}, days \\
+Parameter & \{10\} & \{6, 10\} & \{6, 10, 14\} & \{4, 6, 10\} & \{4, 6, 10\} \\\midrule
+A death, A persist, A$\to$B & 16 & 16 & 16 & 16 & 16 (A persist: ---) \\
+B death & 32 & 16 & 16 & 16 & 128 \\
+A$\to$AA & 256 & 16 & 16 & ---$^a$ & --- \\
+A$\to$BB & --- & 256 & --- & \textbf{32} & 128 \\
+B persist & --- & 512 & --- & \textbf{64} & --- \\
+B$\to$A & --- & --- & --- & \textbf{128} & --- \\
+A$\to$AB & --- & 512 & --- & 512 & 256 \\\bottomrule
+\multicolumn{6}{@{}l}{$^a$ error $\le 0.04$ at every size, but coverage 2--4/5 (narrow posteriors, sd $\approx$ 0.02).}
+\end{tabular}
+
+\medskip
+\begin{tabular}{@{}lll@{}}\toprule
+ & \textbf{BH} (days) & \textbf{GW} (generations) \\\midrule
+Contraction, 16 $\to$ 512, \{4,6,10\} & 0.50 $\to$ 0.79 & 0.80 $\to$ 0.95 \\
+MAE, 16 $\to$ 512, \{4,6,10\} & 0.114 $\to$ 0.060 & 0.052 $\to$ 0.023 \\
+Single late endpoint, contraction & 0.37 $\to$ 0.50 & 0.63 $\to$ 0.85 (A$\to$AB / A$\to$BB confounded) \\
+A$\to$AA (0.55) & 0.29--0.39, 0--2/5 covered & 0.47--0.54 at every design \\
+B$\to$A (0.80), \{4,6,10\}, 128 / 512 & 0.65 / 0.73 & 0.78 / 0.80 \\
+Support mass / PPC (well specified, per run) & 0.52--0.92 / $\le 0.042$ & 0.07--0.89 / $\le 0.10$ (group means $\le 0.021$) \\\bottomrule
+\end{tabular}
+\end{center}
+\Comment
+\begin{itemize}
+\item \textbf{Same design ranking as BH}: an early endpoint is worth most (\{4,6,10\} best at every size); a late extra endpoint (\{6,10,14\}) adds little over \{6,10\}; one endpoint plateaus and cannot separate A$\to$AB from A$\to$BB (0.15--0.24 vs 0.05; 0.15--0.20 vs 0.29) at any size. The ranking is a property of the endpoint information, not of the time model.
+\item \textbf{Without lifetimes everything is recoverable}: with \{4,6,10\} and $\approx$\,128 organoids per endpoint all probabilities except A$\to$AB (512) meet the criterion; A$\to$AA is right from 16 organoids. The GW numbers are the attainable target \emph{if} division times are known (BH with lifetimes fixed: MAE 0.059, \S\ref{sec:ridge}).
+\item Checks: single well-specified GW runs reach PPC 0.10 and support mass 0.07 (\{4,6,10\}, seed 4): borderline single values are not evidence of misspecification.
+\item Caveat: generations are not days; one truth, perfect assay, single A founders, 5k simulations. Planned extension (not run): \code{law=two_type} at 256--512 clones.
 \end{itemize}
 
 % ---------------------------------------------------------------------- ridge
@@ -432,7 +484,7 @@ SBC error / PPC / support & 0.025 / 0.008 / n/r & 0.031 / 0.025 / 0.65 & 0.079 /
 \begin{itemize}
 \item Ridge confirmed: posterior corr(A$\to$AA, \tA) $\approx +0.7$ (E3c). Removing the lifetime degree of freedom recovers self-renewal and halves the error.
 \item The prior chose the point: only 1.8\% of uniform-Dirichlet mass lies above 0.55. A flat prior re-centres (5/5 covered) but stays wide, degrades B$\to$A and calibration: not a fix.
-\item GW has no lifetimes and no ridge: the GW control at the same design gives A$\to$AA 0.52 (\S\ref{sec:e1a}).
+\item GW has no lifetimes and no ridge: the GW control at the same design gives A$\to$AA 0.52 (\S\ref{sec:e1a}), and 0.47--0.54 at every E4 design (\S\ref{sec:e4gw}).
 \item Consequence: measure A's division time (live imaging) or use it as an informative prior; otherwise report BH results with prior sensitivity.
 \end{itemize}
 
@@ -491,7 +543,7 @@ Inference model & sizes [1] (wrong for $p_1<1$) or [1,2,3] inferred \\
 Design & real-like 144/240\,h $\times$ 165/101 \\
 Inference / budget & NPE amortised, 5k \\
 Seeds / runs & 5 / 30 \\
-Folder & \res{results/e1a/founder_number_bh/} (GW: \S\ref{sec:p-e1agw}) \\
+Folder & \res{results/e1a/founder_number_bh/} (GW: \S\ref{sec:e1agw}) \\
 \end{setup}
 \Result
 \figorpending{e1a_founder_number_bh}{1.0}{Shift vs the $p_1=1$ control of the same arm ($\pm$ paired SE).}{E1a founder number figure.}
@@ -509,6 +561,39 @@ Arm, $p_1$ & A$\to$AB (.05) & B death (.10) & B$\to$A (.80) & \tA{} (20\,h) & \c
 \item Founder size stays at its prior (0.78--0.83); inferring it does not remove the shifts.
 \item Observed fraction rises with multi-cell seeding (0.95 $\to$ 0.97--0.98): fewer clones go extinct.
 \item Consequence: tolerable at $p_1 \ge 0.6$; do not infer founder size; measure it at seeding if needed. No support mass recorded (pre-\code{43e9e44} code).
+\end{itemize}
+
+% ---------------------------------------------------------------------- E1a number GW
+\section{E1a --- Wrong number of founder cells (GW)}\label{sec:e1agw}
+\Q As \S\ref{sec:e1anum} for Galton--Watson: are the dynamics biased by multi-cell founders, can the founder size be inferred, and does the answer depend on the time model?
+\Setup
+\begin{setup}
+Simulator & Galton--Watson \\
+Law (free) & \code{reversible_ab} (7); inferred arm adds \code{founder_size} (sizes 1--3, Dirichlet(8,1,1)) \\
+Data model & founder size $\{1,2,3\}$, $p_1 \in \{1, 0.85, 0.6\}$, all A \\
+Design & real-like generations 6/10 $\times$ 165/101 \\
+Inference / budget & NPE amortised, 5k (one network per arm and seed: paired shifts) \\
+Seeds / runs & 5 / 30 \\
+Folder & \res{results/e1a/founder_number_gw/} \\
+\end{setup}
+\Result
+\figorpending{e1a_founder_number_gw}{1.0}{E1a founder number, GW: shift vs the $p_1=1$ control of the same arm ($\pm$ paired SE).}{E1a founder number GW.}
+\begin{center}\footnotesize\setlength{\tabcolsep}{2.8pt}
+\begin{tabular}{@{}lrrrrrr@{}}\toprule
+Arm, $p_1$ & A$\to$AA (.55) & B persist (.10) & B$\to$A (.80) & \code{founder_size.1} & PPC & support (min) \\\midrule
+{[1]}, control & 0.52 [3/5] & 0.13 & 0.76 [5/5] & fixed & 0.004 & 0.67 (0.44) \\
+{[1]}, 0.85 & $+0.05 \pm .01$ & $+0.08 \pm .03$ & $-0.08$ [4/5] & fixed & 0.042 & 0.56 (0.21) \\
+{[1]}, 0.6 & $\mathbf{+0.13 \pm .02}$ [0/5] & $\mathbf{+0.21 \pm .03}$ [0/5] & $\mathbf{-0.25 \pm .03}$ [0/5] & fixed & \textbf{0.117} & \textbf{0.16} (0.015) \\
+{[1,2,3]}, control & 0.46 [3/5] & 0.09 & 0.83 [5/5] & 0.85 & 0.000 & 0.55 (0.52) \\
+{[1,2,3]}, 0.85 / 0.6 & $+0.02$ / $+0.07 \pm .02$ & $+0.02$ / $+0.09$ & $-0.02$ / $-0.12 \pm .04$ [5/5] & 0.80 / 0.71 & $\le 0.004$ & 0.53 / 0.56 \\\bottomrule
+\end{tabular}
+\end{center}
+\Comment
+\begin{itemize}
+\item \textbf{A large, partly detectable error in GW}: 40\% multi-cell clones ignored inflate self-renewal (+0.13) and lower B$\to$A ($-0.25$), all 0/5 covered; the fit is flagged (PPC 0.12, support 0.16). At $p_1=0.85$ the shifts are a third of that and the checks borderline.
+\item \textbf{Contrast with BH} (\S\ref{sec:e1anum}): there the same error moved B$\to$A by only $-0.07$ and was silent --- the lifetimes absorb part of the extra growth. A free time scale hides the error.
+\item \textbf{Inferring the founder size helps in GW}: misfit removed (PPC $\le 0.004$), shifts halved and covered, \code{founder_size.1} tracks $p_1$ (0.85 / 0.80 / 0.71, contraction $\approx$\,0.2). Cost on single-cell data: A$\to$AA $-0.06 \pm 0.01$, mean contraction 0.89 $\to$ 0.73.
+\item Consequence: record at seeding whether wells contain multi-cell seeds; if $\gtrsim$\,15\% of organoids start from several cells, fix the measured distribution or infer it. $p_1<0.6$ not tested.
 \end{itemize}
 
 % ---------------------------------------------------------------------- E1b
@@ -541,7 +626,7 @@ Folder & \res{results/e1b/bh}, \res{results/e1b/gw} \\
 \item A death dominates (0 $\to$ 0.3: 1.00 $\to$ 0.54--0.58); B death 0 $\to$ 0.5 only to $\approx$ 0.82.
 \item Losses happen early (day 6 $\approx$ day 10), except high B death with A death $\ge 0.1$.
 \item Different (A, B) death pairs give the same fraction --- confirmed by the exact GW values ((0, 0.5) and (0.1, 0.3): 0.84 vs 0.79; (0.03, 0.5): 0.80): one constraint on a ridge, not two measurements.
-\item GW exact and BH simulated agree within $\approx$ 0.03 at the same days/generations.
+\item GW exact and BH simulated agree on average to 0.02 (max 0.07, both signs; within $\approx$\,2 binomial SE of BH) at the same days/generations.
 \item Consequence: record the number of seeded organoids per well (Q5). A measured fraction well below 0.9 would indicate A death $\gtrsim 0.1$. Not yet tested: using it as a summary (\code{observation=all_clones}).
 \item Caveat: death also lowers the growth rate here (rows rescaled).
 \end{itemize}
@@ -556,7 +641,7 @@ Law (free) & \code{reversible_ab} with A death, B death fixed (7 free) \\
 Data vs inference & data always $\theta^\star$ (A death 0.03, B death 0.1); inference fixes A death $\in \{0, 0.03, 0.2\}$, B death $\in \{0, 0.1, 0.4\}$ \\
 Design & real-like 144/240\,h $\times$ 165/101 \\
 Inference / budget & NPE amortised, 5k (retrained per setting) \\
-Seeds / runs & 5 / 45 (3 $\times$ 3 grid; the planned 4 $\times$ 4 grid is the GW sweep, \S\ref{sec:p-e1cgw}) \\
+Seeds / runs & 5 / 45 (3 $\times$ 3 grid; the 4 $\times$ 4 grid is the GW sweep, \S\ref{sec:e1cgw}) \\
 Control & deaths fixed at truth (0.03 / 0.1) \\
 Folder & \res{results/e1c/bh/} \\
 \end{setup}
@@ -581,7 +666,46 @@ Paired SE $\le 0.03$ (probabilities), $\le 0.35$\,h (\tA), $\le 1.6$\,h (\tB).
 \item Bias, not information loss: mean contraction \emph{rises} (0.72 $\to$ 0.84) while coverage falls (0.76 $\to$ 0.38): wrong models are more confident.
 \item Only the double error is flagged (PPC 0.096, support 0.30; seed 2 support 0.014 $\Rightarrow$ not an estimate).
 \item Fixing deaths at the truth gains little vs free deaths (free baseline already constrains them: contraction 0.89 / 0.65).
-\item Consequence: do not fix death to a guess; keep free or measure (apoptosis marker). C2ST not run; intermediate values (0.1, 0.2) only in the GW sweep.
+\item Consequence: do not fix death to a guess; keep free or measure (apoptosis marker). C2ST not run; intermediate values (0.1, 0.2) only in the GW sweep (\S\ref{sec:e1cgw}).
+\end{itemize}
+
+% ---------------------------------------------------------------------- E1c GW
+\section{E1c --- Death rates fixed to wrong values (GW, 4 $\times$ 4 grid)}\label{sec:e1cgw}
+\Q As \S\ref{sec:e1c}, on a finer grid and without the BH ridge: is there a flat PPC valley across fixed death values?
+\Setup
+\begin{setup}
+Simulator & Galton--Watson \\
+Law (free) & \code{reversible_ab} with A, B death fixed (5 free) \\
+Data vs inference & data always $\theta^\star$; inference fixes A death $\in \{0, .03, .1, .2\}$ $\times$ B death $\in \{0, .1, .2, .4\}$ \\
+Design & real-like generations 6/10 $\times$ 165/101 \\
+Inference / budget & NPE amortised, 5k (retrained per setting); bounded SBC (relaunched after the first launch hung; 1 SBC case excluded in 1 run) \\
+Seeds / runs & 5 / 80 \\
+Control & deaths fixed at truth (0.03 / 0.1) \\
+Folder & \res{results/e1c/gw/} \\
+\end{setup}
+\Result
+\figorpending{e1c_gw}{1.0}{E1c GW. Left: shift of posterior means vs the control (deaths fixed at truth); rows with support mass $< 0.02$ are not estimates. Right: PPC and posterior support mass.}{E1c GW.}
+\begin{center}\footnotesize
+\begin{tabular}{@{}lrrrrrr@{}}\toprule
+Fixed A / B death & A persist & A$\to$AB & B persist & B$\to$A & PPC & support \\\midrule
+0.03 / 0.1 (control) & 0.04 & 0.10 & 0.14 & 0.76 [5/5] & 0.004 & 0.82 \\
+0 / 0, 0 / 0.1, 0.03 / 0 & $\le +0.04$ & $\ge -0.03$ & $\le +0.07$ & $\le +0.04$ & $\le 0.013$ & 0.88--0.95 \\
+0 / 0.2, 0.03 / 0.2 & $+0.03$ / $-0.01$ & $+0.03$ & $-0.05$ & $-0.05 \pm .02$ [0/5] & $\le 0.008$ & 0.58--0.70 \\
+0 / 0.4 & $-0.01$ & $+0.09$ & $-0.07$ & $-0.23$ [0/5] & \textbf{0.083} & \textbf{0.33} \\
+0.03 / 0.4 & $-0.03$ [1/5] & $+0.08$ & $-0.04$ & $-0.26$ [0/5] & \textbf{0.179} & \textbf{0.13} \\
+0.1 / 0 & $-0.03$ [0/5] & $+0.02$ & $+0.08$ & $+0.02$ & 0.042 & 0.46 \\
+0.1 / 0.1 & $-0.03$ [0/5] & $+0.04$ & $+0.03$ & $-0.03$ & \textbf{0.175} & \textbf{0.05} \\
+0.1 / 0.2, 0.1 / 0.4 & \multicolumn{4}{c}{no estimate (support mass $\le 0.004$)} & --- & \textbf{0.00} \\
+0.2 / any & \multicolumn{4}{c}{no estimate (17/20 runs without any posterior sample)} & --- & \textbf{0.00} \\\bottomrule
+\end{tabular}
+\end{center}
+A$\to$AA never moves ($|\Delta| \le 0.02$) in an estimable cell. Paired SE $\le 0.02$ for the shifts shown.
+\Comment
+\begin{itemize}
+\item \textbf{The valley is flat downwards, walled upwards for A}: death fixed at 0 fits as well as the truth (shifts $\le 0.07$, PPC $\le 0.013$; small, though up to $\approx$\,2 posterior sd for GW's narrow posteriors). A death fixed above the truth breaks the fit from 0.1 on (support $\approx 0$; at 0.2 no posterior mass in the prior support): GW has one event per generation, so a higher death must be absorbed within A's simplex (A persist and A$\to$B hit 0 first).
+\item \textbf{Contrast with BH} (\S\ref{sec:e1c}): there A death 0.2 was absorbed silently by a faster A clock (PPC $\le 0.033$, support 0.64--0.77, A persist $-0.10$, \tA{} $-2$ to $-3$\,h). Whether a wrong fixed death is \emph{detectable} depends on whether the model has a free time scale.
+\item \textbf{B death too high biases B$\to$A in both}: 0.4 $\Rightarrow$ $-0.23$/$-0.26$ (GW, flagged: support 0.13--0.33) vs $-0.19$/$-0.20$ (BH, silent). B death 0.2 is silent in GW but already 0/5 covered (B$\to$A $-0.05$; with B death fixed, B's row has one free coordinate and a narrow posterior).
+\item Fixing deaths at truth gains little over free deaths (MAE 0.028 vs 0.033). Consequence unchanged: do not fix death rates to guesses. C2ST not run.
 \end{itemize}
 
 % ---------------------------------------------------------------------- E2
@@ -619,6 +743,43 @@ Known: contraction A$\to$AA (0.52) & 0.53 & 0.48 & 0.43 & 0.41 & 0.38 & \\\botto
 \item Consequence: estimate $e$ (2D vs 3D, Q3) and pass it to the model. Asymmetric errors not tested.
 \end{itemize}
 
+% ---------------------------------------------------------------------- E2 GW
+\section{E2a / E2b --- A$\leftrightarrow$B mis-typing, known vs ignored (GW)}\label{sec:e2gw}
+\Q As \S\ref{sec:e2} for Galton--Watson: tolerance to known vs ignored mis-typing when the baseline is unbiased and the posteriors are narrower.
+\Setup
+\begin{setup}
+Simulator & Galton--Watson \\
+Law (free) & \code{reversible_ab} (7) \\
+Data / inference & symmetric $e \in \{0,.02,.05,.1,.15,.2\}$; modelled (E2a, network retrained per $e$) or ignored (E2b, one network per seed) \\
+Design & real-like generations 6/10 $\times$ 165/101 \\
+Inference / budget & NPE amortised, 5k \\
+Seeds / runs & 5 / 60 \\
+Control & $e=0$ (= GW baseline) \\
+Folder & \res{results/e2/known_gw}, \res{results/e2/ignored_gw} \\
+\end{setup}
+\Result
+\figorpending{e2_gw}{1.0}{E2 GW: shift vs $e=0$ ($\pm$ paired SE) and contraction of A$\to$AB. Blue: error modelled; orange: error ignored.}{E2 GW.}
+\begin{center}\footnotesize\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}lrrrrrr@{}}\toprule
+$e$ & 0.02 & 0.05 & 0.1 & 0.15 & 0.2 & BH at 0.2 \\\midrule
+Ignored: A$\to$AB shift & +0.01 & +0.05 & +0.10 [0/5] & +0.13 & +0.15 $\pm$ .04 [0/5] & +0.09 \\
+Ignored: A$\to$AA shift & $-0.01$ & $-0.02$ & $-0.05$ [0/5] & $-0.07$ & $-0.09 \pm$ .01 [0/5] & $-0.06$ \\
+Ignored: B$\to$A shift & $-0.01$ & $-0.03$ & $-0.06$ & $-0.10$ & $-0.13 \pm$ .04 [3/5] & $-0.02$ \\
+Ignored: shift / posterior sd (A$\to$AB) & 0.2 & 0.7 & \textbf{1.4} & 1.8 & 2.1 & 0.7 \\
+Ignored: PPC / support & .004 / .66 & .004 / .64 & 0 / .59 & .012 / .55 & .033 / .48 & .000 / .78 \\
+Known: contraction A$\to$AB (0.85 at $e$=0) & 0.83 & 0.79 & 0.62 & 0.48 & 0.37 & $-0.22$ \\
+Known: B$\to$A shift & $-0.04$ & $-0.05$ & $-0.05$ & $-0.08$ & $-0.11 \pm$ .03 [4/5] & $-0.03$ \\\bottomrule
+\end{tabular}
+\end{center}
+\Comment
+\begin{itemize}
+\item \textbf{Same mechanism as BH}, about 1.5$\times$ larger and extending to B's row: mislabelled clones look mixed $\Rightarrow$ more asymmetric division, less self-renewal, fewer B$\to$A, more B persist (+0.18 at $e=0.2$).
+\item \textbf{Tolerance is set by the posterior width}: GW posteriors are $\approx$\,2.5$\times$ narrower (sd of A$\to$AB 0.05 vs 0.12), so the bias exceeds one posterior sd at $e \approx 0.1$ (0/5 covered). Tolerable $e \approx 0.05$ in GW vs $\approx 0.2$ in BH.
+\item \textbf{Modelled error = information loss}: A$\to$AB contraction 0.85 $\to$ 0.37; means drift towards the prior means (B$\to$A $-0.11$, A$\to$AB $+0.08$ at $e=0.2$) with coverage kept --- expected for a wider posterior under a uniform Dirichlet, not a bias.
+\item \textbf{Not detected}: PPC $\le 0.033$; support mass falls 0.67 $\to$ 0.48 (min 0.10) --- a trend across the sweep, not a single-run warning.
+\item Consequence: estimate $e$ (Q3) and model it; the BH tolerance will shrink to the GW one once division times are measured. Asymmetric errors not tested.
+\end{itemize}
+
 % ---------------------------------------------------------------------- E2c ignore
 \section{E2c --- Hidden third type ignored (GW)}\label{sec:e2c}
 \Q Data contain a third type C (double negative/positive) read as A with prob.\ $q$ and as B with $1-q$. If the model ignores C, are the A and B rows still recovered, and does the PPC flag the two-type model?
@@ -631,7 +792,7 @@ Truth for scored names & A death .03, A persist .02, A$\to$AA .905 / .79, A$\to$
 Design & real-like generations 6/10 $\times$ 165/101 \\
 Inference / budget & NPE amortised, 5k \\
 Seeds / runs & 5 / 30 \\
-Control & \emph{none} in this sweep (no two-type data with the same A row); arms with C modelled pending (\S\ref{sec:p-e2c}) \\
+Control & \emph{none} in this sweep (no two-type data with the same A row); arms with C modelled: \S\ref{sec:e2cmodel} \\
 Folder & \res{results/e2c/ignore_c/} \\
 \end{setup}
 \Result
@@ -652,8 +813,43 @@ $\approx$5\% & 0 & 0.89 (.905) & 0.03 & 0.03 & 0.37 & 0.31 & 0.39 & 0.15 \\
 \item \textbf{The two-type fit is flagged}: PPC 0.17--0.41 (well specified $\le$\,0.03), support mass 0.01--0.16 (well specified 0.5--0.9). Per the reading rules these posteriors are not reliable estimates.
 \item How C is absorbed: read as B ($q=0$), A$\to$CC appears as A$\to$BB (0.10 at 15\%); read as A ($q=1$), C$\to$B appears as A$\to$B switching (0.08) and A death rises (0.05). A$\to$AA is overestimated at 15\% (+0.05) and slightly under at 5\% ($-0.02$).
 \item At 5\% C, B cells are rare (B only arises via C): B's row stays prior-like (B persist 0.37, contraction 0.25--0.45 for B death).
-\item \textbf{Caveat --- attribution}: the data truth is far in the prior tail of the inference model (A$\to$AA 0.79--0.905: prior mass above $<$\,0.05\%; B persist 0.9: 1\%), and PPC is \emph{higher} with less C (5\% vs 15\%). The misfit may partly be the tail truth, not C. A two-type control with the same A row is needed before concluding that the PPC detects a hidden type.
+\item \textbf{Attribution}: the data truth is far in the prior tail of the inference model (A$\to$AA 0.79--0.905: prior mass above $<$\,0.05\%; B persist 0.9: 1\%), and PPC is \emph{higher} with less C (5\% vs 15\%). The arms that model C (\S\ref{sec:e2cmodel}) fail even more although one of them is the data model: the misfit is driven by the prior tail and cannot be attributed to C.
 \item One run (5\%, $q=1$, seed 2) drew only 74 posterior samples.
+\end{itemize}
+
+% ---------------------------------------------------------------------- E2c model C
+\section{E2c --- Third type modelled: three-arm comparison (GW)}\label{sec:e2cmodel}
+\Q When C is modelled (freely, or with the trajectory constraint C$\to$B only), are A and B recovered, is C's row identifiable without its own marker, and is the misfit of \S\ref{sec:e2c} removed?
+\Setup
+\begin{setup}
+Simulator & Galton--Watson \\
+Data model & as \S\ref{sec:e2c} (same 30 datasets: $q \in \{0,.5,1\}$, $\approx$5\% / 15\% C) \\
+Inference arms & ignore C: \code{reversible_ab} (7 free, \S\ref{sec:e2c}); C free: \code{three_type} + \code{three_split}, $q$ known (27 free) = \emph{the data model}; C trajectory: \code{three_type_traj} (C never produces A; pending Q1) + \code{three_split} (23 free) \\
+Design & real-like generations 6/10 $\times$ 165/101 \\
+Inference / budget & NPE amortised, 5k \\
+Seeds / runs & 5 / 30 per arm (90) \\
+Folder & \res{results/e2c/{ignore_c,model_c_free,model_c_traj}} \\
+\end{setup}
+\Result
+\figorpending{e2c_arms}{1.0}{E2c, three inference arms on the same data (one point per run). Grey bands: well-specified ranges. A$\to$AA: open circles = support mass $< 0.02$ (not estimates); dashed = truth (0.905 at 5\% C, 0.79 at 15\%). Right: prior probability of A$\to$AA above the truth under each inference model (uniform Dirichlet; dotted = one in 5\,000 training simulations).}{E2c arms.}
+\begin{center}\footnotesize
+\begin{tabular}{@{}llrlll@{}}\toprule
+Arm & C & runs with samples & support: median (max) & PPC (group means) & A$\to$AA (truth) \\\midrule
+ignore C & 5\% & 15/15 & 0.05 (0.43) & 0.38--0.41 & 0.87--0.89 (.905) \\
+ & 15\% & 15/15 & 0.004 (0.10) & 0.17--0.30 & 0.83--0.84 (.79) \\
+C free (well specified) & 5\% & 11/15 & 0.000 (0.08) & 0.63--0.84 & \emph{0.48--0.52} \\
+ & 15\% & 9/15 & 0.000 (0.02) & 0.37--0.50 & \emph{0.33--0.53} \\
+C trajectory & 5\% & 14/15 & 0.000 (0.15) & 0.60--0.75 & \emph{0.39--0.60} \\
+ & 15\% & 14/15 & 0.008 (0.48) & 0.26--0.38 & \emph{0.35--0.59} \\\bottomrule
+\end{tabular}
+\end{center}
+Italics: not estimates (support $\approx 0$). SBC coverage error 0.024--0.029 in every arm. Prior P(A$\to$AA $>$ truth) at 5\% / 15\% C: two-type (6 outcomes) $8\cdot10^{-6}$ / $4\cdot10^{-4}$; three-type (10 outcomes) $6\cdot10^{-10}$ / $8\cdot10^{-7}$. P(B persist $>0.9$): 0.01 (two-type) vs $10^{-9}$ (three-type).
+\Comment
+\begin{itemize}
+\item \textbf{Modelling C does not remove the misfit --- it makes it worse}: support $\approx 0$ in almost every run (10/30 free and 2/30 trajectory runs drew no posterior sample at all), PPC 0.26--0.84. No A/B bias and nothing about C (e.g.\ C$\to$B 0.01--0.12 vs 0.40) can be read from these arms.
+\item \textbf{The failure is a prior-tail failure, not misspecification}: the free arm \emph{is} the data model. Under a 10-outcome uniform Dirichlet the true A$\to$AA (0.79--0.905) and B persist (0.9) have prior probability $10^{-6}$--$10^{-10}$: no training simulation resembles the data, and amortised NPE extrapolates outside the prior support. SBC is fine because it averages over the prior. The two-type model fits \emph{better} than the true model because its prior has more mass near the truth.
+\item \textbf{Hence the ignore-C flag (PPC 0.17--0.41) cannot be attributed to C}; also within ignore-C the PPC is higher with \emph{less} C. Whether the PPC detects a hidden type is still open. The trajectory constraint helps slightly (fewer empty posteriors; one run with support 0.48).
+\item Next step (not run): repeat with a truth inside the prior bulk of the three-type model (A$\to$AA $\approx$ 0.4--0.5, C fraction via A$\to$C / A$\to$AC) or an informative prior on A's self-renewal and B's persistence, plus a two-type control with the same A row.
 \end{itemize}
 
 % ---------------------------------------------------------------------- E3a
@@ -794,95 +990,8 @@ SNPE, GPU, 128 & 753 & 3.2 & 226 & 0.129 & --- \\\bottomrule
 
 % ====================================================================== PART II
 \clearpage
-\part{Running and planned experiments}\label{part:pending}
-Partial runs of these sweeps are \emph{not} used. Figures are filled in automatically by \code{make_figures.py} once a sweep is complete (the text must then be updated).
-
-% ---------------------------------------------------------------------- E4 GW
-\section{E4 --- Amount of data (GW half)}\label{sec:p-e4gw}
-\Q Same as \S\ref{sec:e4} for Galton--Watson: minimum organoids per endpoint and best endpoint set without the BH lifetime ridge.
-\Setup
-\begin{setup}
-Simulator & Galton--Watson \\
-Law (free) & \code{reversible_ab} (7) \\
-Data vs inference & well specified, $\theta^\star$ \\
-Design & clones $\in \{16,\dots,512\}$ $\times$ generations \{10\}, \{6,10\}, \{4,6,10\}, \{6,10,14\} \\
-Inference / budget & NPE amortised, 5k \\
-Seeds / runs & 5 / 120 (running: 65/120 at writing) \\
-Folder & \res{results/e4/gw/} \\
-\end{setup}
-\Result
-\figorpending{e4_gw_heat}{1.0}{E4 GW: contraction and MAE grid.}{Sweep running. Will show the contraction/MAE heat map (clones $\times$ endpoint set), posterior means of A$\to$AA, B$\to$A, A$\to$AB vs clones, and the ``minimum organoids'' table. Key comparison: is A$\to$AA recovered in GW at all sizes (no ridge)?}
-\figorskip{e4_gw_params}{1.0}{E4 GW: selected parameters vs clones.}
-\Comment
-\begin{itemize}
-\item Expected: the GW baseline is close to unbiased at the real-like design (MAE 0.033) (\S\ref{sec:e1a}); this sweep gives the design table without the BH ridge. Caveat: generations are not days.
-\item Planned extension: \code{law=two_type} at 256--512 clones (is B$\to$A recoverable when C2ST predicts a signal?).
-\end{itemize}
-
-% ---------------------------------------------------------------------- E1c GW
-\section{E1c --- Death fixed (GW, full 4 $\times$ 4 grid)}\label{sec:p-e1cgw}
-\Q As \S\ref{sec:e1c}, on a finer grid and without the BH ridge: is there a flat PPC valley across fixed death values?
-\Setup
-\begin{setup}
-Simulator & Galton--Watson \\
-Law (free) & \code{reversible_ab} with A, B death fixed (5) \\
-Data vs inference & data $\theta^\star$; fixed A death $\in \{0, .03, .1, .2\}$ $\times$ B death $\in \{0, .1, .2, .4\}$ \\
-Design & real-like generations 6/10 $\times$ 165/101 \\
-Inference / budget & NPE amortised, 5k \\
-Seeds / runs & 5 / 80 (running: 35/80) \\
-Folder & \res{results/e1c/gw/} \\
-\end{setup}
-\Result
-\figorpending{e1c_gw}{1.0}{E1c GW.}{Sweep running. Will show the shift heat map vs the (0.03, 0.1) control, PPC and support mass per cell, i.e.\ the shape of the PPC valley; optional C2ST (\code{scripts/truth_vs_posterior.py}).}
-
-% ---------------------------------------------------------------------- E1a number GW
-\section{E1a --- Founder number (GW)}\label{sec:p-e1agw}
-\Q As \S\ref{sec:e1anum} for Galton--Watson.
-\Setup
-\begin{setup}
-Simulator & Galton--Watson \\
-Law (free) & \code{reversible_ab} (7) or + \code{founder_size} (9) \\
-Data model & founder sizes 1--3, $p_1 \in \{1, 0.85, 0.6\}$ \\
-Design & real-like generations 6/10 $\times$ 165/101 \\
-Inference / budget & NPE amortised, 5k \\
-Seeds / runs & 5 / 30 (running: 13/30) \\
-Folder & \res{results/e1a/founder_number_gw/} \\
-\end{setup}
-\Result
-\figorpending{e1a_founder_number_gw}{1.0}{E1a founder number, GW.}{Sweep running. Will show shifts vs $p_1$ for both arms and whether \code{founder_size.1} is identifiable in GW (founder type was partly identifiable in GW, \S\ref{sec:e1a}).}
-
-% ---------------------------------------------------------------------- E2 GW
-\section{E2a / E2b --- Mis-typing (GW)}\label{sec:p-e2gw}
-\Q As \S\ref{sec:e2} for Galton--Watson: tolerance to known vs ignored mis-typing when the baseline is unbiased.
-\Setup
-\begin{setup}
-Simulator & Galton--Watson \\
-Law (free) & \code{reversible_ab} (7) \\
-Data / inference & symmetric $e \in \{0,.02,.05,.1,.15,.2\}$; modelled (E2a) or ignored (E2b) \\
-Design & real-like generations 6/10 $\times$ 165/101 \\
-Inference / budget & NPE amortised, 5k \\
-Seeds / runs & 5 / 60 (queued) \\
-Folder & \res{results/e2/known_gw}, \res{results/e2/ignored_gw} (expected names) \\
-\end{setup}
-\Result
-\figorpending{e2_gw}{1.0}{E2 GW.}{Queued. Will show shifts of A$\to$AA, A$\to$AB, B$\to$A vs $e$ and the contraction of A$\to$AB, known vs ignored; the largest tolerable $e$ (bias $<$ posterior sd) with narrower GW posteriors. Asymmetric confusion still to be added.}
-
-% ---------------------------------------------------------------------- E2c model C
-\section{E2c --- Third type modelled (GW)}\label{sec:p-e2c}
-\Q When C is modelled (freely, or with the trajectory constraint C$\to$B only), are A and B recovered, is C's row identifiable without its own marker, and is the misfit of \S\ref{sec:e2c} removed?
-\Setup
-\begin{setup}
-Simulator & Galton--Watson \\
-Data model & as \S\ref{sec:e2c} ($q \in \{0,.5,1\}$, $\approx$5\% / 15\% C) \\
-Inference model & \code{three_type} + \code{three_split} (confusion assumed known) / \code{three_type_traj} (C$\to$A and C divisions with an A daughter fixed to 0; pending Q1) \\
-Design & real-like generations 6/10 $\times$ 165/101 \\
-Inference / budget & NPE amortised, 5k \\
-Seeds / runs & 5 / 30 per arm (free: running 12/30; trajectory: queued) \\
-Folder & \res{results/e2c/model_c_free}, \res{results/e2c/model_c_traj} \\
-\end{setup}
-\Result
-\figorpending{e2c_model_c_free}{1.0}{E2c, C modelled freely.}{Free arm running, trajectory arm queued. Will show posterior vs truth for A, B and C rows per $q$ and C share, contraction of C's row, PPC/support mass next to the ignore-C arm. Needed to attribute the ignore-C misfit to C (see caveat in \S\ref{sec:e2c}).}
-\figorskip{e2c_model_c_traj}{1.0}{E2c, trajectory-constrained C.}
+\part{Planned experiments}\label{part:pending}
+All sweeps of E0--E4 are finished (Part~\ref{part:finished}). The experiments below were never run; no results exist for them.
 
 % ---------------------------------------------------------------------- X2
 \section{X2 --- Seed spread: dataset vs training}\label{sec:p-x2}
@@ -899,7 +1008,7 @@ Will show the posterior mean and sd per parameter in both arms. If the training 
 \end{pending}
 
 % ---------------------------------------------------------------------- X1/X3/X4/R
-\section{Other planned work (X1, X3, X4, R, P0)}\label{sec:p-other}
+\section{Other planned work (X1, X3, X4, R, P0, follow-ups)}\label{sec:p-other}
 \Q
 \begin{itemize}
 \item \textbf{X1 methods}: NPE vs NLE vs NRE (and SNPE) at the baseline and the worst realistic error.
@@ -907,6 +1016,7 @@ Will show the posterior mean and sd per parameter in both arms. If the training 
 \item \textbf{X4 combined errors}: realistic combination (organoid death + mis-typing + C + lifetime CV), real-like design, \code{budget=full}: the error budget to quote with the real-data fit.
 \item \textbf{R real data}: CRC0322, day 6 (165 organoids) and day 10 (101); choose 2D counts vs 3D estimates (Q3); final model, SBC, fit, PPC.
 \item \textbf{P0 BH timing}: seconds per BH run at \code{dev}/\code{smoke} budgets on an idle machine.
+\item \textbf{Follow-ups of finished sweeps}: E2c with a truth inside the prior bulk of the three-type model (or an informative prior) and a two-type control (\S\ref{sec:e2cmodel}); asymmetric mis-typing (E2); E4 GW with \code{law=two_type} at 256--512 clones; observed fraction as a summary (\code{observation=all_clones}, E1b).
 \end{itemize}
 \Setup
 \begin{setup}
@@ -937,7 +1047,12 @@ E1a number BH & \code{27b1d61} & \code{+experiment=e1a_founder_number simulator=
 E1b & BH \code{43e9e44}; GW \code{d46b4c2} & \code{+experiment=e1b_death_detection simulator=...} \\
 E1c BH & \code{43e9e44}/\code{c919397} & \code{+experiment=e1c_fixed_death simulator=bellman_harris law.fixed.A.death=0,0.03,0.2 law.fixed.B.death=0,0.1,0.4} \\
 E2a/E2b BH & \code{27b1d61}--\code{c919397} & \code{+experiment=e2a_typing_known}, \code{+experiment=e2b_typing_ignored} \\
+E4 GW & \code{19a10ea} & \code{+experiment=e4_design} \\
+E1a number GW & \code{b0789d3} & \code{+experiment=e1a_founder_number simulator=galton_watson} \\
+E1c GW & \code{d46b4c2} & \code{+experiment=e1c_fixed_death} (4 $\times$ 4 grid; relaunched with bounded SBC) \\
+E2a/E2b GW & \code{12c0827} & \code{+experiment=e2a_typing_known|e2b_typing_ignored simulator=galton_watson} \\
 E2c ignore C & \code{19a10ea} & \code{+experiment=e2c_third_type} \\
+E2c C modelled & free \code{d46b4c2}; traj.\ \code{12c0827} & \code{+experiment=e2c_third_type law=three_type|three_type_traj observation=three_split} \\
 E3a / E3b / E3c & \code{27b1d61}--\code{c919397} & \code{e3a_lifetime_free}, \code{e3a_lifetime_fixed}, \code{e3b_desync}, \code{e3c_persist} \\\bottomrule
 \end{tabularx}
 \end{center}
@@ -953,8 +1068,8 @@ Packages: \code{bio-sbi} 0.2.0, \code{sbi} 0.27.0, \code{torch} 2.14.1+cu126, \c
 uv run python report/make_figures.py      # figures/*.pdf, tables/*.csv
 cd report && /home/matteo/miniconda3/envs/latex/bin/tectonic report.tex
 \end{verbatim}
-\code{make_figures.py} only reads \code{results/}; incomplete sweeps are skipped and shown as pending boxes.
-Numbers in tables come from the \code{info.md} analyses or from \code{scripts/summarize.py} functions (\code{mae_probabilities}, per-parameter rows); the GW E1a and E2c analyses are new in this report (\code{report/tables/}).
+\code{make_figures.py} only reads \code{results/}; incomplete sweeps would be skipped and shown as pending boxes.
+Numbers in tables come from the \code{info.md} analyses in \code{results/} (overview: \code{results/overview.md}) or from \code{scripts/summarize.py} functions (\code{mae_probabilities}, per-parameter rows); plotted numbers are in \code{report/tables/}.
 
 \section{Glossary}\label{sec:glossary}
 \begin{center}\footnotesize

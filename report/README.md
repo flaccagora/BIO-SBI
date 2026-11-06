@@ -23,15 +23,14 @@ cd report && /home/matteo/miniconda3/envs/latex/bin/tectonic report.tex
 
 Tectonic downloads the LaTeX packages on first use (no system LaTeX needed).
 
-## Pending experiments
+## Status and pending boxes
 
-`make_figures.py` checks that a sweep is complete before plotting it (expected run
-counts: E4 GW 120, E1c GW 80, E1a founder number GW 30, E2c model-C arms 30 each,
-E2a/E2b GW 30 each in `results/e2/known*gw*` / `ignored*gw*`). Incomplete sweeps are
-skipped and the report shows an orange "Result pending" box instead. Once a sweep has
-finished, re-run the script and recompile: the figure replaces the box automatically
-(`\figorpending` in `report.tex`). The Comment text and the executive summary must then
-be updated by hand.
+As of 6 November 2026 every sweep of E0–E4 is complete and has its figure; only X2 and
+the never-run experiments (X1, X3, X4, R, P0, follow-ups) are shown as orange "Result
+pending" boxes. `make_figures.py` still checks that a sweep is complete before plotting
+it (expected run counts are in each `fig_*` function) and skips it otherwise, so the
+report shows a pending box (`\figorpending` in `report.tex`) until the sweep has
+finished; the Comment text and the executive summary must then be updated by hand.
 
-Numbers in the text come from the `info.md` analyses in `results/` and, for the GW
-E1a founder-type and E2c ignore-C sweeps (not analysed there), from `tables/*.csv`.
+Numbers in the text come from the `info.md` analyses in `results/` (overview:
+`results/overview.md`); the plotted numbers are in `tables/*.csv`.

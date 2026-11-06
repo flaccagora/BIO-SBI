@@ -397,8 +397,9 @@ def fig_e4(rel="e4/bh", name="e4_bh", hmap=HSET_BH, expected=120):
         ax.set_xlabel("clones per endpoint")
         ax.set_title(f"{PRETTY[par]} (truth {tv:g})")
     h, lab = axes[0].get_legend_handles_labels()
-    fig.legend(h, lab, loc="upper center", ncol=4, bbox_to_anchor=(0.5, 1.1), fontsize=6.5,
-               title="endpoints", title_fontsize=6.5)
+    fig.legend(h, lab, loc="lower center", ncol=5, bbox_to_anchor=(0.5, 1.0), fontsize=6.5,
+               title="endpoints:", title_fontsize=6.5, alignment="left")
+    fig.legends[-1]._legend_box.align = "left"
     save(fig, f"{name}_params")
 
 
@@ -562,9 +563,10 @@ def fig_e1a_number(rel="e1a/founder_number_bh", name="e1a_founder_number_bh", ex
     params = params.copy()
     params["p1"] = _p1(ov(params, "data.law.reference.founder_size")).astype(str)
     params["arm"] = ov(params, "law.founder_sizes").str.replace(" ", "")
-    sel = ["A.div_AB", "B.death", "B.to_A"]
     if (params.parameter == "A.mean_lifetime").any():
-        sel.append("A.mean_lifetime")
+        sel = ["A.div_AB", "B.death", "B.to_A", "A.mean_lifetime"]
+    else:  # GW: the largest shifts are in A's self-renewal and B's row
+        sel = ["A.div_AA", "A.div_AB", "B.persist", "B.to_A"]
     fig, axes = plt.subplots(1, len(sel), figsize=(W_FULL, 1.9), gridspec_kw=dict(wspace=0.5))
     rows = []
     for arm, c, mk, lab in [("[1]", BLUE, "o", "inference: 1 founder cell"),
@@ -614,6 +616,10 @@ def fig_e1c(rel="e1c/bh", name="e1c_bh", expected=45):
     probs = [p for p in pars if is_prob(p)]
     mat = t[t.parameter.isin(probs)].pivot(index="setting", columns="parameter", values="shift")
     mat = mat.reindex(order)[probs]
+    # settings whose posterior lies (almost) entirely outside the prior support are not
+    # estimates: no shift and no PPC shown (support mass < 0.02)
+    no_est = rs.set_index("setting").support.reindex(order) < 0.02
+    mat.loc[no_est.values] = np.nan
     mat.columns = [PRETTY[c] for c in mat.columns]
     fig, axes = plt.subplots(1, 3, figsize=(W_FULL, 0.25 * len(order) + 1.0),
                              gridspec_kw=dict(width_ratios=[3.2, 1, 1], wspace=0.08))
@@ -622,20 +628,25 @@ def fig_e1c(rel="e1c/bh", name="e1c_bh", expected=45):
     axes[0].set_ylabel("fixed A death / B death")
     axes[0].set_title("shift of posterior mean vs control (0.03 / 0.1)", fontsize=7.2)
     axes[0].tick_params(axis="x", labelrotation=45)
+    for i, bad in enumerate(no_est.values):
+        if bad:
+            axes[0].text((len(probs) - 1) / 2, i, "no estimate (support mass ≈ 0)",
+                         ha="center", va="center", fontsize=6.2, color=INK2)
     y = np.arange(len(order))
     rs = rs.set_index("setting").reindex(order)
+    rs.loc[no_est.values, "ppc"] = np.nan
     for ax, col, lab, c in [(axes[1], "ppc", "PPC outside 95%", ORANGE),
                             (axes[2], "support", "support mass", BLUE)]:
-        ax.barh(y, rs[col], color=c, height=0.6)
+        ax.barh(y, rs[col].fillna(0), color=c, height=0.6)
         for yi, v in zip(y, rs[col], strict=True):
-            ax.text(v + 0.01, yi, f"{v:.2f}" if col == "support" else f"{v:.3f}",
-                    va="center", fontsize=6)
+            txt = "n/e" if np.isnan(v) else (f"{v:.2f}" if col == "support" else f"{v:.3f}")
+            ax.text((0 if np.isnan(v) else v) + 0.01, yi, txt, va="center", fontsize=6)
         ax.set_ylim(len(order) - 0.5, -0.5)
         ax.set_yticks([])
         ax.set_title(lab, fontsize=7.2)
         ax.grid(axis="y", visible=False)
         ax.spines["left"].set_visible(False)
-    axes[1].set_xlim(0, max(0.15, rs.ppc.max() * 1.4))
+    axes[1].set_xlim(0, max(0.15, np.nanmax(rs.ppc.values) * 1.4))
     axes[2].set_xlim(0, 1.2)
     save(fig, name)
     table(t.merge(rs.reset_index(), on="setting", how="left"), name)
@@ -791,6 +802,67 @@ def fig_e2c_model(arm="model_c_free", name="e2c_model_c_free"):
 
 def fig_e2c_traj():
     fig_e2c_model("model_c_traj", "e2c_model_c_traj")
+
+
+def fig_e2c_arms():
+    """Three E2c inference arms on the same data: support mass, PPC, A->AA per run and
+    the prior mass above the true A->AA under each inference model."""
+    arms = [("ignore_c", "ignore\nC"), ("model_c_free", "C\nfree"),
+            ("model_c_traj", "C\ntraj.")]
+    for a, _ in arms:
+        require(f"e2c/{a}", 30)
+    fig, axes = plt.subplots(1, 4, figsize=(W_FULL, 2.3),
+                             gridspec_kw=dict(width_ratios=[1, 1, 1, 0.9], wspace=0.55))
+    colors = {"≈5% C": BLUE, "≈15% C": ORANGE}
+    rows = []
+    for k, (arm, lab) in enumerate(arms):
+        runs, p = _e2c_frame(f"e2c/{arm}")
+        frac = p.groupby("run").frac.first()
+        r = runs.assign(frac=runs.run.map(frac))
+        aa = p[p.parameter == "A.div_AA"].set_index("run")
+        r["div_AA"] = r.run.map(aa.posterior_mean)
+        r["div_AA_truth"] = r.run.map(aa.truth)
+        r["arm"] = arm
+        rows.append(r[["arm", "run", "frac", "posterior_support_mass", "posterior_samples_drawn",
+                       "ppc_fraction_outside_95", "div_AA", "div_AA_truth"]])
+        for j, fr in enumerate(["≈5% C", "≈15% C"]):
+            u = r[r.frac == fr]
+            x = k + (j - 0.5) * 0.3 + np.linspace(-0.08, 0.08, len(u))
+            est = u.posterior_support_mass >= 0.02
+            axes[0].scatter(x, u.posterior_support_mass, s=9, color=colors[fr], lw=0,
+                            label=fr if k == 0 else None)
+            axes[1].scatter(x, u.ppc_fraction_outside_95, s=9, color=colors[fr], lw=0)
+            axes[2].scatter(x[est.values], u.div_AA[est], s=9, color=colors[fr], lw=0)
+            axes[2].scatter(x[~est.values], u.div_AA[~est], s=9, facecolor="none",
+                            edgecolor=colors[fr], lw=0.6)
+    for ax, title in zip(axes[:3], ["support mass", "PPC outside 95%", "A→AA posterior mean"],
+                         strict=True):
+        ax.set_xticks(range(3), [lab for _, lab in arms], fontsize=6.2)
+        ax.set_xlim(-0.5, 2.5)
+        ax.set_title(title, fontsize=7.2)
+    axes[0].axhspan(0.5, 0.9, color=GRID, lw=0, zorder=0)
+    axes[0].set_ylim(-0.02, 1)
+    axes[0].legend(fontsize=6, loc="upper right", handletextpad=0.2)
+    axes[1].axhspan(0, 0.03, color=GRID, lw=0, zorder=0)
+    axes[1].set_ylim(-0.02, 1)
+    for tv, fr in [(0.905, "≈5% C"), (0.7925, "≈15% C")]:
+        axes[2].axhline(tv, color=colors[fr], lw=0.8, ls=(0, (3, 1.5)))
+    axes[2].set_ylim(0, 1)
+    # prior mass above the truth: A row has 6 outcomes (two-type) or 10 (three-type)
+    tail = pd.DataFrame([dict(model=m, frac=fr, p=(1 - tv) ** (k - 1))
+                         for m, k in [("two-type", 6), ("three-type", 10)]
+                         for fr, tv in [("≈5% C", 0.905), ("≈15% C", 0.7925)]])
+    for j, fr in enumerate(["≈5% C", "≈15% C"]):
+        u = tail[tail.frac == fr]
+        axes[3].bar(np.arange(2) + (j - 0.5) * 0.35, u.p, width=0.33, color=colors[fr])
+    axes[3].set_yscale("log")
+    axes[3].set_ylim(1e-10, 1)
+    axes[3].set_xticks(range(2), ["two-type\nprior", "three-type\nprior"], fontsize=5.8)
+    axes[3].set_title("prior P(A→AA > truth)", fontsize=7.2)
+    axes[3].axhline(1 / 5000, color=INK2, lw=0.7, ls=":")
+    axes[3].text(1.6, 1 / 5000 * 2.5, "1 / 5k sims", fontsize=5.6, color=INK2, ha="right")
+    save(fig, "e2c_arms")
+    table(pd.concat(rows), "e2c_arms")
 
 
 # ------------------------------------------------------------------- E3a
@@ -1026,6 +1098,67 @@ def fig_detectability():
     save(fig, "detectability")
 
 
+def fig_detectability_gw():
+    """GW counterpart of fig_detectability: largest control-relative shift (in control
+    posterior sd) vs PPC and vs support mass, for every GW misspecified setting with a
+    paired control; settings without an estimate (support < 0.02) are listed apart."""
+    for rel, n in [("e1a/founder_type", 80), ("e1a/founder_number_gw", 30), ("e1c/gw", 80),
+                   ("e2/ignored_gw", 30)]:
+        require(rel, n)
+    pts = []
+
+    def add(exp, params, setting, control, drop=()):
+        pars = [p for p in P_ROWS if p not in drop]
+        t = paired(params, setting, control, pars)
+        ctrl_sd = t[t.setting == control].set_index("parameter").post_sd
+        t = t[t.setting != control].copy()
+        t["z"] = t["shift"].abs() / t.parameter.map(ctrl_sd)
+        q = params.assign(s=setting.values).groupby("s")
+        ppc, sup = q.ppc.mean(), q.support.mean()
+        for st, g in t.groupby("setting"):
+            r = g.loc[g.z.idxmax()]
+            pts.append(dict(exp=exp, setting=st, z=r.z, par=r.parameter, ppc=ppc.get(st),
+                            support=sup.get(st)))
+
+    _, p = load("e1a/founder_type")
+    p = p[p.sweep == "fixed_gw"]
+    add("E1a type", p, _founder_f(ov(p, "data.law.fixed.founder")).round(2).astype(str), "1.0")
+    _, p = load("e1a/founder_number_gw")
+    p = p[ov(p, "law.founder_sizes").str.replace(" ", "") == "[1]"]
+    add("E1a number", p, _p1(ov(p, "data.law.reference.founder_size")).astype(str), "1.0")
+    _, p = load("e1c/gw")
+    add("E1c", p, ov(p, "law.fixed.A.death") + "/" + ov(p, "law.fixed.B.death"), "0.03/0.1",
+        drop=("A.death", "B.death"))
+    _, p = load("e2/ignored_gw")
+    add("E2b", p, ov(p, "data.observation.confusion"), "0")
+    d = pd.DataFrame(pts)
+    table(d, "detectability_gw")
+    ok = d[d.support >= 0.02]
+    fig, axes = plt.subplots(1, 2, figsize=(W_FULL, 2.3), gridspec_kw=dict(wspace=0.3))
+    exps = list(dict.fromkeys(d.exp))
+    for k, e in enumerate(exps):
+        u = ok[ok.exp == e]
+        for ax, col in [(axes[0], "ppc"), (axes[1], "support")]:
+            ax.scatter(u.z, u[col], s=18, color=CAT[k % 8], label=e if col == "ppc" else None,
+                       lw=0.4, ec="white", zorder=3, marker="osD^vP<"[k % 7])
+    axes[0].axhspan(0, 0.03, color=GRID, lw=0, zorder=0)
+    axes[0].set_ylabel("PPC fraction outside 95%")
+    axes[0].set_ylim(-0.01, 0.4)
+    axes[1].axhspan(0.5, 0.9, color=GRID, lw=0, zorder=0)
+    axes[1].set_ylabel("posterior support mass")
+    axes[1].set_ylim(-0.02, 1)
+    for ax in axes:
+        ax.axvline(1, color=AXIS, lw=0.8, ls=":")
+        ax.set_xlabel("largest shift vs control (in control posterior sd)")
+    r1c, _ = load("e1c/gw")
+    sm = r1c.groupby(ov(r1c, "law.fixed.A.death") + "/" + ov(r1c, "law.fixed.B.death"))
+    n_bad = int((sm.posterior_support_mass.mean() < 0.02).sum())
+    axes[1].text(0.98, 0.02, f"not shown: {n_bad} E1c settings\nwith support ≈ 0 (no estimate)",
+                 transform=axes[1].transAxes, ha="right", va="bottom", fontsize=5.8, color=INK2)
+    axes[0].legend(fontsize=6, loc="upper left")
+    save(fig, "detectability_gw")
+
+
 # ======================================================================= main
 FIGURES = [
     fig_e0_bto_a, fig_e0_c2st, fig_design, fig_gpu, fig_e4, fig_ridge, fig_e1b,
@@ -1033,6 +1166,7 @@ FIGURES = [
     fig_e3c, fig_detectability,
     # pending sweeps: built only once complete
     fig_e4_gw, fig_e1c_gw, fig_e1a_number_gw, fig_e2_gw, fig_e2c_model, fig_e2c_traj,
+    fig_e2c_arms, fig_detectability_gw,
 ]
 
 
