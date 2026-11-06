@@ -132,7 +132,7 @@ Parameters: A$\to$AA etc.\ are outcome probabilities per cell event; \tA, \tB{} 
 \section*{Executive summary}\label{sec:summary}
 \addcontentsline{toc}{section}{Executive summary}
 
-\textbf{Scope.} All simulation sweeps of E0--E4 are finished (1046 runs, incl.\ the E4 extension to 1024/2048 organoids per endpoint), all on synthetic data from one reference parameter vector $\theta^\star$ (Table~\ref{tab:truth}), 5 seeds per setting. Two later experiments test the role of the prior with truths swept or drawn from the prior: the E2c rerun (90 runs, \S\ref{sec:e2cprior}) and X5 (355 runs; X5a \S\ref{sec:x5a}, X5c \S\ref{sec:x5c}, X5d \S\ref{sec:x5d}, X5b \S\ref{sec:x5b}). Galton--Watson (GW, time in generations; mapping to days nominal) and Bellman--Harris (BH, time in hours; real-like design = days 6 and 10 = 144/240\,h with 165/101 organoids). Every error is compared with the well-specified control of the same sweep.
+\textbf{Scope.} All simulation sweeps of E0--E4 are finished (1096 runs, incl.\ the E4 extensions to 1024--4096 organoids per endpoint and a 20k-simulation check at 4096), all on synthetic data from one reference parameter vector $\theta^\star$ (Table~\ref{tab:truth}), 5 seeds per setting. Two later experiments test the role of the prior with truths swept or drawn from the prior: the E2c rerun (90 runs, \S\ref{sec:e2cprior}) and X5 (355 runs; X5a \S\ref{sec:x5a}, X5c \S\ref{sec:x5c}, X5d \S\ref{sec:x5d}, X5b \S\ref{sec:x5b}). Galton--Watson (GW, time in generations; mapping to days nominal) and Bellman--Harris (BH, time in hours; real-like design = days 6 and 10 = 144/240\,h with 165/101 organoids). Every error is compared with the well-specified control of the same sweep.
 
 \subsection*{Key findings, in the order of the argument}
 
@@ -144,15 +144,15 @@ Parameters: A$\to$AA etc.\ are outcome probabilities per cell event; \tA, \tB{} 
 
 \textbf{II. Design and amount of data (Part~\ref{part:design}).}
 \begin{enumerate}[resume,leftmargin=1.4em]
-\item \textbf{Endpoints matter more than organoids, in both simulators} (design comparison, E4): days/generations \{4,6,10\} beat every other set at every size; one late endpoint plateaus; a late extra endpoint (\{6,10,14\}) adds little. GW: contraction 0.80 $\to$ 0.95 $\to$ 0.96, MAE 0.052 $\to$ 0.023 $\to$ 0.019 (16 $\to$ 512 $\to$ 2048 organoids/endpoint); with \{4,6,10\} every probability except A$\to$AB (error 0.03, intermittently covered) is recovered by $\approx$\,128, and multi-endpoint designs plateau at $\approx$\,1024 per endpoint (MAE $\approx$ 0.02). A single endpoint never catches up: at 2048 organoids MAE 0.046, worse than three endpoints at 32 (0.042). BH: 0.50 $\to$ 0.79 $\to$ 0.80, MAE 0.114 $\to$ 0.060 $\to$ 0.058. At 1024--2048 the SBC error grows (GW 0.03 $\to$ 0.06): the 5k-simulation NPE starts to limit accuracy (a 20k check was not run).
-\item \textbf{The well-specified GW model is recovered}: at the real-like design MAE 0.033 over the 9 outcome probabilities, contraction 0.89, A$\to$AA 0.52 (truth 0.55); across all E4 designs A$\to$AA 0.47--0.54 --- provided B's divisions are fixed to 0 (E0).
+\item \textbf{Endpoints matter more than organoids, in both simulators} (design comparison, E4): days/generations \{4,6,10\} beat every other set at every size; one late endpoint plateaus; a late extra endpoint (\{6,10,14\}) adds little. GW: contraction 0.80 $\to$ 0.95 $\to$ 0.96, MAE 0.052 $\to$ 0.023 $\to$ 0.019 $\to$ 0.020 (16 $\to$ 512 $\to$ 2048 $\to$ 4096 organoids/endpoint); with \{4,6,10\} every probability except A$\to$AB (error 0.02--0.03, intermittently covered) is recovered by $\approx$\,128, and at 5k simulations multi-endpoint designs plateau at $\approx$\,1024 per endpoint (MAE $\approx$ 0.02; flat to 4096). A single endpoint never catches up: at 4096 organoids MAE 0.046, worse than three endpoints at 32 (0.042). BH: 0.50 $\to$ 0.79 $\to$ 0.80 $\to$ 0.82, MAE 0.114 $\to$ 0.060 $\to$ 0.058 $\to$ 0.057. \textbf{The plateau is set by the network, not the data}: at 4096 organoids per endpoint, 20k instead of 5k training simulations on the same datasets lower GW MAE 0.020 $\to$ 0.017 and SBC error 0.064 $\to$ 0.044, and raise BH run coverage 0.76 $\to$ 0.93 (\S\ref{sec:e4budget}).
+\item \textbf{The well-specified GW model is recovered}: at the real-like design MAE 0.033 over the 9 outcome probabilities, contraction 0.89, A$\to$AA 0.52 (truth 0.55); across all E4 designs A$\to$AA 0.47--0.55 --- provided B's divisions are fixed to 0 (E0).
 \end{enumerate}
 
 \textbf{III. Bellman--Harris timing (Part~\ref{part:timing}).}
 \begin{enumerate}[resume,leftmargin=1.4em]
-\item \textbf{BH baseline bias = lifetime/self-renewal ridge.} Well-specified BH gives A$\to$AA $\approx$ 0.32 and \tA{} $\approx$ 16\,h (truth 0.55, 20\,h), 0/5 covered, at every design. Fixing lifetimes to the truth gives 0.51 (5/5), MAE 0.109 $\to$ 0.059 (\S\ref{sec:ridge}). More organoids do not help, not even 2048 clones per endpoint (up to 6144 organoids, E4): A$\to$AA 0.29--0.41, \tA{} 15.7--17.1\,h, 0/5 covered in every design, with \tA{} contraction 0.99 --- confidently on the wrong point.
+\item \textbf{BH baseline bias = lifetime/self-renewal ridge.} Well-specified BH gives A$\to$AA $\approx$ 0.32 and \tA{} $\approx$ 16\,h (truth 0.55, 20\,h), 0/5 covered, at every design. Fixing lifetimes to the truth gives 0.51 (5/5), MAE 0.109 $\to$ 0.059 (\S\ref{sec:ridge}). With the standard 5k-simulation NPE the posterior stays on the ridge up to 4096 clones per endpoint (up to 12\,288 organoids, E4): A$\to$AA 0.29--0.41, \tA{} 15.7--17.1\,h, 0/5 covered in every design, \tA{} contraction 0.99 --- confidently on the wrong point. But with 20k simulations at 4096 clones (days 4/6/10) it moves most of the way to the truth: A$\to$AA 0.40 $\to$ 0.50 (3/5 covered), \tA{} 17.0 $\to$ 18.9\,h (3/5), lifetime error 0.27 $\to$ 0.15 (\S\ref{sec:e4budget}). So the data at very large designs can resolve the ridge; at realistic sizes (untested at 20k) lifetime information remains the practical fix.
 \item \textbf{Averaged over the prior, both simulators are calibrated} (X5d): 90\% coverage, SBC $\approx 0.03$; contraction 0.68 GW vs 0.51 BH --- single-truth failures are about truths and priors, not broken inference. A$\to$AA is learned well on average: the BH ridge bias is specific to this tail truth.
-\item \textbf{Lifetime information is the lever} (X5b, E3a): a right literature lifetime prior ($\pm 25\%$) moves A$\to$AA 0.32 $\to$ 0.46 (MAE 0.109 $\to$ 0.068); a lifetime prior 50\% too long is detected (support $\approx 0$, PPC 0.27), and so is a fixed global lifetime longer than A's; a slightly too short one biases silently. Lifetime CV 0.18--0.5 is harmless, near-exponential cycles are not (E3b); quiescence is not identifiable (E3c).
+\item \textbf{Lifetime information is the practical lever at realistic sizes} (X5b, E3a): a right literature lifetime prior ($\pm 25\%$) moves A$\to$AA 0.32 $\to$ 0.46 (MAE 0.109 $\to$ 0.068); a lifetime prior 50\% too long is detected (support $\approx 0$, PPC 0.27), and so is a fixed global lifetime longer than A's; a slightly too short one biases silently. Lifetime CV 0.18--0.5 is harmless, near-exponential cycles are not (E3b); quiescence is not identifiable (E3c).
 \end{enumerate}
 
 \textbf{IV. Misspecified biology and assay (Part~\ref{part:errors}).}
@@ -173,8 +173,8 @@ Parameters: A$\to$AA etc.\ are outcome probabilities per cell event; \tA, \tB{} 
 
 \subsection*{Recommendations for the wet-lab design}
 \begin{itemize}
-\item \textbf{Endpoints:} three, including an early one --- e.g.\ days 4, 6, 10 (best in both simulators). A single day-10 endpoint is the weakest design, and no number of organoids compensates (GW: 2048 per endpoint at one endpoint is worse than 32 per endpoint at three).
-\item \textbf{Organoids:} $\approx$\,128 per endpoint. In GW this recovers every outcome probability with \{4,6,10\} (A$\to$BB from 32, B persist from 64, B$\to$A from 128; A$\to$AB within 0.03 but only intermittently covered); gains stop at $\approx$\,1024 per endpoint. In BH it gives contraction 0.71; A$\to$BB and B death need $\ge 128$, A$\to$AB $\ge 256$; self-renewal is not recovered at any size (tested up to 2048 per endpoint) without lifetime information.
+\item \textbf{Endpoints:} three, including an early one --- e.g.\ days 4, 6, 10 (best in both simulators). A single day-10 endpoint is the weakest design, and no number of organoids compensates (GW: 4096 per endpoint at one endpoint is worse than 32 per endpoint at three).
+\item \textbf{Organoids:} $\approx$\,128 per endpoint. In GW this recovers every outcome probability with \{4,6,10\} (A$\to$BB from 32, B persist from 64, B$\to$A from 128; A$\to$AB within 0.03 but only intermittently covered); gains stop at $\approx$\,1024 per endpoint. In BH it gives contraction 0.71; A$\to$BB and B death need $\ge 128$, A$\to$AB $\ge 256$; self-renewal is not recovered at realistic sizes without lifetime information (with 5k simulations not even at 4096 per endpoint; at 4096 with 20k simulations it largely is, \S\ref{sec:e4budget}).
 \item \textbf{Measure independently:}
   \begin{enumerate}[label=(\alph*)]
   \item \emph{A (LGR5$^+$) division time} by live imaging --- the single most valuable measurement (it is what separates BH, MAE 0.109, from the GW target, 0.033); per type, not pooled;
@@ -185,6 +185,7 @@ Parameters: A$\to$AA etc.\ are outcome probabilities per cell event; \tA, \tB{} 
   \item \emph{apoptosis} only if death rates are to be fixed; otherwise keep them free (a value too high biases B$\to$A; in BH silently).
   \end{enumerate}
 \item \textbf{Biological constraints help more than data}: B divisions = 0 (if KRT20$^+$ cells do not divide) is what makes B$\to$A identifiable; neither a different prior nor 1024 organoids replaces it (X5a, X5c). A soft biological prior (``B rarely divides'') helps but does not replace it; with the constraint keep B's prior near-uniform (an informative symmetric one shrinks B$\to$A toward 1/3).
+\item \textbf{Simulation budget:} for large designs ($\gtrsim$\,1024 per endpoint) and for any BH fit where the lifetime/self-renewal ridge matters, train on $\ge$\,20k simulations with a higher epoch cap (the 20k runs stopped at the 200-epoch cap) and check SBC; 5k results at large sizes are lower bounds on attainable accuracy (\S\ref{sec:e4budget}).
 \item \textbf{Literature division times} can enter as an informative lifetime prior ($\pm 25\%$ gets most of the benefit of fixing them, X5b); check PPC and support mass for conflict (a prior that is too long is flagged; too-short lifetimes bias silently, E3a).
 \item \textbf{Hidden third type}: endpoint counts of two labels cannot identify a three-type model (E2c rerun). If C may exist, find out how it is labelled: read as B, ignoring it is usually flagged; read as A, it biases the A/B rows silently. Modelling it needs a C-specific marker, trajectory data that justify constraints, or much richer designs --- a free C model returns the prior.
 \end{itemize}
@@ -192,13 +193,13 @@ Parameters: A$\to$AA etc.\ are outcome probabilities per cell event; \tA, \tB{} 
 \subsection*{Methodological lessons}
 \begin{itemize}
 \item \textbf{Prior tails}: a truth with $<$\,2\% prior mass is pulled to the prior only where the data are weak or confounded along a ridge (A$\to$AA = 0.55 in BH); where the model is identifiable the data win at every truth position (X5a, B divisions fixed: B$\to$A 0.1--0.9 recovered under every prior). Where it is structurally confounded (B divisions free) the prior decides at every position, and neither a flat prior nor more organoids fixes it. With $10^{-6}$ or less (original E2c) amortised NPE extrapolates outside the prior support, while the same model is calibrated for truths in the bulk. SBC and prior-averaged coverage (X5d) look fine in all these cases: report prior quantiles of the truth, check prior sensitivity, and compare hand-picked truths with prior-drawn ones.
-\item \textbf{Simulation budget vs data size}: at 1024--2048 organoids per endpoint the SBC error of the 5k-simulation amortised NPE doubles (GW 0.03 $\to$ 0.06; BH up to 0.039) while posteriors still narrow: large designs need a larger simulation budget (or a check that separates data limit from network limit; E4, not run).
+\item \textbf{Simulation budget vs data size --- confirmed}: at 1024--4096 organoids per endpoint the SBC error of the 5k-simulation amortised NPE doubles (GW 0.03 $\to$ 0.06; BH up to 0.039) and accuracy is flat from 2048 to 4096. The 20k check at 4096 (same datasets) separates the two: GW MAE 0.020 $\to$ 0.017, SBC 0.064 $\to$ 0.044; BH coverage 0.76 $\to$ 0.93, A$\to$AA 0.40 $\to$ 0.50. The plateau was the network's, and an apparently data-limited ridge can be a training limit (E4, \S\ref{sec:e4budget}). Training hit the 200-epoch cap, so 20k is not the limit either.
 \item \textbf{Ridges and free time scales}: endpoint counts fix the growth rate; lifetime, self-renewal and quiescence trade off along it (posterior corr.\ $+0.7$, $-0.6$). The prior picks the point, and the free lifetime also absorbs (hides) errors that GW detects (E1a number, E1c).
 \item \textbf{Compare with paired controls}, not with the truth (BH baseline is biased); 5 seeds resolve shifts of $\approx$\,0.02--0.03 (probabilities) and 0.5--1.5\,h.
 \item \textbf{Diagnostics}: SBC checks the inference model only; PPC and support mass are relative checks and vary between well-specified GW runs (support 0.07--0.89, PPC up to 0.10); support mass $\approx 0$ = the model cannot explain the data (numbers from such runs are not estimates).
 \end{itemize}
 
-\textbf{Planned, never run} (Part~\ref{part:pending}): X2 seed spread; X1 methods comparison, X3 GW fit to BH data, X4 combined errors, R real CRC0322 data, P0 BH timing; also asymmetric mis-typing.
+\textbf{Planned, never run} (Part~\ref{part:pending}): X2 seed spread; X1 methods comparison, X3 GW fit to BH data, X4 combined errors, R real CRC0322 data, P0 BH timing; also asymmetric mis-typing, and the decisive ridge follow-up: 20k simulations with a higher epoch cap at realistic BH sizes (real-like, 512 per endpoint).
 
 \clearpage
 {\setcounter{tocdepth}{1}\tableofcontents}
@@ -211,7 +212,7 @@ The experiments were planned as one-error-at-a-time sweeps (\code{TODO.md}), but
 
 \begin{enumerate}[leftmargin=1.6em,label=\Roman*.]
 \item \textbf{Identifiability and the role of the prior} (Part~\ref{part:ident}). The first fits (E0) could not recover B's switching back to A. Before anything else could be measured we had to know whether this was the prior or the model, which X5a (truth position, prior shape) and X5c (sample size) settle: it is structural, and fixing B divisions to 0 is the baseline for everything after.
-\item \textbf{Design and amount of data} (Part~\ref{part:design}). With an identifiable model, the design comparison and E4 ask which endpoints and how many organoids. In GW everything is recovered; in BH self-renewal is never recovered, at any size (up to 2048 organoids per endpoint).
+\item \textbf{Design and amount of data} (Part~\ref{part:design}). With an identifiable model, the design comparison and E4 ask which endpoints and how many organoids. In GW everything is recovered; in BH self-renewal is not recovered with the standard 5k-simulation network at any size up to 4096 organoids per endpoint --- only a 20k-simulation network at 4096 moves it most of the way.
 \item \textbf{Bellman--Harris timing} (Part~\ref{part:timing}). That failure is the lifetime/self-renewal ridge. X5d and X5b ask whether it is the truth's position in the prior and whether lifetime information removes it; E3a--E3c test the timing assumptions such information would rest on.
 \item \textbf{Misspecified biology and assay} (Part~\ref{part:errors}). Against well-understood GW and BH baselines, each real-data error is introduced alone: founders (E1a), death (E1b, E1c), mis-typing (E2a/b), a hidden third type (E2c and its rerun, which reuses the tail-truth lesson of Parts I and III). The GW/BH contrast keeps returning: a free time scale absorbs errors. A synthesis section collects detectability.
 \item \textbf{Planned work} (Part~\ref{part:pending}): seed spread, methods, GW vs BH, combined errors, real data. Engineering (device benchmark) is in Appendix~\ref{sec:gpu}.
@@ -236,7 +237,7 @@ Figure~\ref{fig:roadmap} draws the dependencies; Table~\ref{tab:index} lists eve
 \node[pl] at (-1.25,-1.55) {II\\[-1pt]\scriptsize design};
 \node[n=caqua] (des) at (2*\dx,-1.55) {\textbf{Design} \sref{sec:design}\\1 vs 3 endpoints\\(GW)};
 \node[n=caqua] (e4g) at (3*\dx,-1.55) {\textbf{E4 GW} \sref{sec:e4gw}\\organoids $\times$ days\\all recovered};
-\node[n=caqua] (e4b) at (4*\dx,-1.55) {\textbf{E4 BH} \sref{sec:e4}\\A$\to$AA never\\recovered};
+\node[n=caqua] (e4b) at (4*\dx,-1.55) {\textbf{E4 BH} \sref{sec:e4}\\A$\to$AA not recov.\\(5k sims)};
 % ---------------- Part III
 \node[pl] at (-1.25,-3.1) {III\\[-1pt]\scriptsize timing};
 \node[n=cyellow] (rid) at (5*\dx,-3.1) {\textbf{BH ridge} \sref{sec:ridge}\\lifetime vs\\self-renewal};
@@ -310,7 +311,8 @@ X5c & organoids vs prior (\res{x5/c_*}) & \spref{sec:x5c} & \S21.3 & E0 C2ST, X5
 \multicolumn{6}{@{}l}{\emph{Part II --- design and amount of data}} \\
 Design & 1 vs 3 endpoints (\res{design_comparison}) & \spref{sec:design} & \S3 & E0/X5a: model fixed & E4 GW \\
 E4 GW & organoids $\times$ endpoints (\res{e4/gw}) & \spref{sec:e4gw} & \S5 & design comparison & E4 BH; GW = target \\
-E4 BH & organoids $\times$ endpoints (\res{e4/bh}) & \spref{sec:e4} & \S4 & E4 GW; BH closer to data & ridge (A$\to$AA never recovered) \\[2pt]
+E4 BH & organoids $\times$ endpoints (\res{e4/bh}) & \spref{sec:e4} & \S4 & E4 GW; BH closer to data & ridge (A$\to$AA not recovered at 5k sims) \\
+E4 20k & 5k vs 20k sims at 4096 (\res{e4/*_xxl_20k}) & \spref{sec:e4budget} & \S4.1 & E4 plateau, SBC growth & ridge moves; planned 20k at real sizes \\[2pt]
 \multicolumn{6}{@{}l}{\emph{Part III --- Bellman--Harris timing}} \\
 Ridge & lifetime vs self-renewal (\res{bh_ridge}) & \spref{sec:ridge} & \S6 & E4 BH bias & X5d, X5b; E1a/E1c GW contrasts \\
 X5d & prior-averaged (\res{x5/d_*}) & \spref{sec:x5d} & \S21.4 & ridge, E0: tail truths & X5b; E2c rerun \\
@@ -597,7 +599,7 @@ PPC $\le 0.03$ in every group. Numbers: \res{tables/x5c.csv}.
 \begin{itemize}
 \item \textbf{1024 organoids do not overrule the uniform prior}: B$\to$A moves 0.19 $\to$ 0.25 (truth 0.9), never covered, contraction $\le 0$; the mass goes to B$\to$AA ($\approx$\,0.3, truth 0) --- the switching/division confounding of E0.
 \item A flat prior helps and improves with data (0.47 $\to$ 0.59, contraction up to 0.65) but is still far from 0.9 at 1024 organoids and costs calibration (SBC 0.08).
-\item Endpoint counts of this kind cannot resolve the confounding by sample size at realistic scales; the structural constraint (B divisions fixed, X5a) is what works.
+\item Endpoint counts of this kind cannot resolve the confounding by sample size at realistic scales (with NPE 5k; E4 later shows a larger simulation budget can matter at very large designs, \sref{sec:e4budget}); the structural constraint (B divisions fixed, X5a) is what works.
 \end{itemize}
 \Leads{Part~\ref{part:design}: with B divisions fixed (\code{reversible_ab}) as the baseline, which design and how many organoids? The design comparison (\sref{sec:design}) also re-checks the free law at up to 384 organoids.}
 
@@ -645,23 +647,23 @@ Design (\code{reversible_ab}) & organoids & MAE & contraction & 90\% cov. & B$\t
 % ---------------------------------------------------------------------- E4 GW
 \expsec{E4 --- Amount of data: organoids and endpoints (GW)}{sec:e4gw}
 \Why{The design comparison (\sref{sec:design}) showed that three endpoints beat one at equal organoids. For a plan we need the minimum number of organoids per endpoint for each parameter and the best endpoint set, systematically. GW comes first: it has no lifetimes, so it shows what endpoint counts can deliver when the time scale is known.}
-\Q How do contraction and error depend on organoids per endpoint (16--2048) and on the measured generations? What is the minimum number to recover each parameter when there is no lifetime ridge?
+\Q How do contraction and error depend on organoids per endpoint (16--4096) and on the measured generations? What is the minimum number to recover each parameter when there is no lifetime ridge?
 \Setup
 \begin{setup}
 Simulator & Galton--Watson (endpoints in \emph{generations}; day-mapping nominal) \\
 Law (free) & \code{reversible_ab} (7 probabilities) \\
 Data vs inference & well specified, $\theta^\star$ \\
-Design & clones per endpoint $\in \{16,32,\dots,512\}$ and extension $\{1024, 2048\}$ $\times$ generations \{10\}, \{6,10\}, \{6,10,14\}, \{4,6,10\} \\
-Inference / budget & NPE amortised, 5k \\
-Seeds / runs & 5 / 160 = 120 (16--512) + 40 (1024, 2048); all with 2\,000 posterior samples, 200 SBC cases \\
-Folder & \res{results/e4/gw/} (16--512), \res{results/e4/gw_large/} (1024, 2048; commit \code{5cb6018}); pooled tables \res{results/e4/gw_all_summary_*.csv} \\
+Design & clones per endpoint $\in \{16,32,\dots,512\}$ and extensions $\{1024, 2048\}$, $\{4096\}$ $\times$ generations \{10\}, \{6,10\}, \{6,10,14\}, \{4,6,10\} \\
+Inference / budget & NPE amortised, 5k; budget check: 20k at 4096 clones, \{4,6,10\}, same 5 datasets (\S\ref{sec:e4budget}) \\
+Seeds / runs & 5 / 180 = 120 (16--512) + 40 (1024, 2048) + 20 (4096); + 5 at 20k; all with 2\,000 posterior samples, 200 SBC cases \\
+Folder & \res{results/e4/gw/} (16--512), \res{results/e4/gw_large/} (1024, 2048; commit \code{5cb6018}), \res{results/e4/gw_xxl/} (4096; \code{07fb7fe}), \res{results/e4/gw_xxl_20k/} (20k; \code{07fb7fe}, preset docs \code{503ec72}); pooled tables \res{results/e4/gw_all_summary_*.csv} \\
 \end{setup}
 \Result
-\figorpending{e4_gw_heat}{1.0}{E4 GW: mean contraction and MAE of the outcome probabilities (mean over 5 seeds); endpoints in generations; 1024 and 2048 from the extension.}{E4 GW heat map.}
-\figorpending{e4_gw_params}{1.0}{E4 GW: posterior means (mean $\pm$ SE over seeds) vs organoids per endpoint; dashed = truth.}{E4 GW parameter lines.}
+\figorpending{e4_gw_heat}{1.0}{E4 GW: mean contraction and MAE of the outcome probabilities (mean over 5 seeds); endpoints in generations; NPE 5k; 1024--4096 from the extensions.}{E4 GW heat map.}
+\figorpending{e4_gw_params}{1.0}{E4 GW: posterior means (mean $\pm$ SE over seeds) vs organoids per endpoint, NPE 5k; dashed = truth. Star: \{4,6,10\} at 4096 with 20k simulations (\S\ref{sec:e4budget}).}{E4 GW parameter lines.}
 \Needspace*{14\baselineskip}
 \begin{center}\footnotesize
-\textbf{Minimum organoids per endpoint for ``recovered''} (contraction $>0.5$, $|$error$|<0.05$, $\ge$\,4/5 covered; must hold at every larger size; --- = not reached; for BH see \S\ref{sec:e4})\\[2pt]
+\textbf{Minimum organoids per endpoint for ``recovered''} (contraction $>0.5$, $|$error$|<0.05$, $\ge$\,4/5 covered; must hold at every larger size up to 4096; --- = not reached; NPE 5k; for BH see \S\ref{sec:e4})\\[2pt]
 \begin{tabular}{@{}lrrrr@{}}\toprule
  & \multicolumn{4}{c}{\textbf{GW}, generations} \\
 Parameter & \{10\} & \{6, 10\} & \{6, 10, 14\} & \{4, 6, 10\} \\\midrule
@@ -669,107 +671,157 @@ A death, A persist, A$\to$B & 16 & 16 & 16 & 16 \\
 B death & 32 & 16 & 16 & 16 \\
 A$\to$AA & 256 & 16 & 16 & 2048$^a$ \\
 A$\to$BB & --- & 256 & 2048 & \textbf{32} \\
-B persist & --- & 512 & 1024 & \textbf{64} \\
-B$\to$A & --- & 1024 & 1024 & \textbf{128} \\
-A$\to$AB & --- & 512 & 2048 & ---$^b$ \\\bottomrule
+B persist & --- & 512 & ---$^c$ & \textbf{64} \\
+B$\to$A & --- & 1024 & ---$^c$ & \textbf{128} \\
+A$\to$AB & --- & 512 & 2048 & 4096$^b$ \\\bottomrule
 \end{tabular}\\[1pt]
 $^a$ error $\le 0.04$ at every size, but coverage 2--3/5 at 256--1024 (narrow posteriors, sd $\approx$ 0.02).\\
-$^b$ met at 128 and 512 only (1024/2048: error 0.03, 3/5).
+$^b$ also met at 128 and 512 (1024/2048: error 0.03, 3/5); at 4096 error 0.017, 4/5.\\
+$^c$ 1024 up to 2048; at 4096 error 0.051 (B persist) and 0.053 (B$\to$A), just above the 0.05 threshold.
 
-\medskip\textbf{Extension: 1024 and 2048 clones per endpoint} (5 seeds; MAE of probabilities / mean contraction / SBC coverage error)\\[2pt]
-\begin{tabular}{@{}lccc@{}}\toprule
-Generations & 512 & 1024 & 2048 \\\midrule
-\{10\} & 0.069 / 0.85 / 0.034 & 0.061 / 0.87 / 0.039 & 0.046 / 0.89 / 0.038 \\
-\{6, 10\} & 0.027 / 0.93 / 0.037 & 0.022 / 0.94 / 0.044 & 0.021 / 0.95 / 0.045 \\
-\{6, 10, 14\} & 0.034 / 0.93 / 0.041 & 0.024 / 0.94 / 0.047 & 0.022 / 0.95 / 0.055 \\
-\{4, 6, 10\} & \textbf{0.023} / \textbf{0.95} / 0.044 & \textbf{0.017} / \textbf{0.96} / 0.052 & \textbf{0.019} / \textbf{0.96} / 0.059 \\\bottomrule
+\medskip\textbf{Extensions: 1024, 2048, 4096 clones per endpoint} (5 seeds, NPE 5k; MAE of probabilities / mean contraction / SBC coverage error)\\[2pt]
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}lcccc@{}}\toprule
+Generations & 512 & 1024 & 2048 & 4096 \\\midrule
+\{10\} & 0.069 / 0.85 / 0.034 & 0.061 / 0.87 / 0.039 & 0.046 / 0.89 / 0.038 & 0.046 / 0.90 / 0.043 \\
+\{6, 10\} & 0.027 / 0.93 / 0.037 & 0.022 / 0.94 / 0.044 & 0.021 / 0.95 / 0.045 & 0.020 / 0.95 / 0.050 \\
+\{6, 10, 14\} & 0.034 / 0.93 / 0.041 & 0.024 / 0.94 / 0.047 & 0.022 / 0.95 / 0.055 & 0.022 / 0.95 / 0.058 \\
+\{4, 6, 10\} & \textbf{0.023} / \textbf{0.95} / 0.044 & \textbf{0.017} / \textbf{0.96} / 0.052 & \textbf{0.019} / \textbf{0.96} / 0.059 & \textbf{0.020} / \textbf{0.96} / 0.064 \\\bottomrule
 \end{tabular}
+\setlength{\tabcolsep}{6pt}
 \end{center}
 \Comment
 \begin{itemize}
-\item \textbf{Design ranking}: an early endpoint is worth most (\{4,6,10\} best at every size); a late extra endpoint (\{6,10,14\}) adds little over \{6,10\}; one endpoint plateaus and cannot separate A$\to$AB from A$\to$BB (0.15--0.24 vs 0.05; 0.15--0.20 vs 0.29 up to 512; still 0.10 and 0.24 at 2048).
+\item \textbf{Design ranking}: an early endpoint is worth most (\{4,6,10\} best at every size); a late extra endpoint (\{6,10,14\}) adds little over \{6,10\}; one endpoint plateaus and cannot separate A$\to$AB from A$\to$BB (0.15--0.24 vs 0.05; 0.15--0.20 vs 0.29 up to 512; still 0.11 and 0.24 at 4096).
 \item \textbf{Without lifetimes everything is recoverable}: with \{4,6,10\} and $\approx$\,128 organoids per endpoint all probabilities except A$\to$AB (met at 128 and 512, not stably) meet the criterion; A$\to$AA is right from 16 organoids. The GW numbers are the attainable target \emph{if} division times are known (BH with lifetimes fixed: MAE 0.059, \S\ref{sec:ridge}).
-\item \textbf{Plateau at $\approx$\,1024 per endpoint} (extension): multi-endpoint designs reach MAE $\approx$ 0.02 and contraction $\approx$ 0.95 and gain little from 2048; with two or three endpoints every parameter meets the criterion at 1024--2048 except A$\to$AB with \{4,6,10\} (intermittent). B$\to$A contraction 0.87--0.92.
-\item \textbf{A single endpoint never catches up}: it keeps improving, but at 2048 organoids (MAE 0.046) it is still worse than three endpoints at 32 (0.042); B$\to$A, A$\to$AB, A$\to$BB and B persist never meet the criterion.
-\item \textbf{SBC error grows with size} (0.03 $\to$ 0.05--0.06 at 1024--2048) while coverage of the truth stays 0.87--0.96: at these sizes the amortised NPE (5k simulations) starts to limit accuracy. A 20k-simulation check of one 2048 cell would separate data limit from network limit (not run).
+\item \textbf{Plateau at $\approx$\,1024 per endpoint with NPE 5k} (extensions): multi-endpoint designs reach MAE $\approx$ 0.02 and contraction $\approx$ 0.95 and gain nothing from 2048 or 4096; with two or three endpoints every parameter meets the criterion at 1024--2048 except A$\to$AB with \{4,6,10\} (intermittent). B$\to$A contraction 0.87--0.93.
+\item \textbf{The plateau is the network's}: with 20k simulations at 4096 (\{4,6,10\}, same datasets) MAE 0.020 $\to$ 0.017, B$\to$A error 0.047 $\to$ 0.032 (5/5 covered), SBC 0.064 $\to$ 0.044, support 0.59 $\to$ 0.78; training used 190 of 200 epochs on average (\S\ref{sec:e4budget}, after the BH grid).
+\item \textbf{A single endpoint never catches up}: it keeps improving, but at 4096 organoids (MAE 0.046) it is still worse than three endpoints at 32 (0.042); B$\to$A, A$\to$AB, A$\to$BB and B persist never meet the criterion.
+\item \textbf{SBC error grows with size} (0.03 $\to$ 0.05--0.06 at 1024--4096) while coverage of the truth stays 0.87--0.98: at these sizes the amortised NPE (5k simulations) limits accuracy, as the 20k check confirms.
 \item Checks: single well-specified GW runs reach PPC 0.10 and support mass 0.07 (\{4,6,10\}, seed 4): borderline single values are not evidence of misspecification.
-\item Caveat: generations are not days; one truth, perfect assay, single A founders, 5k simulations. Planned extension (not run): \code{law=two_type} at 256--512 clones.
+\item Caveat: generations are not days; one truth, perfect assay, single A founders, 5k simulations (20k only for \{4,6,10\} at 4096). Planned extension (not run): \code{law=two_type} at 256--512 clones.
 \end{itemize}
 \Leads{The same grid in BH (\sref{sec:e4}), the simulator closer to the real data (time in hours, free lifetimes). Does the ranking survive, and are the GW numbers reached?}
 
 % ---------------------------------------------------------------------- E4 BH
 \expsec{E4 --- Amount of data: organoids and endpoints (BH), and comparison with GW}{sec:e4}
 \Why{GW (\sref{sec:e4gw}) recovers every probability by $\approx$\,128 organoids with \{4,6,10\}. BH adds two free lifetimes and measures time in days; it is the model that will be fitted to real data.}
-\Q As \S\ref{sec:e4gw} for Bellman--Harris (endpoints in hours): how do contraction and error depend on organoids per endpoint (16--2048) and on the measured days? What is the minimum number to recover each parameter, and are the GW numbers reached?
+\Q As \S\ref{sec:e4gw} for Bellman--Harris (endpoints in hours): how do contraction and error depend on organoids per endpoint (16--4096) and on the measured days? What is the minimum number to recover each parameter, and are the GW numbers reached?
 \Setup
 \begin{setup}
 Simulator & Bellman--Harris, Gamma lifetimes shape 8 \\
 Law (free) & \code{reversible_ab}: 7 probabilities + \tA, \tB{} (9) \\
 Data vs inference & well specified, $\theta^\star$ \\
-Design & clones per endpoint $\in \{16,32,64,128,256,512\}$ and extension $\{1024, 2048\}$ $\times$ endpoints \{240\}, \{144, 240\}, \{144, 240, 336\}, \{96, 144, 240\}\,h = days \{10\}, \{6,10\}, \{6,10,14\}, \{4,6,10\} \\
-Inference / budget & NPE amortised, 5k \\
-Seeds / runs & 5 / 160 = 120 (16--512) + 40 (1024, 2048) \\
-Varied & clones $\times$ endpoint set \\
-Folder & \res{results/e4/bh/} (16--512), \res{results/e4/bh_large/} (1024, 2048; commit \code{5cb6018}); pooled tables \res{results/e4/bh_all_summary_*.csv} \\
+Design & clones per endpoint $\in \{16,32,64,128,256,512\}$ and extensions $\{1024, 2048\}$, $\{4096\}$ $\times$ endpoints \{240\}, \{144, 240\}, \{144, 240, 336\}, \{96, 144, 240\}\,h = days \{10\}, \{6,10\}, \{6,10,14\}, \{4,6,10\} \\
+Inference / budget & NPE amortised, 5k; budget check: 20k at 4096 clones, days 4/6/10, same 5 datasets \\
+Seeds / runs & 5 / 180 = 120 (16--512) + 40 (1024, 2048) + 20 (4096); + 5 at 20k \\
+Varied & clones $\times$ endpoint set; simulation budget (check only) \\
+Folder & \res{results/e4/bh/} (16--512), \res{results/e4/bh_large/} (1024, 2048; commit \code{5cb6018}), \res{results/e4/bh_xxl/} (4096; \code{07fb7fe}), \res{results/e4/bh_xxl_20k/} (20k; \code{07fb7fe}, preset docs \code{503ec72}); pooled tables \res{results/e4/bh_all_summary_*.csv} \\
 \end{setup}
 \Result
-\figorpending{e4_bh_heat}{1.0}{Mean contraction and MAE of the 7 outcome probabilities (mean over 5 seeds); 1024 and 2048 from the extension.}{E4 BH heat map.}
-\figorpending{e4_bh_params}{1.0}{Posterior means (mean $\pm$ SE over seeds) vs organoids per endpoint, one line per endpoint set; dashed = truth.}{E4 BH parameter lines.}
+\figorpending{e4_bh_heat}{1.0}{Mean contraction and MAE of the 7 outcome probabilities (mean over 5 seeds, NPE 5k); 1024--4096 from the extensions.}{E4 BH heat map.}
+\figorpending{e4_bh_params}{1.0}{Posterior means (mean $\pm$ SE over seeds) vs organoids per endpoint, one line per endpoint set, NPE 5k; dashed = truth. Star: days 4/6/10 at 4096 with 20k simulations (\S\ref{sec:e4budget}).}{E4 BH parameter lines.}
 \Needspace*{14\baselineskip}
 \begin{center}\footnotesize
-\textbf{Minimum organoids per endpoint for ``recovered''} (contraction $>0.5$, $|$error$|<0.05$, $\ge$\,4/5 covered); --- = not reached at 2048 (the 1024/2048 extension changes no entry).\\[2pt]
+\textbf{Minimum organoids per endpoint for ``recovered''} (contraction $>0.5$, $|$error$|<0.05$, $\ge$\,4/5 covered); --- = not reached at 4096 (NPE 5k; the 1024--4096 extensions change one entry).\\[2pt]
 \begin{tabular}{@{}lrrrr@{}}\toprule
 Parameter & day 10 & days 6, 10 & days 6, 10, 14 & days 4, 6, 10 \\\midrule
 A death, A$\to$B (small truths) & 16 & 16 & 16 & 16 \\
 A$\to$BB & --- & 512 & 256 & \textbf{128} \\
 B death & --- & 256 & 256 & \textbf{128} \\
-A$\to$AB & --- & --- & --- & \textbf{256} \\
+A$\to$AB & --- & 4096$^a$ & --- & \textbf{256} \\
 A$\to$AA, A persist, B persist, B$\to$A & --- & --- & --- & --- \\
 \tA, \tB{} (biased: \tA{} 15--17\,h, 0/5 covered) & --- & --- & --- & --- \\\bottomrule
+\multicolumn{5}{@{}l}{$^a$ met only at the largest size (error 0.026, 5/5); not a stable threshold.}
 \end{tabular}
 
-\medskip\textbf{Extension: 1024 and 2048 clones per endpoint} (5 seeds; probabilities: MAE, contraction; lifetimes: mean relative error)\\[2pt]
+\medskip\textbf{Extensions: 1024, 2048, 4096 clones per endpoint} (5 seeds, NPE 5k; probabilities: MAE, contraction; lifetimes: mean relative error)\\[2pt]
+\setlength{\tabcolsep}{4pt}
 \begin{tabular}{@{}lccccc@{}}\toprule
-Endpoints (days) & MAE & contraction & rel.\ error \tA, \tB & A$\to$AA (0.55) & \tA{} (20\,h) \\
- & 1024 / 2048 & 1024 / 2048 & 1024 / 2048 & 512 $\to$ 2048, covered & 2048 \\\midrule
-\{10\} & 0.124 / 0.124 & 0.51 / 0.52 & 0.32 / 0.30 & 0.30 $\to$ 0.29, 0/5 & 15.7 \\
-\{6, 10\} & 0.067 / 0.070 & 0.74 / 0.72 & 0.29 / 0.27 & 0.34 $\to$ 0.37, 0/5 & 16.5 \\
-\{6, 10, 14\} & 0.076 / 0.073 & 0.71 / 0.74 & 0.25 / 0.27 & 0.34 $\to$ 0.37, 0/5 & 16.6 \\
-\{4, 6, 10\} & \textbf{0.056} / \textbf{0.058} & \textbf{0.80} / \textbf{0.80} & 0.24 / 0.27 & 0.38 $\to$ 0.41, 0/5 & 17.1 \\\bottomrule
+Endpoints & MAE & contraction & rel.\ error \tA, \tB & A$\to$AA (0.55) & \tA{} (20\,h) \\
+(days) & 1024 / 2048 / 4096 & 1024 / 2048 / 4096 & 1024 / 2048 / 4096 & 512 $\to$ 2048 $\to$ 4096 & 2048 / 4096 \\\midrule
+\{10\} & 0.124 / 0.124 / 0.112 & 0.51 / 0.52 / 0.55 & 0.32 / 0.30 / 0.30 & 0.30 $\to$ 0.29 $\to$ 0.29 & 15.7 / 15.8 \\
+\{6, 10\} & 0.067 / 0.070 / 0.059 & 0.74 / 0.72 / 0.76 & 0.29 / 0.27 / 0.24 & 0.34 $\to$ 0.37 $\to$ 0.38 & 16.5 / 16.7 \\
+\{6, 10, 14\} & 0.076 / 0.073 / 0.069 & 0.71 / 0.74 / 0.74 & 0.25 / 0.27 / 0.27 & 0.34 $\to$ 0.37 $\to$ 0.37 & 16.6 / 16.7 \\
+\{4, 6, 10\} & \textbf{0.056} / \textbf{0.058} / \textbf{0.057} & \textbf{0.80} / \textbf{0.80} / \textbf{0.82} & 0.24 / 0.27 / 0.27 & 0.38 $\to$ 0.41 $\to$ 0.40 & 17.1 / 17.0 \\\bottomrule
+\multicolumn{6}{@{}l}{A$\to$AA and \tA{} covered 0/5 at every size and design with NPE 5k.}
 \end{tabular}
+\setlength{\tabcolsep}{6pt}
 
 \medskip\textbf{Comparison with GW} (\S\ref{sec:e4gw}; same grid, endpoints in generations)\\[2pt]
 \begin{tabular}{@{}lll@{}}\toprule
  & \textbf{BH} (days) & \textbf{GW} (generations) \\\midrule
-Contraction, \{4,6,10\}, 16 $\to$ 512 $\to$ 2048 & 0.50 $\to$ 0.79 $\to$ 0.80 & 0.80 $\to$ 0.95 $\to$ 0.96 \\
-MAE, \{4,6,10\}, same sizes & 0.114 $\to$ 0.060 $\to$ 0.058 & 0.052 $\to$ 0.023 $\to$ 0.019 \\
-One late endpoint, contraction & 0.37 $\to$ 0.50 $\to$ 0.52 & 0.63 $\to$ 0.85 $\to$ 0.89 (A$\to$AB/BB confounded) \\
-A$\to$AA (0.55) & 0.28--0.42, 0--2/5 covered & 0.47--0.54 at every design \\
-B$\to$A (0.80), \{4,6,10\}, 128/512/2048 & 0.65 / 0.73 / 0.70 & 0.78 / 0.80 / 0.77 \\
-SBC error, 16--512 / 1024--2048 & 0.025--0.034 / 0.029--0.039 & 0.024--0.044 / 0.038--0.059 \\
-Support mass / PPC (per run) & 0.45--0.92 / $\le 0.042$ & 0.07--0.89 / $\le 0.10$ (groups $\le 0.021$) \\\bottomrule
+Contraction, \{4,6,10\}, 16/512/2048/4096 & 0.50 / 0.79 / 0.80 / 0.82 & 0.80 / 0.95 / 0.96 / 0.96 \\
+MAE, \{4,6,10\}, same sizes & 0.114 / 0.060 / 0.058 / 0.057 & 0.052 / 0.023 / 0.019 / 0.020 \\
+One late endpoint, contraction & 0.37 / 0.50 / 0.52 / 0.55 & 0.63 / 0.85 / 0.89 / 0.90 (A$\to$AB/BB conf.) \\
+A$\to$AA (0.55), NPE 5k & 0.28--0.42, 0--2/5 covered & 0.47--0.55 at every design \\
+A$\to$AA, 4096, \{4,6,10\}, 5k / 20k & 0.40 (0/5) / 0.50 (3/5) & 0.54 / 0.55 (5/5) \\
+B$\to$A (0.80), \{4,6,10\}, 128/512/2048/4096 & 0.65 / 0.73 / 0.70 / 0.72 & 0.78 / 0.80 / 0.77 / 0.78 \\
+SBC error, 16--512 / 1024--4096 & 0.025--0.034 / 0.029--0.039 & 0.024--0.044 / 0.038--0.064 \\
+Support mass / PPC (per run) & 0.37--0.92 / $\le 0.042$ & 0.07--0.89 / $\le 0.10$ (groups $\le 0.021$) \\\bottomrule
 \end{tabular}
 \end{center}
 \Comment
 \begin{itemize}
-\item \textbf{Same design ranking as GW} (\S\ref{sec:e4gw}): the ranking is a property of the endpoint information, not of the time model. An early endpoint (day 4) helps most: days 4/6/10 are best on every metric at every size and the only design where A$\to$AB is recovered (0.054 at 2048, truth 0.05). Day 10 alone plateaus (contraction 0.37 $\to$ 0.50 $\to$ 0.52 from 16 to 512 to 2048).
-\item With several endpoints more organoids help up to $\approx$\,512--1024 (MAE 0.114 $\to$ 0.060 $\to$ 0.056 for days 4/6/10, 0.058 at 2048). B$\to$A rises 0.59 $\to$ 0.73 and is covered at every size, but not recovered (0.61--0.70 at 1024--2048).
-\item \textbf{The ridge does not yield to sample size.} At 2048 clones per endpoint (up to 6144 organoids) A$\to$AA is 0.29--0.41 (truth 0.55) and \tA{} 15.7--17.1\,h (truth 20), 0/5 covered in every design. The posterior creeps along the ridge (days 4/6/10: 0.34 $\to$ 0.41 from 16 to 2048) with \tA{} contraction 0.99: confidently on the wrong point. Lifetime information, not more organoids, moves it (\S\ref{sec:ridge}, X5b).
-\item Calibration at 1024--2048: SBC error rises mildly (0.028--0.039), PPC $\le 0.8\%$, support mass 0.45--0.81.
+\item \textbf{Same design ranking as GW} (\S\ref{sec:e4gw}): the ranking is a property of the endpoint information, not of the time model. An early endpoint (day 4) helps most: days 4/6/10 are best on every metric at every size and the only design where A$\to$AB is recovered from a moderate size (0.054 at 2048, 0.042 at 4096, truth 0.05; days 6/10 meet it only at 4096). Day 10 alone plateaus (contraction 0.37 $\to$ 0.50 $\to$ 0.52 $\to$ 0.55 from 16 to 512 to 2048 to 4096).
+\item With several endpoints and NPE 5k more organoids help up to $\approx$\,512--1024 (MAE 0.114 $\to$ 0.060 $\to$ 0.056 for days 4/6/10; 0.058 at 2048, 0.057 at 4096). B$\to$A rises 0.59 $\to$ 0.73 and is covered at every size, but not recovered (0.61--0.72 at 1024--4096).
+\item \textbf{With NPE 5k the ridge does not yield to sample size.} At 4096 clones per endpoint (up to 12\,288 organoids) A$\to$AA is 0.29--0.40 (truth 0.55) and \tA{} 15.8--17.0\,h (truth 20), 0/5 covered in every design. The posterior creeps along the ridge (days 4/6/10: 0.34 $\to$ 0.41 from 16 to 2048, flat at 4096) with \tA{} contraction 0.99: confidently on the wrong point.
+\item \textbf{But this is a training limit, not a data limit} (\S\ref{sec:e4budget}): with 20k simulations on the same 4096-clone datasets A$\to$AA moves 0.40 $\to$ 0.50 and \tA{} 17.0 $\to$ 18.9\,h (3/5 covered each). At realistic sizes ($\le 512$, untested at 20k) lifetime information remains the practical lever (\S\ref{sec:ridge}, X5b).
+\item Calibration at 1024--4096: SBC error rises mildly (0.028--0.039), PPC $\le 1.4\%$, support mass 0.37--0.81.
 \item ``Recovered'' for A death / A$\to$B is easy because the truths are small ($|$error$|<0.05$ is loose there).
-\item GW, without lifetimes, reaches contraction 0.80 $\to$ 0.95 $\to$ 0.96 (16 $\to$ 512 $\to$ 2048) and recovers A$\to$AA at every design (table above).
-\item Caveat: one truth, perfect assay, single A founders, 5k simulations.
+\item GW, without lifetimes, reaches contraction 0.80 $\to$ 0.95 $\to$ 0.96 (16 $\to$ 512 $\to$ 2048, also 0.96 at 4096) and recovers A$\to$AA at every design (table above).
+\item Caveat: one truth, perfect assay, single A founders, 5k simulations (20k only for one design at 4096).
 \end{itemize}
-\Leads{A$\to$AA and \tA{} are wrong at \emph{every} size (16--2048) and endpoint set, with coverage falling as data grow: a bias, not a lack of data. Part~\ref{part:timing} opens with the hypothesis that explains it (\sref{sec:ridge}).}
+
+\Needspace*{14\baselineskip}
+\subsection{Simulation budget check: 5k vs 20k simulations at 4096 clones (BH and GW)}\label{sec:e4budget}
+\Q At the largest designs, is the GW plateau (\sref{sec:e4gw}) and the stuck BH ridge (above) a limit of the data or of the 5k-simulation network?
+\Setup
+\begin{setup}
+Design & 4096 clones per endpoint; best design per simulator: GW generations \{4,6,10\}, BH days \{4,6,10\} = \{96,144,240\}\,h \\
+Inference / budget & NPE amortised, 5k (from \res{*_xxl}) vs 20k (\code{budget.simulations=20000}); epoch cap 200 \\
+Seeds / runs & 5 paired seeds (same datasets) / 5 per simulator at 20k \\
+Folder & \res{results/e4/gw_xxl_20k/}, \res{results/e4/bh_xxl_20k/} (commit \code{07fb7fe}; preset docs \code{503ec72}); table \res{report/tables/e4_budget.csv} \\
+\end{setup}
+\Result
+\figorpending{e4_budget}{1.0}{5k vs 20k training simulations on the same 5 datasets (lines join seeds). BH, days 4/6/10: A$\to$AA and \tA{} posterior mean $\pm$ sd; filled = truth in the 90\% interval, open = not covered; dashed = truth. GW, generations 4/6/10: B$\to$A absolute error and run SBC coverage error. Bars = mean over seeds.}{E4 budget check.}
+\Needspace*{14\baselineskip}
+\begin{center}\footnotesize
+\begin{tabular}{@{}lcccc@{}}\toprule
+ & \multicolumn{2}{c}{GW \{4,6,10\}} & \multicolumn{2}{c}{BH \{96,144,240\}\,h} \\
+ & 5k & 20k & 5k & 20k \\\midrule
+MAE (probabilities) & 0.020 & \textbf{0.017} & 0.057 & \textbf{0.049} \\
+Rel.\ error lifetimes & -- & -- & 0.27 & \textbf{0.15} \\
+Mean contraction (all parameters) & 0.964 & 0.977 & 0.842 & 0.893 \\
+Coverage (run, 90\%) & 0.93 & 0.93 & 0.76 & \textbf{0.93} \\
+SBC coverage error & 0.064 & \textbf{0.044} & 0.039 & 0.040 \\
+Support mass & 0.59 & 0.78 & 0.56 & 0.51 \\
+Epochs, mean (cap 200) & 162 & 190 & 160 & \textbf{201} (all 5) \\
+B$\to$A (0.80): mean, error, covered & 0.78, 0.047, 4/5 & 0.79, 0.032, 5/5 & 0.72, 0.082, 5/5 & 0.70, 0.096, 5/5 \\
+A$\to$AA (0.55): mean, covered & 0.54, 5/5 & 0.55, 5/5 & 0.40, 0/5 & \textbf{0.50, 3/5} \\
+\tA{} (20\,h): mean, covered & -- & -- & 17.0, 0/5 & \textbf{18.9, 3/5} \\
+\tB{} (30\,h): mean, covered & -- & -- & 18.4, 2/5 & 22.5, 5/5 \\\bottomrule
+\end{tabular}
+\end{center}
+\Comment
+\begin{itemize}
+\item \textbf{The 5k network, not the data, sets the large-design plateau.} Four times the training simulations lower the error on the same datasets in both simulators and improve calibration (GW SBC 0.064 $\to$ 0.044) or coverage (BH 0.76 $\to$ 0.93). At 5k, 2048 $\to$ 4096 is flat for both simulators.
+\item \textbf{The BH ridge moves with enough data when the network is trained enough}: A$\to$AA 0.40 $\to$ 0.50 and \tA{} 17.0 $\to$ 18.9\,h, each 3/5 covered (0/5 at 5k); lifetime error 0.27 $\to$ 0.15. ``The ridge does not yield to sample size'' holds for NPE at 5k simulations, not for the data.
+\item Training stopped at the 200-epoch cap in all 5 BH runs (and 190 on average in GW), so 20k is probably not the limit either: 5k (and possibly 20k) results at large sizes are lower bounds on attainable accuracy.
+\item Not tested: 20k at realistic sizes ($\le 512$ per endpoint). Whether the ridge moves there is the decisive follow-up (\sref{sec:p-other}); until then lifetime information is the practical fix at realistic sizes.
+\item B$\to$A in BH does not improve (0.72 $\to$ 0.70, error 0.082 $\to$ 0.096, still covered); BH support mass slightly lower (0.56 $\to$ 0.51).
+\item Caveat: one design per simulator, 5 seeds, one truth.
+\end{itemize}
+\Leads{With the standard 5k network A$\to$AA and \tA{} are wrong at \emph{every} size (16--4096) and endpoint set, with coverage falling as data grow; only a 20k network at 4096 clones moves them most of the way. At realistic sizes this is a bias that more organoids do not remove. Part~\ref{part:timing} opens with the hypothesis that explains it (\sref{sec:ridge}).}
 
 % ====================================================================== PART III
 \clearpage
 \part{Bellman--Harris timing: the lifetime ridge}\label{part:timing}
-\partintro{\textbf{Motivation.} E4 BH (\sref{sec:e4}) left a bias that more organoids do not remove, not even 2048 per endpoint. This part identifies it as a ridge (\sref{sec:ridge}), asks whether it is a property of the hand-picked truth (X5d), and tests the remedy suggested by the ridge, lifetime information, in its soft (literature prior, X5b) and hard (fixed lifetimes, E3a) form. Fixing lifetimes rests on timing assumptions: one value per type (E3a), the lifetime variability (E3b), and the absence of quiescence (E3c), which are tested last.}
+\partintro{\textbf{Motivation.} E4 BH (\sref{sec:e4}) left a bias that more organoids do not remove with the standard 5k-simulation network, not even 4096 per endpoint (a 20k network at 4096 moves it most of the way, \sref{sec:e4budget}; at realistic sizes that is untested). This part identifies it as a ridge (\sref{sec:ridge}), asks whether it is a property of the hand-picked truth (X5d), and tests the remedy suggested by the ridge, lifetime information, in its soft (literature prior, X5b) and hard (fixed lifetimes, E3a) form. Fixing lifetimes rests on timing assumptions: one value per type (E3a), the lifetime variability (E3b), and the absence of quiescence (E3c), which are tested last.}
 
 % ---------------------------------------------------------------------- ridge
 \expsec{BH ridge --- lifetime vs self-renewal}{sec:ridge}
-\Why{E4 BH (\sref{sec:e4}): A$\to$AA 0.28--0.42 and \tA{} 15--17\,h at every design up to 2048 organoids per endpoint, 0/5 covered, whereas GW recovers A$\to$AA at every design (\sref{sec:e4gw}). The only structural difference is the free time scale. Hypothesis: endpoint counts fix the growth rate, which faster cycles or more self-renewal produce equally.}
+\Why{E4 BH (\sref{sec:e4}): A$\to$AA 0.28--0.42 and \tA{} 15--17\,h at every design up to 4096 organoids per endpoint with NPE 5k, 0/5 covered, whereas GW recovers A$\to$AA at every design (\sref{sec:e4gw}). The only structural difference is the free time scale. Hypothesis: endpoint counts fix the growth rate, which faster cycles or more self-renewal produce equally.}
 \Q Is the BH baseline bias (A$\to$AA $\approx$ 0.32, \tA{} $\approx$ 16\,h) a ridge on which endpoint counts fix only a combination of lifetime and self-renewal, with the prior picking the point?
 \Setup
 \begin{setup}
@@ -799,8 +851,9 @@ SBC error / PPC / support & 0.025 / 0.008 / n/r & 0.031 / 0.025 / 0.65 & 0.079 /
 \begin{itemize}
 \item Ridge confirmed: posterior corr(A$\to$AA, \tA) $\approx +0.7$ (E3c). Removing the lifetime degree of freedom recovers self-renewal and halves the error.
 \item The prior chose the point: only 1.8\% of uniform-Dirichlet mass lies above 0.55. A flat prior re-centres (5/5 covered) but stays wide, degrades B$\to$A and calibration: not a fix.
-\item GW has no lifetimes and no ridge: the GW control at the same design gives A$\to$AA 0.52 (\S\ref{sec:e1a}), and 0.47--0.54 at every E4 design (\S\ref{sec:e4gw}).
-\item Consequence: measure A's division time (live imaging) or use it as an informative prior; otherwise report BH results with prior sensitivity. X5 tested both: a right $\pm 25\%$ lifetime prior gives A$\to$AA 0.46, MAE 0.068 (\S\ref{sec:x5b}); averaged over prior-drawn truths A$\to$AA is learned well (contraction 0.82, \S\ref{sec:x5d}), so the ridge bites at tail truths such as $\theta^\star$.
+\item GW has no lifetimes and no ridge: the GW control at the same design gives A$\to$AA 0.52 (\S\ref{sec:e1a}), and 0.47--0.55 at every E4 design (\S\ref{sec:e4gw}).
+\item Sample size alone, with the standard 5k-simulation NPE, does not leave the ridge: A$\to$AA stays 0.29--0.41 and \tA{} 15.7--17.1\,h (0/5) up to 4096 clones per endpoint in every E4 design. With 20k simulations at 4096 clones (days 4/6/10) it does move most of the way: A$\to$AA 0.50, \tA{} 18.9\,h (3/5 each; \sref{sec:e4budget}). The data can resolve the ridge at very large designs if the network is trained enough; whether they do at realistic sizes ($\le 512$) with 20k is untested.
+\item Consequence: at realistic sizes measure A's division time (live imaging) or use it as an informative prior; otherwise report BH results with prior sensitivity, and train BH fits on $\ge$\,20k simulations. X5 tested both: a right $\pm 25\%$ lifetime prior gives A$\to$AA 0.46, MAE 0.068 (\S\ref{sec:x5b}); averaged over prior-drawn truths A$\to$AA is learned well (contraction 0.82, \S\ref{sec:x5d}), so the ridge bites at tail truths such as $\theta^\star$.
 \end{itemize}
 \Leads{Two questions: is the ridge bias a property of this truth, whose A$\to$AA has only 1.8\% prior mass above it (X5d, \sref{sec:x5d})? And can partial lifetime information --- a literature prior --- replace exact lifetimes (X5b, \sref{sec:x5b})?}
 
@@ -838,7 +891,7 @@ BH mean contraction includes \tA{} (0.82) and \tB{} (0.53); relative lifetime er
 \item \textbf{The methods are calibrated on average}: with truths drawn from the prior both simulators give 90\% coverage and SBC error $\approx 0.03$. Single-truth failures are about specific truths and priors, not broken inference.
 \item GW learns A's divisions well (contraction 0.89--0.94), A's death/persist/switch about halfway ($\approx 0.5$), B's row moderately (0.43--0.71; B death weakest).
 \item \textbf{BH learns less} (contraction 0.51 vs 0.68; MAE 0.100 vs 0.072): the lifetimes absorb information; A persist barely moves (contraction 0.14, error no better than the prior mean) and B death / B persist stay close to the prior-mean baseline (0.142 / 0.160 vs 0.170 / 0.164).
-\item \textbf{The BH ridge is a tail-truth effect}: averaged over the prior A$\to$AA is learned well (contraction 0.82), so the failure at $\theta^\star$ (A$\to$AA 0.55, 0/5 covered, \S\ref{sec:ridge}) is specific to a truth with 1.8\% prior mass above it, where the prior picks the point on the lifetime/self-renewal ridge.
+\item \textbf{The BH ridge is a tail-truth effect}: averaged over the prior A$\to$AA is learned well (contraction 0.82), so the failure at $\theta^\star$ (A$\to$AA 0.55, 0/5 covered, \S\ref{sec:ridge}) is specific to a truth with 1.8\% prior mass above it, where the prior picks the point on the lifetime/self-renewal ridge (at realistic sizes; at 4096 clones per endpoint and 20k simulations the data largely override it, \sref{sec:e4budget}).
 \item Caveat: X5d uses real-like generations 6/10; the E0/design-comparison single-truth runs used 4/8/12, so they are not directly comparable.
 \end{itemize}
 \Leads{The ridge bites where the prior chooses the point. The natural fix is to give the prior information about lifetimes (X5b, \sref{sec:x5b}).}
@@ -874,7 +927,7 @@ Mean over 5 seeds $\pm$ mean posterior sd, seeds covered. Lifetimes fixed exactl
 \end{center}
 \Comment
 \begin{itemize}
-\item \textbf{A right literature prior moves along the ridge towards the truth}: A$\to$AA 0.32 $\to$ 0.46, lifetimes about right, MAE 0.109 $\to$ 0.068 --- most of the way to fixing lifetimes exactly (0.51, 0.059).
+\item \textbf{A right literature prior moves along the ridge towards the truth}: A$\to$AA 0.32 $\to$ 0.46, lifetimes about right, MAE 0.109 $\to$ 0.068 --- most of the way to fixing lifetimes exactly (0.51, 0.059), at the real-like design. More organoids alone reach a similar point only at 4096 per endpoint and with 20k simulations (A$\to$AA 0.50, \sref{sec:e4budget}); at realistic sizes lifetime information is the practical lever.
 \item \textbf{A prior 50\% too long is clearly flagged}: support $\approx 0$, PPC 0.27 (0.17--0.35), A's lifetime pinned at the prior's lower edge (the data push against it). Consistent with E3a, where too-long lifetimes fail visibly and too-short ones bias silently. Probabilities remain off (1/5 covered) despite high contraction.
 \item Caveat: one truth ($\theta^\star$), 5 seeds; a too-short wrong prior was not tested.
 \end{itemize}
@@ -1459,7 +1512,7 @@ Will show the posterior mean and sd per parameter in both arms. If the training 
 
 % ---------------------------------------------------------------------- other
 \expsec{Other planned work (X1, X3, X4, R, P0, follow-ups)}{sec:p-other}
-\Why{X1: every result uses amortised NPE (SNPE only in E0, \sref{sec:e0}). X3: the GW/BH contrast recurs throughout (\sref{sec:ridge}, \sref{sec:e1agw}, \sref{sec:e1cgw}, \sref{sec:e2gw}), but the two simulators do not share a time unit. X4: Part~\ref{part:errors} tested errors one at a time. R: the end goal. P0: BH cost was never measured on an idle machine (Appendix~\ref{sec:gpu}). Follow-ups: asymmetric mis-typing (\sref{sec:e2}), \code{two_type} at large size (\sref{sec:x5c}), the observed fraction as a summary (\sref{sec:e1b}).}
+\Why{X1: every result uses amortised NPE (SNPE only in E0, \sref{sec:e0}). X3: the GW/BH contrast recurs throughout (\sref{sec:ridge}, \sref{sec:e1agw}, \sref{sec:e1cgw}, \sref{sec:e2gw}), but the two simulators do not share a time unit. X4: Part~\ref{part:errors} tested errors one at a time. R: the end goal. P0: BH cost was never measured on an idle machine (Appendix~\ref{sec:gpu}). Follow-ups: the BH ridge at realistic sizes with a well-trained network (\sref{sec:e4budget}), asymmetric mis-typing (\sref{sec:e2}), \code{two_type} at large size (\sref{sec:x5c}), the observed fraction as a summary (\sref{sec:e1b}).}
 \Q
 \begin{itemize}
 \item \textbf{X1 methods}: NPE vs NLE vs NRE (and SNPE) at the baseline and the worst realistic error.
@@ -1467,7 +1520,8 @@ Will show the posterior mean and sd per parameter in both arms. If the training 
 \item \textbf{X4 combined errors}: realistic combination (organoid death + mis-typing + C + lifetime CV), real-like design, \code{budget=full}: the error budget to quote with the real-data fit.
 \item \textbf{R real data}: CRC0322, day 6 (165 organoids) and day 10 (101); choose 2D counts vs 3D estimates (Q3); final model, SBC, fit, PPC.
 \item \textbf{P0 BH timing}: seconds per BH run at \code{dev}/\code{smoke} budgets on an idle machine.
-\item \textbf{Follow-ups of finished sweeps}: asymmetric mis-typing (E2); E4 GW with \code{law=two_type} at 256--512 clones; a 20k-simulation NPE for one 2048-clone E4 cell (data limit vs network limit, \S\ref{sec:e4gw}); observed fraction as a summary (\code{observation=all_clones}, E1b).
+\item \textbf{BH ridge at realistic sizes with a well-trained network (decisive follow-up)}: the E4 budget check (\sref{sec:e4budget}) moved the ridge at 4096 clones per endpoint with 20k simulations. Repeat with 20k (or more) simulations and a higher epoch cap at the real-like design and at 512 per endpoint (days 4/6/10): if A$\to$AA and \tA{} move there too, the BH bias is a training limit at realistic sizes; if not, lifetime information remains necessary.
+\item \textbf{Follow-ups of finished sweeps}: asymmetric mis-typing (E2); E4 GW with \code{law=two_type} at 256--512 clones; observed fraction as a summary (\code{observation=all_clones}, E1b).
 \end{itemize}
 \Setup
 \begin{setup}
@@ -1525,8 +1579,8 @@ E0 (\S\ref{sec:e0}) & \code{194e31f}, \code{b3cbae0} & \code{+experiment=b_row_i
 X5a (\S\ref{sec:x5a}) & \code{d403cac}; bio \code{7f4a11f} & \code{+experiment=x5a_truth_position law=two_type|reversible_ab '++law.concentration={},<Jeffreys>,<flat B.to_A>'}\newline biological priors: same with \code{'++law.concentration=<bio-B>,<bio>'} (folders \code{results/x5/a_*_bio})\newline (exact lists in the preset header and \code{results/x5/a_*/info.md}) \\
 X5c (\S\ref{sec:x5c}) & \code{d403cac} & \code{+experiment=x5c_data_vs_prior} \\
 Design comparison (\S\ref{sec:design}) & \code{b3cbae0} & \code{+experiment=design_comparison} (laws two\_type, reversible\_ab) \\
-E4 GW (\S\ref{sec:e4gw}) & \code{19a10ea} & \code{+experiment=e4_design} \\ & \code{5cb6018} (1024, 2048) & \code{+experiment=e4_design design.clones=1024,2048} (folder \code{results/e4/gw_large}) \\
-E4 BH (\S\ref{sec:e4}) & \code{43e9e44} & \code{+experiment=e4_design simulator=bellman_harris design.horizons=[240],[144,240],[96,144,240],[144,240,336]} \\ & \code{5cb6018} (1024, 2048) & same + \code{design.clones=1024,2048} (folder \code{results/e4/bh_large}) \\
+E4 GW (\S\ref{sec:e4gw}) & \code{19a10ea} & \code{+experiment=e4_design} \\ & \code{5cb6018} (1024, 2048) & \code{+experiment=e4_design design.clones=1024,2048} (folder \code{results/e4/gw_large}) \\ & \code{07fb7fe} (4096) & \code{+experiment=e4_design design.clones=4096} (folder \code{results/e4/gw_xxl}) \\ & \code{07fb7fe} (20k; docs \code{503ec72}) & \code{+experiment=e4_design design.clones=4096 'design.horizons=[4,6,10]' budget.simulations=20000 seed=0,1,2,3,4} (folder \code{results/e4/gw_xxl_20k}) \\
+E4 BH (\S\ref{sec:e4}) & \code{43e9e44} & \code{+experiment=e4_design simulator=bellman_harris design.horizons=[240],[144,240],[96,144,240],[144,240,336]} \\ & \code{5cb6018} (1024, 2048) & same + \code{design.clones=1024,2048} (folder \code{results/e4/bh_large}) \\ & \code{07fb7fe} (4096) & same + \code{design.clones=4096} (folder \code{results/e4/bh_xxl}) \\ & \code{07fb7fe} (20k; docs \code{503ec72}) & \code{simulator=bellman_harris design.clones=4096 'design.horizons=[96,144,240]' budget.simulations=20000 seed=0,1,2,3,4} (folder \code{results/e4/bh_xxl_20k}) \\
 BH ridge (\S\ref{sec:ridge}) & \code{19a10ea} & \code{+experiment=bh_ridge} (+ lifetimes fixed / A concentration) \\
 X5d (\S\ref{sec:x5d}) & \code{d403cac} & \code{+experiment=x5d_prior_average}\newline \code{simulator=galton_watson|bellman_harris} \\
 X5b (\S\ref{sec:x5b}) & \code{d403cac} & vague: \code{+experiment=x5b_lifetime_prior}\newline right / wrong: add \code{'~simulator.model.lifetime_mean_bounds'} and\newline \code{'+simulator.model.lifetime_mean_bounds={A:[16,25],B:[24,37.5]}'}\newline resp.\ \code{{A:[24,37.5],B:[36,56.25]}} \\

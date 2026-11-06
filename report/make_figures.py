@@ -347,11 +347,13 @@ HSET_BH = {"[240]": "d10", "[144,240]": "d6,10", "[144,240,336]": "d6,10,14",
 HSET_GW = {"[10]": "g10", "[6,10]": "g6,10", "[6,10,14]": "g6,10,14", "[4,6,10]": "g4,6,10"}
 
 
-E4_CLONES = [16, 32, 64, 128, 256, 512, 1024, 2048]
+E4_CLONES = [16, 32, 64, 128, 256, 512, 1024, 2048, 4096]
 
 
 def e4_frames(rels):
-    """Pooled runs/parameters of the E4 folders (16-512 and the 1024/2048 extension)."""
+    """Pooled runs/parameters of the E4 folders (16-512, the 1024/2048 and the 4096
+    extensions). Clone count and endpoints are read from each run's own overrides (the
+    4096 folders' summaries lack a design.clones column because it was constant)."""
     loaded = [load(r) for r in rels]
     runs = pd.concat([r for r, _ in loaded], ignore_index=True)
     params = pd.concat([q for _, q in loaded], ignore_index=True)
@@ -361,7 +363,8 @@ def e4_frames(rels):
     return runs, p
 
 
-def fig_e4(rels=(("e4/bh", 120), ("e4/bh_large", 40)), name="e4_bh", hmap=HSET_BH):
+def fig_e4(rels=(("e4/bh", 120), ("e4/bh_large", 40), ("e4/bh_xxl", 20)), name="e4_bh",
+           hmap=HSET_BH):
     for rel, expected in rels:
         require(rel, expected)
     _, p = e4_frames([rel for rel, _ in rels])
@@ -377,7 +380,7 @@ def fig_e4(rels=(("e4/bh", 120), ("e4/bh_large", 40)), name="e4_bh", hmap=HSET_B
                                     (axes[1], "mae", "MAE (probabilities)", SEQ.reversed(),
                                      "{:.3f}")]:
         mat = g.pivot(index="hset", columns="clones", values=col).reindex(order)
-        heat(ax, mat, cmap, fmt=fmt, fs=5.4)
+        heat(ax, mat, cmap, fmt=fmt, fs=4.9)
         ax.tick_params(axis="x", labelsize=6, labelrotation=45)
         ax.set_xlabel("clones per endpoint")
         ax.set_title(lab)
@@ -390,6 +393,12 @@ def fig_e4(rels=(("e4/bh", 120), ("e4/bh_large", 40)), name="e4_bh", hmap=HSET_B
         sel.append(("A.mean_lifetime", 20.0))
     else:
         sel.append(("A.div_AB", 0.05))
+    # the 20k-simulation check at 4096 clones (best design), drawn as a star if present
+    p20 = None
+    rel20 = rels[-1][0] + "_20k"
+    if n_runs(rel20) >= 5:
+        _, p20 = e4_frames([rel20])
+        p20["hset"] = p20.hset.map(hmap)
     fig, axes = plt.subplots(1, len(sel), figsize=(W_FULL, 2.0), gridspec_kw=dict(wspace=0.4))
     for ax, (par, tv) in zip(axes, sel, strict=True):
         s = p[p.parameter == par].groupby(["hset", "clones"]).posterior_mean.agg(
@@ -399,6 +408,12 @@ def fig_e4(rels=(("e4/bh", 120), ("e4/bh_large", 40)), name="e4_bh", hmap=HSET_B
             ax.errorbar(t.clones * (1 + 0.04 * (k - 1.5)), t["mean"],
                         yerr=t["std"] / np.sqrt(t["count"]), color=CAT[k], marker="o", ms=3,
                         lw=1.2, elinewidth=0.7, label=h)
+        if p20 is not None:
+            t = p20[p20.parameter == par].posterior_mean
+            k = order.index(p20.hset.iloc[0])
+            ax.errorbar([4096 * 1.25], [t.mean()], yerr=[t.std() / np.sqrt(len(t))],
+                        color=CAT[k], marker="*", ms=7, mec=INK, mew=0.5, lw=0,
+                        elinewidth=0.7, label="20k sims (4096)")
         truth_line(ax, tv)
         ax.set_xscale("log", base=2)
         ax.set_xticks(E4_CLONES, [str(c) for c in E4_CLONES], fontsize=6, rotation=45)
@@ -406,14 +421,111 @@ def fig_e4(rels=(("e4/bh", 120), ("e4/bh_large", 40)), name="e4_bh", hmap=HSET_B
         ax.set_xlabel("clones per endpoint")
         ax.set_title(f"{PRETTY[par]} (truth {tv:g})")
     h, lab = axes[0].get_legend_handles_labels()
-    fig.legend(h, lab, loc="lower center", ncol=5, bbox_to_anchor=(0.5, 1.0), fontsize=6.5,
+    fig.legend(h, lab, loc="lower center", ncol=6, bbox_to_anchor=(0.5, 1.0), fontsize=6.5,
                title="endpoints:", title_fontsize=6.5, alignment="left")
     fig.legends[-1]._legend_box.align = "left"
     save(fig, f"{name}_params")
 
 
 def fig_e4_gw():
-    fig_e4((("e4/gw", 120), ("e4/gw_large", 40)), "e4_gw", HSET_GW)
+    fig_e4((("e4/gw", 120), ("e4/gw_large", 40), ("e4/gw_xxl", 20)), "e4_gw", HSET_GW)
+
+
+def _epochs(run_dirs) -> pd.Series:
+    out = {}
+    for d in run_dirs:
+        m = json.loads((Path(d) / "metrics.json").read_text())
+        out[str(d)] = m["training"][-1]["epochs"]
+    return pd.Series(out)
+
+
+def fig_e4_budget():
+    """5k vs 20k training simulations at 4096 clones per endpoint, best design per
+    simulator, same five datasets (paired by seed)."""
+    cases = [("gw", "[4,6,10]", "GW {4,6,10}"), ("bh", "[96,144,240]", "BH {96,144,240} h")]
+    runs_all, par_all = [], []
+    for sim, hs, lab in cases:
+        require(f"e4/{sim}_xxl", 20)
+        require(f"e4/{sim}_xxl_20k", 5)
+        for rel, bud in [(f"e4/{sim}_xxl", "5k"), (f"e4/{sim}_xxl_20k", "20k")]:
+            r, q = load(rel)
+            keep = ov(r, "design.horizons").str.replace(" ", "") == hs
+            r = r[keep].assign(case=lab, budget=bud)
+            r["epochs"] = r.run.map(_epochs(r.run))
+            q = q[q.run.isin(r.run)].assign(case=lab, budget=bud)
+            runs_all.append(r)
+            par_all.append(q)
+    runs = pd.concat(runs_all, ignore_index=True)
+    par = pd.concat(par_all, ignore_index=True)
+    par = par[par.inferred.astype(bool)]
+    panels = [("BH {96,144,240} h", "A.div_AA", "posterior mean", 0.55),
+              ("BH {96,144,240} h", "A.mean_lifetime", "posterior mean", 20.0),
+              ("GW {4,6,10}", "B.to_A", "abs_error", None),
+              ("GW {4,6,10}", None, "sbc_mean_abs_coverage_error", None)]
+    fig, axes = plt.subplots(1, 4, figsize=(W_FULL, 1.9), gridspec_kw=dict(wspace=0.55))
+    xs = {"5k": 0, "20k": 1}
+    for ax, (case, par_name, what, tv) in zip(axes, panels, strict=True):
+        if par_name is None:
+            d = runs[runs.case == case][["seed", "budget", what]].rename(columns={what: "y"})
+            d["e"] = 0.0
+            title, ylab = "GW: SBC coverage error", "mean |coverage error|"
+        else:
+            q = par[(par.case == case) & (par.parameter == par_name)]
+            if what == "abs_error":
+                d = q[["seed", "budget", "abs_error"]].rename(columns={"abs_error": "y"})
+                d["e"] = 0.0
+                title, ylab = f"GW: {PRETTY[par_name]} error", "|posterior mean − truth|"
+            else:
+                d = q[["seed", "budget", "posterior_mean", "posterior_std", "covered"]].rename(
+                    columns={"posterior_mean": "y", "posterior_std": "e"})
+                title = f"BH: {PRETTY[par_name]}"
+                ylab = "posterior mean ± sd"
+        for k, (seed, t) in enumerate(d.groupby("seed")):
+            t = t.assign(x=t.budget.map(xs)).sort_values("x")
+            off = 0.05 * (k - 2)
+            ax.plot(t.x + off, t.y, color=AXIS, lw=0.7, zorder=1)
+            ax.errorbar(t.x + off, t.y, yerr=t.e, fmt="none", ecolor=MUTED, elinewidth=0.6,
+                        zorder=2)
+            for _, row in t.iterrows():
+                filled = bool(row.get("covered", True))
+                c = BLUE if row.budget == "5k" else ORANGE
+                ax.scatter(row.x + off, row.y, s=16, zorder=3, lw=0.8, ec=c,
+                           color=c if filled else "white")
+        m = d.groupby("budget").y.mean()
+        for b, x in xs.items():
+            ax.plot([x - 0.18, x + 0.18], [m[b], m[b]], color=INK, lw=1.4, zorder=4)
+        if tv is not None:
+            truth_line(ax, tv)
+        ax.set_xticks([0, 1], ["5k sims", "20k sims"])
+        ax.set_xlim(-0.45, 1.45)
+        ax.grid(axis="x", visible=False)
+        ax.set_title(title, fontsize=7.2)
+        ax.set_ylabel(ylab, fontsize=6.5)
+        if what in ("abs_error", "sbc_mean_abs_coverage_error"):
+            ax.set_ylim(bottom=0)
+    save(fig, "e4_budget")
+    # comparison table (means over the 5 seeds)
+    rows = []
+    for case in [c[2] for c in cases]:
+        for bud in ["5k", "20k"]:
+            r = runs[(runs.case == case) & (runs.budget == bud)]
+            q = par[(par.case == case) & (par.budget == bud)]
+            row = dict(case=case, budget=bud, runs=len(r),
+                       mae_probabilities=r.mae_probabilities.mean(),
+                       rel_error_lifetimes=r.rel_error_scalars.mean(),
+                       mean_contraction=r.mean_contraction.mean(),
+                       coverage_run=r.coverage90_reference.mean(),
+                       sbc_error=r.sbc_mean_abs_coverage_error.mean(),
+                       support=r.posterior_support_mass.mean(),
+                       epochs_max=r.epochs.max(), epochs_mean=r.epochs.mean())
+            for pn in ["B.to_A", "A.div_AA", "A.mean_lifetime", "B.mean_lifetime"]:
+                t = q[q.parameter == pn]
+                if len(t):
+                    row[f"{pn}_mean"] = t.posterior_mean.mean()
+                    row[f"{pn}_abs_error"] = t.abs_error.mean()
+                    row[f"{pn}_covered"] = int(t.covered.sum())
+            rows.append(row)
+    table(pd.DataFrame(rows), "e4_budget")
 
 
 # ------------------------------------------------------------------- ridge
@@ -1523,7 +1635,7 @@ FIGURES = [
     fig_e1a_type, fig_e1a_number, fig_e1c, fig_e2, fig_e2c_ignore, fig_e3a, fig_e3b,
     fig_e3c, fig_detectability,
     # pending sweeps: built only once complete
-    fig_e4_gw, fig_e1c_gw, fig_e1a_number_gw, fig_e2_gw, fig_e2c_model, fig_e2c_traj,
+    fig_e4_gw, fig_e4_budget, fig_e1c_gw, fig_e1a_number_gw, fig_e2_gw, fig_e2c_model, fig_e2c_traj,
     fig_e2c_arms, fig_detectability_gw,
     fig_e2c_prior, fig_x5a_priors, fig_x5a, fig_x5b, fig_x5c, fig_x5d,
 ]

@@ -1,0 +1,5 @@
+case,budget,runs,mae_probabilities,rel_error_lifetimes,mean_contraction,coverage_run,sbc_error,support,epochs_max,epochs_mean,B.to_A_mean,B.to_A_abs_error,B.to_A_covered,A.div_AA_mean,A.div_AA_abs_error,A.div_AA_covered,A.mean_lifetime_mean,A.mean_lifetime_abs_error,A.mean_lifetime_covered,B.mean_lifetime_mean,B.mean_lifetime_abs_error,B.mean_lifetime_covered
+"GW {4,6,10}",5k,5,0.01994,,0.9643,0.9333,0.06361,0.5918,201,162.4,0.7779,0.04712,4,0.5421,0.008433,5,,,,,,
+"GW {4,6,10}",20k,5,0.01652,,0.9767,0.9333,0.04407,0.7839,201,190.2,0.793,0.03193,5,0.5457,0.004414,5,,,,,,
+"BH {96,144,240} h",5k,5,0.05684,0.268,0.8423,0.7636,0.03937,0.5591,171,159.8,0.7177,0.08229,5,0.3979,0.1521,0,17.04,2.955,0,18.36,11.64,2
+"BH {96,144,240} h",20k,5,0.04932,0.1535,0.8933,0.9273,0.03967,0.5134,201,201,0.704,0.09598,5,0.4946,0.05539,3,18.87,1.132,3,22.49,7.513,5
