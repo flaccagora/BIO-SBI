@@ -177,7 +177,8 @@ def zero_line(ax):
     ax.axhline(0, color=AXIS, lw=0.8, zorder=1)
 
 
-def heat(ax, mat: pd.DataFrame, cmap, norm=None, fmt="{:.2f}", vmin=None, vmax=None, text=True):
+def heat(ax, mat: pd.DataFrame, cmap, norm=None, fmt="{:.2f}", vmin=None, vmax=None, text=True,
+         fs=6.3):
     """Annotated heat map; near-white cells get dark text, dark cells white."""
     vals = mat.values.astype(float)
     im = ax.imshow(vals, cmap=cmap, norm=norm, vmin=None if norm else vmin,
@@ -196,7 +197,7 @@ def heat(ax, mat: pd.DataFrame, cmap, norm=None, fmt="{:.2f}", vmin=None, vmax=N
                     continue
                 rgba = im.cmap(im.norm(v))
                 lum = 0.2126 * rgba[0] + 0.7152 * rgba[1] + 0.0722 * rgba[2]
-                ax.text(j, i, fmt.format(v), ha="center", va="center", fontsize=6.3,
+                ax.text(j, i, fmt.format(v), ha="center", va="center", fontsize=fs,
                         color="white" if lum < 0.5 else INK)
     return im
 
@@ -346,30 +347,38 @@ HSET_BH = {"[240]": "d10", "[144,240]": "d6,10", "[144,240,336]": "d6,10,14",
 HSET_GW = {"[10]": "g10", "[6,10]": "g6,10", "[6,10,14]": "g6,10,14", "[4,6,10]": "g4,6,10"}
 
 
-def e4_frames(rel):
-    runs, params = load(rel)
+E4_CLONES = [16, 32, 64, 128, 256, 512, 1024, 2048]
+
+
+def e4_frames(rels):
+    """Pooled runs/parameters of the E4 folders (16-512 and the 1024/2048 extension)."""
+    loaded = [load(r) for r in rels]
+    runs = pd.concat([r for r, _ in loaded], ignore_index=True)
+    params = pd.concat([q for _, q in loaded], ignore_index=True)
     p = params[params.inferred.astype(bool)].copy()
     p["clones"] = ov(p, "design.clones").astype(int)
     p["hset"] = ov(p, "design.horizons").str.replace(" ", "")
     return runs, p
 
 
-def fig_e4(rel="e4/bh", name="e4_bh", hmap=HSET_BH, expected=120):
-    require(rel, expected)
-    _, p = e4_frames(rel)
+def fig_e4(rels=(("e4/bh", 120), ("e4/bh_large", 40)), name="e4_bh", hmap=HSET_BH):
+    for rel, expected in rels:
+        require(rel, expected)
+    _, p = e4_frames([rel for rel, _ in rels])
     p["hset"] = p.hset.map(hmap)
     pr = p[p.parameter.map(is_prob)]
     per_run = pr.groupby(["run", "clones", "hset"]).agg(con=("contraction", "mean"),
                                                        mae=("abs_error", "mean")).reset_index()
     g = per_run.groupby(["hset", "clones"])[["con", "mae"]].mean().reset_index()
     order = list(hmap.values())
-    fig, axes = plt.subplots(1, 2, figsize=(W_FULL, 1.9), gridspec_kw=dict(wspace=0.35))
+    fig, axes = plt.subplots(1, 2, figsize=(W_FULL, 2.0), gridspec_kw=dict(wspace=0.3))
     for ax, col, lab, cmap, fmt in [(axes[0], "con", "mean contraction (probabilities)", SEQ,
                                      "{:.2f}"),
                                     (axes[1], "mae", "MAE (probabilities)", SEQ.reversed(),
                                      "{:.3f}")]:
         mat = g.pivot(index="hset", columns="clones", values=col).reindex(order)
-        heat(ax, mat, cmap, fmt=fmt)
+        heat(ax, mat, cmap, fmt=fmt, fs=5.4)
+        ax.tick_params(axis="x", labelsize=6, labelrotation=45)
         ax.set_xlabel("clones per endpoint")
         ax.set_title(lab)
     axes[0].set_ylabel("endpoints")
@@ -392,7 +401,7 @@ def fig_e4(rel="e4/bh", name="e4_bh", hmap=HSET_BH, expected=120):
                         lw=1.2, elinewidth=0.7, label=h)
         truth_line(ax, tv)
         ax.set_xscale("log", base=2)
-        ax.set_xticks([16, 32, 64, 128, 256, 512], ["16", "32", "64", "128", "256", "512"])
+        ax.set_xticks(E4_CLONES, [str(c) for c in E4_CLONES], fontsize=6, rotation=45)
         ax.minorticks_off()
         ax.set_xlabel("clones per endpoint")
         ax.set_title(f"{PRETTY[par]} (truth {tv:g})")
@@ -404,7 +413,7 @@ def fig_e4(rel="e4/bh", name="e4_bh", hmap=HSET_BH, expected=120):
 
 
 def fig_e4_gw():
-    fig_e4("e4/gw", "e4_gw", HSET_GW, 120)
+    fig_e4((("e4/gw", 120), ("e4/gw_large", 40)), "e4_gw", HSET_GW)
 
 
 # ------------------------------------------------------------------- ridge
