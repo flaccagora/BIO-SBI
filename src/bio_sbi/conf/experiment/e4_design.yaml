@@ -24,6 +24,12 @@
 #       'design.horizons=[240],[144,240],[96,144,240],[144,240,336]' \
 #       hydra.sweep.dir=results/e4/bh_xxl
 # 4 horizon sets x 5 seeds = 20 runs per simulator.
+# Simulation-budget check at 4096 clones (best design per simulator, same datasets):
+#   bio-sbi -m +experiment=e4_design design.clones=4096 'design.horizons=[4,6,10]' \
+#       budget.simulations=20000 seed=0,1,2,3,4 hydra.sweep.dir=results/e4/gw_xxl_20k
+#   bio-sbi -m +experiment=e4_design simulator=bellman_harris design.clones=4096 \
+#       'design.horizons=[96,144,240]' budget.simulations=20000 seed=0,1,2,3,4 \
+#       hydra.sweep.dir=results/e4/bh_xxl_20k
 defaults:
   - override /law: reversible_ab
   - override /design: real_like
