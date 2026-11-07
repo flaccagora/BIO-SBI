@@ -1,0 +1,255 @@
+\documentclass[11pt]{article}
+\usepackage[a4paper,margin=2.3cm]{geometry}
+\usepackage{amsmath,mathtools,amssymb,amsthm,booktabs,microtype,xcolor}
+\usepackage[colorlinks,linkcolor=blue!50!black,citecolor=blue!50!black]{hyperref}
+\newtheorem{theorem}{Theorem}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{corollary}[theorem]{Corollary}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{computation}[theorem]{Computation}
+\theoremstyle{remark}
+\newtheorem{remark}[theorem]{Remark}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\Var}{\operatorname{Var}}
+\newcommand{\Cov}{\operatorname{Cov}}
+\newcommand{\KL}{\operatorname{KL}}
+\newcommand{\code}[1]{\texttt{\detokenize{#1}}}
+\title{Identifiability of B's row from endpoint counts:\\ what can be proved, and what the E0 experiments actually show}
+\author{BIO-SBI --- note accompanying \code{report_sequential}, Part I}
+\date{2026-11-07}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+The sequential report (Part I: E0, X5a, X5c, E0 at 4096 clones) concludes that, with B divisions free, B's row is \emph{structurally} non-identifiable from endpoint counts. We study the Galton--Watson (GW) model formally and with the exact likelihood (probability generating functions, no simulation). The results split the claim in two. (i) \emph{What is true and provable}: B's row enters the mean dynamics only through its mean offspring vector, so first moments are blind to a 3-dimensional family that trades switching for division (Theorem~\ref{thm:mean}); within that family the row is fixed by its second factorial moments, and B divisions always inflate clone-size variance (Theorem~\ref{thm:second}); and the variance of the Kesten--Stigum limit sees the second moments of \emph{both} rows through a single scalar, so A's row can absorb B's (Theorem~\ref{thm:varw}). (ii) \emph{What is not true}: the model is not structurally non-identifiable. The exact Fisher information at the truth is positive definite at every endpoint $n=2,\dots,12$ (Computation~\ref{comp:fim}), so the parameters are locally identifiable. The non-identifiability is \emph{practical}. At the real-like design the Cram\'er--Rao bound on B$\to$A is 0.28, larger than the prior sd. Globally, the best model in which B divides with probability 0.5 is only 0.36 nats worse than the truth over all 266 organoids (Computation~\ref{comp:profile}). At 4096 clones on three endpoints the bound is 0.023, and the exact likelihood rejects the NPE answer by 116--178 nats on the very datasets used in the report; the \code{moments} summaries still separate it (97\% accuracy). That failure is in the amortised inference, not in the model. Finally, the information about B's row decays geometrically with the endpoint generation: one endpoint at generation 2--3 gives 10--15 times the information of the real-like design with the same number of organoids.
+\end{abstract}
+
+\tableofcontents
+
+%======================================================================
+\section{Setting}\label{sec:setting}
+Types A (= LGR5$^+$, index 1) and B (= KRT20$^+$, index 2). Each living cell has one event per generation, drawn from its type's \emph{row}: death, persist, switch, or division into AA, AB, BB. Write the rows as
+\[
+\pi_A=(d_A,p_A,t_A,a_A,b_A,c_A),\qquad \pi_B=(d_B,p_B,q,a_B,b_B,c_B),
+\]
+in the order death, persist, switch (A$\to$B resp.\ B$\to$A), div\_AA, div\_AB, div\_BB. With $s=(x,y)$ marking A and B, the offspring probability generating functions (pgfs) are
+\begin{align*}
+f_A(x,y)&=d_A+p_Ax+t_Ay+a_Ax^2+b_Axy+c_Ay^2,\\
+f_B(x,y)&=d_B+p_By+q\,x+a_Bx^2+b_Bxy+c_By^2 .
+\end{align*}
+$Z_n=(Z_{n,A},Z_{n,B})$ is the clone at generation $n$ from one A founder; its pgf is $F^A_n$ with $F_n=f\circ F_{n-1}$, $F_0=\mathrm{id}$. An endpoint $n$ contributes $N_n$ i.i.d.\ clones from the law of $Z_n$ \emph{conditioned on $Z_n\neq 0$} (detected clones, perfect capture). A design is $\mathcal D=\{(n,N_n)\}$. The free parameter is $\theta=(\pi_A,\pi_B)\in\Delta_5\times\Delta_5$ (dimension 10; \code{two_type}). Fixing $a_B=b_B=c_B=0$ gives \code{reversible_ab} (dimension 7).
+
+The truth used throughout E0/X5/E4 is
+\[
+\theta^\star:\ \pi_A=(.03,.03,.05,.55,.05,.29),\quad \pi_B=(.10,.10,.80,0,0,0),
+\]
+which lies on the boundary of $\Delta_5$ for B (no B divisions). Mean matrix $M_{kj}=\partial_j f_k(1,1)$, Perron root $\rho$, right/left Perron vectors $r,u$ ($Mr=\rho r$, $uM=\rho u$, $u\cdot r=1$). At $\theta^\star$: $M=\begin{psmallmatrix}1.18&0.68\\0.80&0.10\end{psmallmatrix}$, $\rho=1.554$, $\lambda_2=-0.274$, $r\propto(1,0.550)$.
+
+\paragraph{Three notions of identifiability.} We separate them because the report's word ``structural'' conflates them.
+\begin{definition}
+(a) $\theta$ is \emph{structurally (globally) identifiable} from design $\mathcal D$ if $\theta\mapsto (\mathcal L(Z_n\mid Z_n\neq0))_{n\in\mathcal D}$ is injective. (b) It is \emph{locally identifiable} at $\theta^\star$ if this holds in a neighbourhood; a sufficient condition is a positive definite Fisher information $I_{\mathcal D}(\theta^\star)=\sum_n N_n I_n(\theta^\star)$. (c) A parameter is \emph{practically non-identifiable} at design $\mathcal D$ if it is locally identifiable but the attainable precision, e.g.\ the Cram\'er--Rao (CR) bound $\sqrt{g^\top I_{\mathcal D}^{-1}g}$ for a functional with gradient $g$, is no better than the prior spread.
+\end{definition}
+A model that is structurally non-identifiable stays so for every $N$. A practically non-identifiable one becomes identifiable as $N$ grows, at rate $N^{-1/2}$ (Bernstein--von Mises), and better designs move it.
+
+%======================================================================
+\section{Exact results on moments}\label{sec:moments}
+
+\begin{theorem}[Mean fibres]\label{thm:mean}
+For every $n$, $\E Z_n=e_A M^n$, and B's row enters $M$ only through its mean offspring vector
+\[
+\mu_B=(M_{BA},M_{BB})=(q+2a_B+b_B,\ p_B+b_B+2c_B).
+\]
+For fixed $\mu_B$ the admissible B rows form a polytope of dimension 3 (when $\mu_B$ is interior), spanned locally by the moves
+\begin{align*}
+e_1&:\ q\to q-2\varepsilon,\ a_B\to a_B+\varepsilon,\ d_B\to d_B+\varepsilon &&\text{(switch $\to$ divide-into-AA and die)},\\
+e_2&:\ p_B\to p_B-2\varepsilon,\ c_B\to c_B+\varepsilon,\ d_B\to d_B+\varepsilon &&\text{(persist $\to$ divide-into-BB and die)},\\
+e_3&:\ q\to q-\varepsilon,\ p_B\to p_B-\varepsilon,\ b_B\to b_B+\varepsilon &&\text{(switch and persist $\to$ divide-into-AB)}.
+\end{align*}
+Every expected count at every endpoint, and therefore every statistic that depends on the data only through mean counts, is constant on these fibres.
+\end{theorem}
+\begin{proof}
+$\E[Z_{n}\mid Z_{n-1}]=Z_{n-1}M$ gives $\E Z_n=e_AM^n$. The two entries of $\mu_B$ are linear in $\pi_B$, and $\pi_B$ lies in a 5-dimensional simplex. So the fibre is the intersection of the simplex with an affine subspace of codimension 2, which has dimension 3 at interior points. Each $e_i$ keeps $\sum\pi_B=1$ and both entries of $\mu_B$; they are linearly independent.
+\end{proof}
+
+\noindent At the truth only the directions with $\varepsilon\ge0$ are admissible (B divisions $\ge0$). The C2ST alternative of E0 (B$\to$AA $=a$, B$\to$A $=0.8-2a$, B death $=0.1+a$) is exactly $e_1$.
+
+\begin{theorem}[Second moments fix the row; B divisions inflate variance]\label{thm:second}
+Let $G_k=\E[\xi_k\xi_k^\top]-\operatorname{diag}(\mu_k)$ be the second factorial moment matrix of type $k$'s offspring $\xi_k$. Then
+\[
+G_k=\begin{pmatrix}2a_k&b_k\\ b_k&2c_k\end{pmatrix}\qquad(k=A,B),
+\]
+and $\pi_k\mapsto(\mu_k,G_k)$ is an affine bijection from $\Delta_5$ onto its image. Moreover, with $V_k=\Cov(\xi_k)$ and $m_j=e_AM^j$,
+\begin{equation}\label{eq:cov}
+\Cov(Z_n)=\sum_{j=0}^{n-1}(M^\top)^{n-1-j}\Big(\sum_k m_j(k)V_k\Big)M^{n-1-j}.
+\end{equation}
+Along a mean fibre (Theorem~\ref{thm:mean}) only $V_B=G_B+\operatorname{diag}(\mu_B)-\mu_B\mu_B^\top$ changes, by $\Delta G_B$. Starting from a row without B divisions (as $\theta^\star$), every admissible move has $\Delta G_B=\begin{psmallmatrix}2a_B&b_B\\b_B&2c_B\end{psmallmatrix}$ with $a_B,b_B,c_B\ge0$. Hence, for every $w\in\mathbb R^2_{>0}$ (e.g.\ $w=(1,1)$, total clone size) and $n\ge2$,
+\[
+\Var(w\cdot Z_n)\ \text{strictly increases with the B-division mass}\ \delta=a_B+b_B+c_B .
+\]
+\end{theorem}
+\begin{proof}
+The formula for $G_k$ is a direct computation over the six outcomes: only the divisions have two daughters, and $\E[\xi_A(\xi_A-1)]=2a_k$, $\E[\xi_A\xi_B]=b_k$, $\E[\xi_B(\xi_B-1)]=2c_k$. Given $(\mu_k,G_k)$, the three division probabilities are read off $G_k$, then persist and switch off $\mu_k$, and death is the remainder; so the map is an affine bijection. Formula \eqref{eq:cov} is the standard covariance recursion $\Cov(Z_{n})=M^\top\Cov(Z_{n-1})M+\sum_k\E Z_{n-1,k}V_k$ (Harris 1963; Athreya and Ney 1972, Ch.~V), unrolled. Along a fibre $M$ and $\mu_B$ are fixed, so the change is
+\[
+\Delta\Var(w\cdot Z_n)=\sum_{j=1}^{n-1}m_j(B)\,v_j^\top\Delta G_Bv_j,\qquad v_j=M^{n-1-j}w>0,
+\]
+and $v^\top\Delta G_Bv=2a_Bv_A^2+2b_Bv_Av_B+2c_Bv_B^2>0$ whenever $v>0$ and $\delta>0$. Since $t_A+b_A+c_A>0$ we have $m_j(B)>0$ for $j\ge1$.
+\end{proof}
+
+\noindent Theorems~\ref{thm:mean}--\ref{thm:second} explain why the E0 C2ST found the switching/division difference only in clone-size \emph{variability}. They also explain why \code{CohortMeans} cannot work. Its 6 features for 10 parameters are rank deficient by construction, and E0 showed that variance carries the information.
+
+\begin{theorem}[The variance of the growth limit sees one scalar]\label{thm:varw}
+Let $\rho>1$ and $W=\lim_n r\cdot Z_n/\rho^n$ (a.s.\ and in $L^2$, since the offspring have finite variance). Then
+\[
+\Var W=\sum_{k\in\{A,B\}}\beta_k\, r^\top V_k r,\qquad \beta_k=\sum_{j\ge0}\rho^{-2(j+1)}m_j(k).
+\]
+Hence, on the product of the two mean fibres (both rows moved with $M$ fixed), $\Var W$ depends on the six second factorial moments $(G_A,G_B)$ only through the scalar
+\[
+\beta_A\,r^\top G_Ar+\beta_B\,r^\top G_Br .
+\]
+An increase of B's division variance can be cancelled exactly by fewer A divisions. At $\theta^\star$, $\beta=(1.000,\,0.294)$.
+\end{theorem}
+\begin{proof}
+$W_n=r\cdot Z_n/\rho^n$ is a martingale. Its increments $W_{j+1}-W_j=\rho^{-(j+1)}\sum_{\text{cells }c\text{ in gen }j}(r\cdot\xi_c-\rho r_{k(c)})$ are uncorrelated with conditional variance $\rho^{-2(j+1)}\sum_kZ_{j,k}\,r^\top V_kr$. Take expectations and sum (orthogonality of martingale increments). $W_0=r_A$ is deterministic. Along fibres $M$, hence $\rho$, $r$, $m_j$ and $\beta$, are fixed, and $r^\top V_kr=r^\top G_kr+\sum_i\mu_k(i)r_i^2-(\mu_k\cdot r)^2$ changes only through $r^\top G_kr$.
+\end{proof}
+
+\noindent Check against the exact law (\code{scripts/b_row_theory/varW.py}): $\Var(r\cdot Z_n/\rho^n)=0.3263$ ($n=10$), 0.3286 ($n=12$) against the formula $\Var W=0.3302$.
+
+\begin{remark}[What Theorem~\ref{thm:varw} does and does not explain]
+For large clones $Z_n\approx\rho^nWu$. The dominant second-order feature of late endpoints, the spread of clone sizes, therefore constrains A's and B's division variances only jointly. This is the mechanism by which leaving B divisions free biases A's row (E0 at 4096: A persist 0.03 $\to$ 0.16, A$\to$BB 0.29 $\to$ 0.21, \S\ref{sec:e0large}). It is \emph{not} a non-identifiability. The type composition, the early endpoints and the higher moments carry further constraints. A naive compensating move that matches $M$ and $\Var W$ exactly (A: div\_AA and div\_BB $-0.22$, div\_AB $+0.44$) is \emph{easier} to detect than the uncompensated B move: KL 0.17--0.28 vs 0.011--0.016 nats per clone. The cheapest compensations are found numerically in \S\ref{sec:profile}. They raise A \emph{death}, not A persist: B$\to$AA instead of B$\to$A makes extra A cells, and A death removes them. The NPE answer at 4096 (A persist 0.15) is a suboptimal version of the same compensation.
+\end{remark}
+
+%======================================================================
+\section{Exact likelihood: local identifiability and its strength}\label{sec:fim}
+The law of $Z_n$ is computed exactly by evaluating $F^A_n$ on an $L\times L$ grid of roots of unity and applying a 2-D FFT. The polynomial $F_n^A$ has degree $\le 2^n$ in each variable, so $L=2^n+1$ is alias-free. For $n=10$, $L=384$ already reproduces the alias-free result to $10^{-17}$, because the mass beyond 384 cells is below $10^{-14}$. Derivatives $\partial_\theta F_n$ are propagated by forward-mode differentiation through the iteration $F_n=f(F_{n-1})$ and checked against finite differences (relative error $10^{-11}$). Means agree with $e_AM^n$ to machine precision. The Fisher information of the \emph{conditioned} law $\tilde p=p/(1-p_{00})$ is $I_n=\sum_{z\neq0}\tilde p_z\,\nabla\log\tilde p_z\nabla\log\tilde p_z^\top$, in the 10 coordinates ``entry minus death'' of each row. Because $\theta^\star$ is on the boundary, B-division directions are one-sided. A positive definite $I_n$ still gives $\KL(\theta^\star\|\theta)\ge c\,|\theta-\theta^\star|^2$ on the admissible cone near $\theta^\star$. Code: \code{scripts/b_row_theory/}.
+
+\begin{computation}[Local identifiability at $\theta^\star$]\label{comp:fim}
+For every single endpoint $n\in\{2,\dots,10,12\}$ the per-clone Fisher information $I_n(\theta^\star)$ of the 10-parameter model is positive definite (Table~\ref{tab:fim}). Hence $\theta^\star$ is locally identifiable from \emph{any single} endpoint distribution. The smallest eigenvalue is far above floating-point error: its ratio to the largest is $\ge5\times10^{-7}$, against a relative accuracy of $\approx10^{-12}$ for the computed probabilities.
+\end{computation}
+
+\begin{table}[h]\centering\small
+\begin{tabular}{@{}rrrrrr@{}}\toprule
+$n$ & $\lambda_{\min}(I_n)$ & cond.\ $I_n$ & CR var.\ B$\to$A & CR var.\ $\delta$ & $N$ for sd 0.05 \\\midrule
+2 & 0.362 & $1.3\times10^{2}$ & 1.8 & 1.7 & 730 \\
+3 & 0.331 & $1.9\times10^{2}$ & 2.3 & 1.8 & 920 \\
+4 & 0.205 & $5.1\times10^{2}$ & 3.6 & 3.6 & 1\,440 \\
+5 & 0.051 & $3.2\times10^{3}$ & 13 & 14 & 5\,300 \\
+6 & 0.037 & $6.6\times10^{3}$ & 18 & 19 & 7\,200 \\
+7 & 0.015 & $2.3\times10^{4}$ & 41 & 39 & 16\,000 \\
+8 & 0.0090 & $5.3\times10^{4}$ & 64 & 54 & 26\,000 \\
+9 & 0.0044 & $1.4\times10^{5}$ & 124 & 91 & 50\,000 \\
+10 & 0.0023 & $3.5\times10^{5}$ & 218 & 143 & 87\,000 \\
+12 & 0.00067 & $1.8\times10^{6}$ & 686 & 413 & 274\,000 \\\bottomrule
+\end{tabular}
+\caption{Exact per-clone Fisher information at $\theta^\star$, single endpoint, 10 free parameters. CR variance of B$\to$A and of the B-division mass $\delta=a_B+b_B+c_B$ with all other parameters free (profiled), per clone: divide by $N$. Last column: $N$ for a CR sd of 0.05 on B$\to$A from that endpoint alone.}\label{tab:fim}
+\end{table}
+
+\paragraph{The weak direction.} The eigenvector of the smallest eigenvalue of $I_{\mathcal D}$ is, at every design checked, dominated by B$\to$A ($\approx0.8$) against B$\to$AA and B$\to$AB ($-0.2$ to $-0.5$), with a smaller B persist component. This is the switching-versus-division direction of Theorem~\ref{thm:mean} (move $e_1$, partly $e_3$), now as a property of the full likelihood rather than of the means.
+
+\begin{proposition}[Practical non-identifiability at realistic designs]\label{prop:cr}
+CR bounds for B$\to$A and for $\delta$ (all other parameters free) are listed in Table~\ref{tab:cr}. At the real-like and E0 designs the bound on B$\to$A is 0.27--0.28. The uniform Dirichlet prior has sd 0.14 (Beta(1,5)) and the flat prior on B$\to$A has sd 0.29. So no estimator that is unbiased near $\theta^\star$ can be more precise than the prior, and the posterior is necessarily prior-dominated. This is the regime of E0, X5a and X5c, and their conclusions hold there.
+\end{proposition}
+
+\begin{table}[h]\centering\small
+\begin{tabular}{@{}lrrr@{}}\toprule
+design (endpoint: clones) & organoids & CR sd B$\to$A & CR sd $\delta$ \\\midrule
+real-like $\{6{:}165,10{:}101\}$ & 266 & 0.28 & 0.28 \\
+E0 $\{4,8,12\}\times32$ & 96 & 0.27 & 0.28 \\
+$\{4,6,10\}\times512$ & 1\,536 & 0.065 & 0.068 \\
+E0 at 4096: $\{4,6,10\}\times4096$ & 12\,288 & 0.023 & 0.024 \\\midrule
+$\{4\}\times266$ & 266 & 0.12 & 0.12 \\
+$\{3\}\times266$ & 266 & 0.093 & 0.083 \\
+$\{2,3\}\times133$ & 266 & 0.077 & 0.066 \\
+$\{3,6,10\}\times\{89,89,88\}$ & 266 & 0.12 & 0.12 \\
+$\{2,4,6,10\}\times\approx66$ & 266 & 0.093 & 0.091 \\
+$\{3,4\}\times1000$ & 2\,000 & 0.036 & 0.033 \\\bottomrule
+\end{tabular}
+\caption{Cram\'er--Rao sd at $\theta^\star$ (exact Fisher information, GW, generations). Top: designs used in the report. Bottom: same 266 organoids redistributed to early endpoints.}\label{tab:cr}
+\end{table}
+
+\begin{proposition}[The information about B's row is in early generations]\label{prop:decay}
+Per clone, the information about B$\to$A and $\delta$ decreases geometrically with the endpoint. From $n=5$ to $n=12$ the CR variance of B$\to$A grows by a factor 1.4--2.3 per generation (geometric mean 1.76; Table~\ref{tab:fim}), and the condition number of $I_n$ by a factor 2--3.5. Between $n=2$ and $n=4$ the loss is milder (factor 2 in total).
+\end{proposition}
+\noindent \emph{Interpretation.} At small $n$ the counts are small integers, and individual events are visible in the law. A clone $(2,0)$ at $n=2$ arises from A$\to$B$\to$AA but not from A$\to$B$\to$A. As $n$ grows the law of $Z_n$ approaches $\rho^nWu$ plus Gaussian composition noise. Its first moments are blind to the fibres of Theorem~\ref{thm:mean}, and its main second moment ($\Var W$) mixes the two rows (Theorem~\ref{thm:varw}). The geometric rate is a numerical observation over $n\le12$, not a proved asymptotic.
+
+\noindent \emph{Consequence for design.} With the same 266 organoids, an endpoint at generation 2--3 gives a CR sd of 0.08--0.09 on B$\to$A, against 0.28 at $\{6,10\}$: 10--15 times the Fisher information. Adding one early endpoint to $\{6,10\}$ already helps (0.12 for $\{3,6,10\}$). Whether generation 2--3 is reachable in the wet lab (day 2--3 for a $\approx$20\,h A cycle) and whether BH behaves alike are open (\S\ref{sec:open}).
+
+%======================================================================
+\section{E0 at 4096 clones revisited}\label{sec:e0large}
+The report (\S\,``E0 revisited at 4096 clones'') concludes ``structural non-identifiability'' because, at $\{4,6,10\}\times4096$ with a 20k-simulation NPE, B$\to$A stays at 0.17--0.34 (truth 0.8) and the B-division mass at its prior mean. Three exact checks contradict the ``structural'' reading for GW.
+
+\paragraph{1. The bound.} The CR sd is 0.023 (Table~\ref{tab:cr}). NPE reported a posterior sd of 0.11 and a bias of 0.47, which is 20 CR sd.
+
+\paragraph{2. The exact likelihood rejects the NPE answer on the report's own data.} For each run we take the NPE posterior mean $\hat\theta$, renormalise each row, and evaluate the exact conditioned log-likelihood on the stored reference data (\code{reference.npz}, $3\times4096$ clones):
+\begin{center}\small
+\begin{tabular}{@{}lrrrrr@{}}\toprule
+run (seed) & 0 & 1 & 2 & 3 & 4\\\midrule
+20k: $\ell(\theta^\star)-\ell(\hat\theta)$ [nats] & 149.8 & 137.7 & 122.4 & 151.7 & 149.6\\
+5k:\ \ $\ell(\theta^\star)-\ell(\hat\theta)$ [nats] & 168.9 & 164.3 & 116.5 & 177.6 & 170.3\\
+expected, $4096\sum_n\KL_n(\theta^\star\|\hat\theta)$ (20k) & 124 & 141 & 130 & 132 & 139\\\bottomrule
+\end{tabular}
+\end{center}
+A likelihood ratio of $e^{116}$--$e^{178}$ is decisive. The NPE posterior concentrates on parameters that the data exclude. The clean PPC does not contradict this: PPC compares \emph{summaries} within 95\% bands, a far coarser check than the likelihood.
+
+\paragraph{3. The summaries carry the information; the network does not use it.} We simulated 300 datasets at $\theta^\star$ and 300 at $\hat\theta$ (seed 0, 20k) with the \code{moments} summary. A regularised logistic regression separates them with 5-fold CV accuracy \textbf{0.968} (0.722 at 165 clones per endpoint). The most shifted features belong to the earliest endpoint (h4: sd of $\log(1+B)$, median of $\log(1+A)$) and to the A--B correlation. In Gaussian-equivalent terms, accuracy 0.968 corresponds to an expected log-LR of $\approx7$ nats. So the summary keeps about 5\% of the exact 124 nats along this direction, and still more than enough to reject $\hat\theta$ ($\approx900{:}1$). The amortised NPE, trained on 20k draws spread over a 10-dimensional prior, does not resolve this.
+
+\paragraph{Conclusion.} In GW the B row is not structurally non-identifiable. It is \emph{practically} non-identifiable at the designs of E0, X5a, X5c and the real-like design (Proposition~\ref{prop:cr}). At 4096 clones per endpoint it is identifiable from the data, from the exact likelihood and to a useful extent from the summaries, and the failure reported there is an inference failure (amortised NPE with uninformative coverage of the relevant region). The report's recommendations survive: fix or measure B divisions, because realistic designs cannot decide them. Their justification and wording should change (\S\ref{sec:wording}).
+
+%======================================================================
+\section{Profile: how flat is the likelihood away from $\theta^\star$?}\label{sec:profile}
+The Fisher information is local. For the global picture we compute the profile
+\[
+K_{\mathcal D}(\delta)=\min\Big\{\sum_n w_n\KL\big(\tilde p_n(\theta^\star)\,\|\,\tilde p_n(\theta)\big):\ \theta\in\Delta_5\times\Delta_5,\ a_B+b_B+c_B=\delta\Big\},
+\]
+the per-clone cost of the best-fitting model in which B divides with probability $\delta$. All other 9 coordinates are optimised (L-BFGS, three starts, exact law). Then $N\,K(\delta)$ is the expected log-likelihood ratio against the best ``B divides'' explanation with $N$ organoids in total, split in the design's proportions ($w_n=N_n/N$).
+
+\begin{table}[h]\centering\small
+\begin{tabular}{@{}lrrrrrr@{}}\toprule
+B-division mass $\delta$ & 0.02 & 0.05 & 0.1 & 0.2 & 0.3 & 0.5 \\\midrule
+\multicolumn{7}{@{}l}{\emph{real-like} $\{6{:}165,10{:}101\}$ (weights 165/266, 101/266)}\\
+$K(\delta)$ per clone & $9.8\cdot10^{-6}$ & $5.4\cdot10^{-5}$ & $1.9\cdot10^{-4}$ & $5.8\cdot10^{-4}$ & $9.3\cdot10^{-4}$ & $1.36\cdot10^{-3}$ \\
+$266\,K(\delta)$ [nats] & 0.003 & 0.014 & 0.05 & 0.15 & 0.25 & 0.36 \\
+best B$\to$A / A death & 0.78 / 0.04 & 0.76 / 0.05 & 0.71 / 0.07 & 0.62 / 0.10 & 0.55 / 0.12 & 0.39 / 0.16 \\\midrule
+\multicolumn{7}{@{}l}{\emph{E0 at 4096} $\{4,6,10\}$, equal weights}\\
+$K(\delta)$ per clone & $2.9\cdot10^{-5}$ & $1.6\cdot10^{-4}$ & $5.5\cdot10^{-4}$ & $1.6\cdot10^{-3}$ & $2.8\cdot10^{-3}$ & $4.2\cdot10^{-3}$ \\
+$12\,288\,K(\delta)$ [nats] & 0.35 & 1.9 & 6.7 & 20 & 34 & 51 \\
+best B$\to$A / A death & 0.78 / 0.04 & 0.76 / 0.05 & 0.72 / 0.07 & 0.64 / 0.10 & 0.54 / 0.12 & 0.33 / 0.15 \\\bottomrule
+\end{tabular}
+\caption{Profile KL $K(\delta)$ (truth $\delta=0$, B$\to$A $=0.8$, A death 0.03) and the B$\to$A and A death of the best-fitting model at each $\delta$. Expected log-LR of truth vs.\ that model $=$ number of organoids $\times K(\delta)$. Full minimisers: \code{scripts/b_row_theory/profile.jsonl}.}\label{tab:profile}
+\end{table}
+
+\begin{computation}[Global profile]\label{comp:profile}
+(i) $K(\delta)>0$ for every $\delta$ on the grid. Near 0 it matches the Fisher prediction $\delta^2/(2\sigma_\delta^2)$, with $\sigma^2_\delta$ the per-clone CR variance of the design (E0 at 4096: predicted $2.8\cdot10^{-5}$ at $\delta=0.02$, computed $2.9\cdot10^{-5}$). Above $\delta\approx0.2$, $K$ grows sub-quadratically: explanations in which B divides a lot are relatively cheap.
+(ii) \emph{Real-like design:} the best model with $\delta=0.5$ (B$\to$A $=0.39$) has an expected log-LR of only 0.36 nats against the truth, a likelihood ratio of about $1.4$. Every $\delta\le0.5$ is statistically indistinguishable from $\delta=0$ with 266 organoids. This is the non-local form of Proposition~\ref{prop:cr}. Three nats of expected evidence against $\delta=0.5$ would need $\approx2\,200$ organoids in the real-like split, or $\approx720$ split equally over $\{4,6,10\}$.
+(iii) \emph{E0 at 4096:} the same alternative costs 51 nats, so it is excluded. Its parameters (B$\to$A 0.33, A death 0.15, B$\to$AA 0.34) are close to the NPE posterior mean (B$\to$A 0.32, A death 0.09, B$\to$AA 0.21). NPE found the bottom of the valley but not its depth.
+(iv) \emph{The compensation} is mainly move $e_1$ (switch $\to$ divide-into-AA) in B's row, with the extra death \emph{moved to A's row}. A death rises from 0.03 to 0.16 while B death stays at 0.06--0.10. This is the precise form of ``the confounding leaks into A's row''.
+\end{computation}
+
+\noindent X5c (\{6,10\}$\times$\{32,128,512\}) is consistent with this. Using the real-like profile as an approximation (its split differs slightly), 1\,024 organoids give $\approx1.4$ nats of expected evidence against $\delta=0.5$. So its failure is mainly the likelihood's, not only the network's.
+
+%======================================================================
+\section{Suggested changes to the report's wording}\label{sec:wording}
+\begin{itemize}
+\item Replace ``structural non-identifiability'' (E0 at 4096, Part~I summary, ``Decided: structural'') with: \emph{``practically non-identifiable at realistic designs (Cram\'er--Rao sd of B$\to$A 0.27--0.28 > prior sd); locally identifiable in principle (positive definite exact Fisher information); at 4096 clones per endpoint the data and the summaries identify it, but amortised NPE does not.''}
+\item ``A clean PPC is no evidence that the B row is right'' stays true. Add: the exact likelihood ratio against the NPE answer is $e^{120}$--$e^{180}$ on the same data.
+\item ``Biological constraints help more than data'' holds at realistic sizes, with the caveat that more \emph{early} data help much more than more late data (Proposition~\ref{prop:decay}).
+\item E0's first attribution (prior tail) and its revision stay as they are. The revision ``the confounding is the root cause'' is correct as a description of practical non-identifiability.
+\end{itemize}
+
+%======================================================================
+\section{Scope, caveats and open questions}\label{sec:open}
+\begin{itemize}
+\item \textbf{Global identifiability} (injectivity) is not proved. The profile of \S\ref{sec:profile} is numerical evidence over a grid of $\delta$, from finitely many starts.
+\item \textbf{One truth.} All computations are at $\theta^\star$. Theorems~\ref{thm:mean}--\ref{thm:varw} hold for every $\theta$; the Fisher numbers do not. The same scripts compute them at any other truth (e.g.\ the X5a truths).
+\item \textbf{Boundary.} $\theta^\star$ has $\delta=0$ on the boundary. The MLE of $\delta$ is asymptotically a censored normal, and the CR bound is the local scale, not an exact sd.
+\item \textbf{CR vs posterior.} The CR bound concerns unbiased estimators. Posteriors with informative priors can have smaller sd but are then biased, which is the E0/X5 picture. Asymptotically (data dominating) the posterior sd approaches the CR sd.
+\item \textbf{Bellman--Harris.} Not analysed. Continuous lifetimes add a free time scale. The BH ridge of Part~III and the larger B$\to$A error under BH at 4096 suggest weaker information there. An exact BH analysis would need the age-dependent pgf (integral equation), which is not done here.
+\item \textbf{Generations vs days.} The early-endpoint recommendation is in GW generations. Its translation to days, and to what can be counted and typed in 2--8-cell organoids, is a wet-lab question.
+\item \textbf{Inference fix at 4096.} The analysis suggests likelihood-based inference (exact GW likelihood here, or sequential/local NPE around the data), or summaries targeted at early endpoints. It does not show that a particular NPE configuration would succeed.
+\end{itemize}
+
+\raggedright
+\paragraph{Reproducibility.} \code{scripts/b_row_theory/}: \code{gwexact.py} (exact law, derivatives, Fisher information, KL), \code{fisher.py}, \code{fisher2.py} (Tables~\ref{tab:fim}, \ref{tab:cr}), \code{llr.py} (\S\ref{sec:e0large}, item 2; reads \code{results/e4/gw_xxl_two_type_*}), \code{summary_twopoint.py} (item 3), \code{varW.py} (Theorem~\ref{thm:varw} check), \code{profile.py} (\S\ref{sec:profile}). Run with \code{uv run python scripts/b_row_theory/<script>.py} from the repository root.
+
+\end{document}
