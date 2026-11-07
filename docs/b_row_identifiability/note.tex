@@ -15,6 +15,8 @@
 \newcommand{\Cov}{\operatorname{Cov}}
 \newcommand{\KL}{\operatorname{KL}}
 \newcommand{\code}[1]{\texttt{\detokenize{#1}}}
+% Pointer to background material after each result; labels refer to Section "Further reading".
+\newcommand{\sources}[1]{\par\smallskip\noindent{\small\textbf{Background and references.} #1}\par\medskip}
 \title{Identifiability of B's row from endpoint counts:\\ what can be proved, and what the E0 experiments actually show}
 \author{BIO-SBI --- note accompanying \code{report_sequential}, Part I}
 \date{2026-11-07}
@@ -53,6 +55,8 @@ which lies on the boundary of $\Delta_5$ for B (no B divisions). Mean matrix $M_
 \end{definition}
 A model that is structurally non-identifiable stays so for every $N$. A practically non-identifiable one becomes identifiable as $N$ grows, at rate $N^{-1/2}$ (Bernstein--von Mises), and better designs move it.
 
+\sources{Probability generating functions and their derivatives: [B7, Ch.~XI]. The composition rule $F_n=f\circ F_{n-1}$: single type [B1, Ch.~I], [B2, Ch.~I]; several types [B1, Ch.~V], [B2, Ch.~II]; for biologists [B3]. Mean matrix and Perron--Frobenius theory for branching processes: [B1, Ch.~V], [B2, Ch.~II]. Identifiability: non-singular Fisher information implies local identifiability [I1]; structural vs practical [I2, I3]. Bernstein--von Mises and the $N^{-1/2}$ rate: [I6, Ch.~10]. Cram\'er--Rao bound for a function of the parameters: [I5, Ch.~2], [I6, Ch.~8].}
+
 %======================================================================
 \section{Exact results on moments}\label{sec:moments}
 
@@ -74,6 +78,8 @@ $\E[Z_{n}\mid Z_{n-1}]=Z_{n-1}M$ gives $\E Z_n=e_AM^n$. The two entries of $\mu_
 \end{proof}
 
 \noindent At the truth only the directions with $\varepsilon\ge0$ are admissible (B divisions $\ge0$). The C2ST alternative of E0 (B$\to$AA $=a$, B$\to$A $=0.8-2a$, B death $=0.1+a$) is exactly $e_1$.
+
+\sources{$\E Z_n=e_AM^n$ for multitype Galton--Watson processes: [B1, Ch.~V], [B2, Ch.~II], [B4]. The same ``only combinations of fate probabilities are fixed by average clone growth'' phenomenon in clonal data: [C2], [C3].}
 
 \begin{theorem}[Second moments fix the row; B divisions inflate variance]\label{thm:second}
 Let $G_k=\E[\xi_k\xi_k^\top]-\operatorname{diag}(\mu_k)$ be the second factorial moment matrix of type $k$'s offspring $\xi_k$. Then
@@ -99,6 +105,8 @@ and $v^\top\Delta G_Bv=2a_Bv_A^2+2b_Bv_Av_B+2c_Bv_B^2>0$ whenever $v>0$ and $\de
 
 \noindent Theorems~\ref{thm:mean}--\ref{thm:second} explain why the E0 C2ST found the switching/division difference only in clone-size \emph{variability}. They also explain why \code{CohortMeans} cannot work. Its 6 features for 10 parameters are rank deficient by construction, and E0 showed that variance carries the information.
 
+\sources{Factorial moments as derivatives of the pgf at 1: [B7, Ch.~XI]. Second-moment (covariance) recursion for multitype processes: [B2, Ch.~II], [B1, Ch.~V]; a gentler derivation in [B3]. Clone-size variability as the informative quantity in lineage-tracing data: [C2], [C3].}
+
 \begin{theorem}[The variance of the growth limit sees one scalar]\label{thm:varw}
 Let $\rho>1$ and $W=\lim_n r\cdot Z_n/\rho^n$ (a.s.\ and in $L^2$, since the offspring have finite variance). Then
 \[
@@ -116,9 +124,13 @@ $W_n=r\cdot Z_n/\rho^n$ is a martingale. Its increments $W_{j+1}-W_j=\rho^{-(j+1
 
 \noindent Check against the exact law (\code{scripts/b_row_theory/varW.py}): $\Var(r\cdot Z_n/\rho^n)=0.3263$ ($n=10$), 0.3286 ($n=12$) against the formula $\Var W=0.3302$.
 
+\sources{The martingale $r\cdot Z_n/\rho^n$ and its limit $W$: [B1, Ch.~V], [B5]; $L^2$ convergence and the variance of $W$ when offspring have finite variance: [B2, Ch.~II], [B1, Ch.~V]. Orthogonality of martingale increments (the step $\Var W=\sum_j\E(\text{increment}_j^2)$): [P1, Ch.~12]. The single-type version of the formula, $\Var W=\sigma^2/(m^2-m)$, is in [B1, Ch.~I] and [B2, Ch.~I] and is a good warm-up.}
+
 \begin{remark}[What Theorem~\ref{thm:varw} does and does not explain]
 For large clones $Z_n\approx\rho^nWu$. The dominant second-order feature of late endpoints, the spread of clone sizes, therefore constrains A's and B's division variances only jointly. This is the mechanism by which leaving B divisions free biases A's row (E0 at 4096: A persist 0.03 $\to$ 0.16, A$\to$BB 0.29 $\to$ 0.21, \S\ref{sec:e0large}). It is \emph{not} a non-identifiability. The type composition, the early endpoints and the higher moments carry further constraints. A naive compensating move that matches $M$ and $\Var W$ exactly (A: div\_AA and div\_BB $-0.22$, div\_AB $+0.44$) is \emph{easier} to detect than the uncompensated B move: KL 0.17--0.28 vs 0.011--0.016 nats per clone. The cheapest compensations are found numerically in \S\ref{sec:profile}. They raise A \emph{death}, not A persist: B$\to$AA instead of B$\to$A makes extra A cells, and A death removes them. The NPE answer at 4096 (A persist 0.15) is a suboptimal version of the same compensation.
 \end{remark}
+
+\sources{The approximation $Z_n\approx\rho^nWu$ (Kesten--Stigum): [B5], [B1, Ch.~V]; the Gaussian fluctuations of the type composition around $u$: [B8], [B1, Ch.~V]. Parameters compensating each other along a valley (``sloppiness''): [I4].}
 
 %======================================================================
 \section{Exact likelihood: local identifiability and its strength}\label{sec:fim}
@@ -127,6 +139,8 @@ The law of $Z_n$ is computed exactly by evaluating $F^A_n$ on an $L\times L$ gri
 \begin{computation}[Local identifiability at $\theta^\star$]\label{comp:fim}
 For every single endpoint $n\in\{2,\dots,10,12\}$ the per-clone Fisher information $I_n(\theta^\star)$ of the 10-parameter model is positive definite (Table~\ref{tab:fim}). Hence $\theta^\star$ is locally identifiable from \emph{any single} endpoint distribution. The smallest eigenvalue is far above floating-point error: its ratio to the largest is $\ge5\times10^{-7}$, against a relative accuracy of $\approx10^{-12}$ for the computed probabilities.
 \end{computation}
+
+\sources{Inverting a pgf by evaluating it on the unit circle and applying an FFT: [N1]; forward-mode differentiation through an iteration: [N2]. Fisher information and its link to local identifiability: [I1], [I5, Ch.~2]. Score of a conditioned (truncated) distribution: derived from $\log\tilde p=\log p-\log(1-p_{00})$; any treatment of truncated likelihoods, e.g.\ [I9]. Behaviour at a boundary point ($\delta=0$): [I7]. Fisher spectra spanning many decades (Table~\ref{tab:fim}): [I4].}
 
 \begin{table}[h]\centering\small
 \begin{tabular}{@{}rrrrrr@{}}\toprule
@@ -150,6 +164,8 @@ $n$ & $\lambda_{\min}(I_n)$ & cond.\ $I_n$ & CR var.\ B$\to$A & CR var.\ $\delta
 \begin{proposition}[Practical non-identifiability at realistic designs]\label{prop:cr}
 CR bounds for B$\to$A and for $\delta$ (all other parameters free) are listed in Table~\ref{tab:cr}. At the real-like and E0 designs the bound on B$\to$A is 0.27--0.28. The uniform Dirichlet prior has sd 0.14 (Beta(1,5)) and the flat prior on B$\to$A has sd 0.29. So no estimator that is unbiased near $\theta^\star$ can be more precise than the prior, and the posterior is necessarily prior-dominated. This is the regime of E0, X5a and X5c, and their conclusions hold there.
 \end{proposition}
+
+\sources{Cram\'er--Rao bound, scalar and for a function $g(\theta)$ with nuisance parameters, $g^\top I^{-1}g$: [I5, Ch.~2], [I6, Ch.~8]. Fisher information adds over independent observations, so $I_{\mathcal D}=\sum_nN_nI_n$: [I5, Ch.~2]. Practical identifiability: [I2, I3]. Prior vs data at small samples, and why a posterior can beat the CR bound only by being biased: [I6, Ch.~10], [S10]. Comparing designs by the CR variance of one parameter is c-optimal design: [D1], [D2].}
 
 \begin{table}[h]\centering\small
 \begin{tabular}{@{}lrrr@{}}\toprule
@@ -175,6 +191,8 @@ Per clone, the information about B$\to$A and $\delta$ decreases geometrically wi
 
 \noindent \emph{Consequence for design.} With the same 266 organoids, an endpoint at generation 2--3 gives a CR sd of 0.08--0.09 on B$\to$A, against 0.28 at $\{6,10\}$: 10--15 times the Fisher information. Adding one early endpoint to $\{6,10\}$ already helps (0.12 for $\{3,6,10\}$). Whether generation 2--3 is reachable in the wet lab (day 2--3 for a $\approx$20\,h A cycle) and whether BH behaves alike are open (\S\ref{sec:open}).
 
+\sources{Long-time behaviour of the clone ($\rho^nWu$ and composition fluctuations): [B5], [B8], [B1, Ch.~V]. The biological counterpart, long-term clone-size distributions converging to universal scaling forms that forget fate details: [C3], [C4]; using short-term clonal data to resolve fate choices: [C1], [C2]. Choosing measurement times from the Fisher information: [D1], [D2].}
+
 %======================================================================
 \section{E0 at 4096 clones revisited}\label{sec:e0large}
 The report (\S\,``E0 revisited at 4096 clones'') concludes ``structural non-identifiability'' because, at $\{4,6,10\}\times4096$ with a 20k-simulation NPE, B$\to$A stays at 0.17--0.34 (truth 0.8) and the B-division mass at its prior mean. Three exact checks contradict the ``structural'' reading for GW.
@@ -195,6 +213,8 @@ A likelihood ratio of $e^{116}$--$e^{178}$ is decisive. The NPE posterior concen
 \paragraph{3. The summaries carry the information; the network does not use it.} We simulated 300 datasets at $\theta^\star$ and 300 at $\hat\theta$ (seed 0, 20k) with the \code{moments} summary. A regularised logistic regression separates them with 5-fold CV accuracy \textbf{0.968} (0.722 at 165 clones per endpoint). The most shifted features belong to the earliest endpoint (h4: sd of $\log(1+B)$, median of $\log(1+A)$) and to the A--B correlation. In Gaussian-equivalent terms, accuracy 0.968 corresponds to an expected log-LR of $\approx7$ nats. So the summary keeps about 5\% of the exact 124 nats along this direction, and still more than enough to reject $\hat\theta$ ($\approx900{:}1$). The amortised NPE, trained on 20k draws spread over a 10-dimensional prior, does not resolve this.
 
 \paragraph{Conclusion.} In GW the B row is not structurally non-identifiable. It is \emph{practically} non-identifiable at the designs of E0, X5a, X5c and the real-like design (Proposition~\ref{prop:cr}). At 4096 clones per endpoint it is identifiable from the data, from the exact likelihood and to a useful extent from the summaries, and the failure reported there is an inference failure (amortised NPE with uninformative coverage of the relevant region). The report's recommendations survive: fix or measure B divisions, because realistic designs cannot decide them. Their justification and wording should change (\S\ref{sec:wording}).
+
+\sources{Expected log-likelihood ratio $=N\times$KL, and KL as the rate of hypothesis testing (Stein's lemma): [I8, Ch.~11]. Unfaithful (over-confident or biased) NPE posteriors: [S6]; amortised vs sequential or truncated training: [S2, S4]. Why posterior predictive checks on summaries are weak: [S10, Ch.~6]. Classifier two-sample tests: [S11]. Converting a classifier accuracy into a Gaussian-equivalent separation $d'$ (accuracy $=\Phi(d'/2)$) and KL $=d'^2/2$ for equal-variance Gaussians: [S14], [I8, Ch.~8]. Information lost by summary statistics (sufficiency, and how to construct better summaries): [S7], [S8].}
 
 %======================================================================
 \section{Profile: how flat is the likelihood away from $\theta^\star$?}\label{sec:profile}
@@ -227,6 +247,8 @@ best B$\to$A / A death & 0.78 / 0.04 & 0.76 / 0.05 & 0.72 / 0.07 & 0.64 / 0.10 &
 \end{computation}
 
 \noindent X5c (\{6,10\}$\times$\{32,128,512\}) is consistent with this. Using the real-like profile as an approximation (its split differs slightly), 1\,024 organoids give $\approx1.4$ nats of expected evidence against $\delta=0.5$. So its failure is mainly the likelihood's, not only the network's.
+
+\sources{Profile likelihood: [I2], [I9]. Minimising $\KL(\theta^\star\|\theta)$ over a restricted model gives the ``pseudo-true'' parameter that the MLE of that model converges to: [I10], [I6, Ch.~5]. The small-$\delta$ approximation $K(\delta)\approx\delta^2/(2\sigma_\delta^2)$ is the second-order expansion of KL, whose Hessian is the Fisher information: [I8, Ch.~11], [I5, Ch.~2]. L-BFGS-B: [N3, Ch.~7].}
 
 %======================================================================
 \section{Suggested changes to the report's wording}\label{sec:wording}
@@ -263,7 +285,7 @@ The analysis above follows a sequence that applies to any simulator-based model 
 
 %======================================================================
 \section{Further reading}\label{sec:reading}
-Suggested order for a first pass: B3 or B4 (branching processes for biologists), I2 and I3 (identifiability in practice), S1 and S8 (simulation-based inference and its failure modes), then D2. Starred items are the most relevant to this note.
+Suggested order for a first pass: B3 or B4 (branching processes for biologists), I2 and I3 (identifiability in practice), S1 and S8 (simulation-based inference and its failure modes), then D2. Starred items are the most relevant to this note. Each result above ends with a ``Background and references'' paragraph pointing here. Chapter numbers refer to the editions listed. They were given from memory, so check the table of contents if a pointer seems off.
 
 \subsection*{Branching processes (the model)}
 \begin{itemize}
@@ -273,6 +295,8 @@ Suggested order for a first pass: B3 or B4 (branching processes for biologists),
 \item[B4] P.\ Haccou, P.\ Jagers and V.\,A.\ Vatutin, \emph{Branching Processes: Variation, Growth, and Extinction of Populations}, Cambridge University Press, 2005. Population-biology viewpoint; good on multitype growth and extinction.
 \item[B5] H.\ Kesten and B.\,P.\ Stigum, ``A limit theorem for multidimensional Galton--Watson processes'', \emph{Ann.\ Math.\ Statist.}\ 37 (1966) 1211--1223. Origin of $Z_n\approx\rho^nWu$.
 \item[B6] P.\ Guttorp, \emph{Statistical Inference for Branching Processes}, Wiley, 1991. Likelihood and estimation for branching processes, including what can and cannot be estimated from generation counts.
+\item[B7$^\star$] W.\ Feller, \emph{An Introduction to Probability Theory and Its Applications}, Vol.~I, 3rd ed., Wiley, 1968. Ch.~XI: generating functions, moments from derivatives, and the branching-process composition rule, at the most elementary level.
+\item[B8] H.\ Kesten and B.\,P.\ Stigum, ``Additional limit theorems for indecomposable multidimensional Galton--Watson processes'', \emph{Ann.\ Math.\ Statist.}\ 37 (1966) 1463--1481. Central limit theorems for the type composition around the Perron direction.
 \end{itemize}
 
 \subsection*{Clonal dynamics in stem-cell biology (the application)}
@@ -292,6 +316,9 @@ Suggested order for a first pass: B3 or B4 (branching processes for biologists),
 \item[I5] E.\,L.\ Lehmann and G.\ Casella, \emph{Theory of Point Estimation}, 2nd ed., Springer, 1998. Fisher information and the Cram\'er--Rao bound, with proofs.
 \item[I6] A.\,W.\ van der Vaart, \emph{Asymptotic Statistics}, Cambridge University Press, 1998. Asymptotics of the MLE and of posteriors (Bernstein--von Mises): why the CR bound is the right yardstick for large samples.
 \item[I7] S.\,G.\ Self and K.-Y.\ Liang, ``Asymptotic properties of maximum likelihood estimators and likelihood ratio tests under nonstandard conditions'', \emph{J.\ Amer.\ Statist.\ Assoc.}\ 82 (1987) 605--610. Parameters on the boundary (here $\delta=0$).
+\item[I8$^\star$] T.\,M.\ Cover and J.\,A.\ Thomas, \emph{Elements of Information Theory}, 2nd ed., Wiley, 2006. Ch.~11 (information theory and statistics): KL divergence as the expected log-likelihood ratio, Stein's lemma, and the link between KL and Fisher information. Ch.~8: relative entropy of continuous (e.g.\ Gaussian) distributions.
+\item[I9] Y.\ Pawitan, \emph{In All Likelihood: Statistical Modelling and Inference Using Likelihood}, Oxford University Press, 2001. Likelihood-based inference for applied scientists: Fisher information, profile likelihood, likelihood ratios. A good textbook companion to [I2].
+\item[I10] H.\ White, ``Maximum likelihood estimation of misspecified models'', \emph{Econometrica} 50 (1982) 1--25. The KL-closest (``pseudo-true'') parameter of a restricted or wrong model, as computed in \S\ref{sec:profile}.
 \end{itemize}
 
 \subsection*{Simulation-based inference: methods, summaries, diagnostics}
@@ -309,6 +336,15 @@ Suggested order for a first pass: B3 or B4 (branching processes for biologists),
 \item[S11] D.\ Lopez-Paz and M.\ Oquab, ``Revisiting classifier two-sample tests'', ICLR 2017. The C2ST used in E0 and the two-point test of \S\ref{sec:e0large}.
 \item[S12] S.\,N.\ Wood, ``Statistical inference for noisy nonlinear ecological systems'', \emph{Nature} 466 (2010) 1102--1104. Synthetic likelihood: a Gaussian model of the summaries. Note its bias with noisy finite-difference derivatives, which made us drop such an estimate here.
 \item[S13] A.\ Tejero-Cantero et al., ``sbi: A toolkit for simulation-based inference'', \emph{J.\ Open Source Softw.}\ 5 (2020) 2505. The library used by this project.
+\item[S14] D.\,M.\ Green and J.\,A.\ Swets, \emph{Signal Detection Theory and Psychophysics}, Wiley, 1966. The discriminability $d'$ and its relation to classification accuracy for two Gaussian classes.
+\end{itemize}
+
+\subsection*{Probability and numerical methods}
+\begin{itemize}
+\item[P1] D.\ Williams, \emph{Probability with Martingales}, Cambridge University Press, 1991. Ch.~12: martingales bounded in $L^2$ and orthogonality of increments, used in Theorem~\ref{thm:varw}. Also a short treatment of the Galton--Watson martingale.
+\item[N1] J.\ Abate and W.\ Whitt, ``Numerical inversion of probability generating functions'', \emph{Oper.\ Res.\ Lett.}\ 12 (1992) 245--251. Recovering probabilities from a pgf on a circle by discrete Fourier transform, with aliasing control: the method of \code{gwexact.py}.
+\item[N2] A.\ Griewank and A.\ Walther, \emph{Evaluating Derivatives: Principles and Techniques of Algorithmic Differentiation}, 2nd ed., SIAM, 2008. Forward-mode (tangent) differentiation, as used for $\partial_\theta F_n$.
+\item[N3] J.\ Nocedal and S.\,J.\ Wright, \emph{Numerical Optimization}, 2nd ed., Springer, 2006. Ch.~7: limited-memory BFGS, the optimiser of the profile.
 \end{itemize}
 
 \subsection*{Experimental design}
