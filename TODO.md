@@ -279,7 +279,9 @@ for each parameter?
 
 ## X. Cross-cutting checks (after E1–E4, on the configurations that matter)
 
-- [ ] **X1 – Methods**: NPE vs NLE vs NRE (and sequential NPE) at the baseline and at
+- [x] **X1 – Methods** (`results/x1/`, DONE: identifiability and flagged/silent pattern
+      are method-independent; NPE best calibrated and fastest; SNPE hangs when the
+      posterior leaves the prior; NLE/NRE less calibrated at 5k): NPE vs NLE vs NRE (and sequential NPE) at the baseline and at
       the worst realistic error setting (`+experiment=compare_methods`). NLE/NRE with
       `budget.sbc_cases=50`.
       Proposed scope (2026-11-06; all results so far are amortised NPE): rerun the
@@ -299,7 +301,8 @@ for each parameter?
       GW ↔ hours mapping implemented (`simulator=galton_watson_hours`,
       `hours_per_generation` τ, h → round_half_up(h/τ) generations); preset
       `x3_gw_fit_bh` sweeps τ ∈ {16, 20, 24, 30} × 5 seeds, BH control arm in its header.
-- [ ] **X4 – Combined errors**: the realistic combination (organoid death + `e` + C +
+- [x] **X4 – Combined errors** (`results/x4/`, DONE: ridge ≈ 0.08 MAE + assay errors ≈ 0.02,
+      none flagged; modelling founders makes it worse; hidden C weakly flagged): the realistic combination (organoid death + `e` + C +
       lifetime CV) at the real design, `budget=full`, 5 seeds. This is the error budget
       to quote alongside the real-data fit.
 - [x] **X5 – Role of the prior** (`results/x5/`): truth position × prior shape (X5a),
