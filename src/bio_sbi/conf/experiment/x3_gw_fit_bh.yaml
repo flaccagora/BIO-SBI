@@ -9,11 +9,9 @@
 # (no rounding warning: every |h / tau - g| <= 0.25).
 #   bio-sbi -m +experiment=x3_gw_fit_bh hydra.sweep.dir=results/x3/gw
 # Control arm, BH inference on the same data (same seeds, so same reference datasets):
-#   bio-sbi -m +experiment=x3_gw_fit_bh simulator=bellman_harris \
-#     '~simulator.model.hours_per_generation' hours_per_generation=null \
-#     hydra.sweep.dir=results/x3/bh_control
-# (the command-line hours_per_generation=null replaces the tau sweep; the `~` removes
-# the GW-only constructor argument from the BH inference model.)
+#   bio-sbi -m simulator=bellman_harris law=reversible_ab design=real_like budget=dev \
+#     seed=0,1,2,3,4 hydra.sweep.dir=results/x3/bh_control
+#   (plain well-specified BH config: same data model, truth and data seeds)
 # GW arm: 4 tau x 5 seeds = 20 runs; control: 5 runs.
 defaults:
   - override /simulator: galton_watson_hours
