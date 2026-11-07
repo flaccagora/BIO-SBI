@@ -249,6 +249,74 @@ best B$\to$A / A death & 0.78 / 0.04 & 0.76 / 0.05 & 0.72 / 0.07 & 0.64 / 0.10 &
 \item \textbf{Inference fix at 4096.} The analysis suggests likelihood-based inference (exact GW likelihood here, or sequential/local NPE around the data), or summaries targeted at early endpoints. It does not show that a particular NPE configuration would succeed.
 \end{itemize}
 
+%======================================================================
+\section{A toolkit for similar situations}\label{sec:toolkit}
+The analysis above follows a sequence that applies to any simulator-based model where a parameter ``is not recovered''. Each step names the readings in \S\ref{sec:reading} that teach it.
+\begin{enumerate}
+\item \textbf{Look for exact invariances first} (moments, symmetries). Which parameter combinations leave the mean, the variance, etc.\ unchanged? (Theorems~\ref{thm:mean}--\ref{thm:varw}; [B1, B2, B5].)
+\item \textbf{Separate structural from practical.} Is the Fisher information singular (structural, at least locally), or just small? A singular information means a flat likelihood; a small one means more or better data. ([I1--I4].)
+\item \textbf{Profile the likelihood} along the suspect direction, re-optimising everything else. It shows how deep the valley is, globally and not only near the truth, and which other parameters compensate. ([I2, I3].)
+\item \textbf{Compare the method with the bound.} If the posterior is much wider or more biased than the Cram\'er--Rao bound, the method is losing information. Check where: exact likelihood ratio on the observed data, then a classifier two-sample test on the summaries, then the network. ([S5--S8, S11].)
+\item \textbf{Use the information to design.} Fisher information per organoid and per endpoint says which measurements help; this is (local) optimal experimental design. ([D1, D2].)
+\item \textbf{Treat clean diagnostics with care.} SBC averages over the prior, and a PPC on summaries is coarser than the likelihood. Neither shows identifiability. ([S6, S9, S10].)
+\end{enumerate}
+
+%======================================================================
+\section{Further reading}\label{sec:reading}
+Suggested order for a first pass: B3 or B4 (branching processes for biologists), I2 and I3 (identifiability in practice), S1 and S8 (simulation-based inference and its failure modes), then D2. Starred items are the most relevant to this note.
+
+\subsection*{Branching processes (the model)}
+\begin{itemize}
+\item[B1$^\star$] K.\,B.\ Athreya and P.\,E.\ Ney, \emph{Branching Processes}, Springer, 1972 (Dover reprint 2004). Ch.~V: multitype processes, the mean matrix, moment recursions and the Kesten--Stigum limit, i.e.\ the background of Theorems~\ref{thm:second} and~\ref{thm:varw}.
+\item[B2] T.\,E.\ Harris, \emph{The Theory of Branching Processes}, Springer, 1963. The classical source for probability generating functions and the covariance recursion~\eqref{eq:cov}; also covers age-dependent (Bellman--Harris) processes.
+\item[B3$^\star$] M.\ Kimmel and D.\,E.\ Axelrod, \emph{Branching Processes in Biology}, 2nd ed., Springer, 2015. The most accessible entry point; cell proliferation, multitype and age-dependent models, with biological examples.
+\item[B4] P.\ Haccou, P.\ Jagers and V.\,A.\ Vatutin, \emph{Branching Processes: Variation, Growth, and Extinction of Populations}, Cambridge University Press, 2005. Population-biology viewpoint; good on multitype growth and extinction.
+\item[B5] H.\ Kesten and B.\,P.\ Stigum, ``A limit theorem for multidimensional Galton--Watson processes'', \emph{Ann.\ Math.\ Statist.}\ 37 (1966) 1211--1223. Origin of $Z_n\approx\rho^nWu$.
+\item[B6] P.\ Guttorp, \emph{Statistical Inference for Branching Processes}, Wiley, 1991. Likelihood and estimation for branching processes, including what can and cannot be estimated from generation counts.
+\end{itemize}
+
+\subsection*{Clonal dynamics in stem-cell biology (the application)}
+\begin{itemize}
+\item[C1$^\star$] H.\,J.\ Snippert et al., ``Intestinal crypt homeostasis results from neutral competition between symmetrically dividing Lgr5 stem cells'', \emph{Cell} 143 (2010) 134--144. LGR5$^+$ clone-size data interpreted with stochastic fate models.
+\item[C2] E.\ Clayton et al., ``A single type of progenitor cell maintains normal epidermis'', \emph{Nature} 446 (2007) 185--189. A classic inference of division and fate probabilities from clone-size distributions.
+\item[C3] A.\,M.\ Klein and B.\,D.\ Simons, ``Universal patterns of stem cell fate in cycling adult tissues'', \emph{Development} 138 (2011) 3103--3111. Why clone-size distributions often fix only some combinations of fate parameters.
+\item[C4] S.\ Rulands and B.\,D.\ Simons, ``Tracing cellular dynamics in tissue development, maintenance and disease'', \emph{Curr.\ Opin.\ Cell Biol.}\ 43 (2016) 38--45. Short review of lineage tracing and its quantitative analysis.
+\end{itemize}
+
+\subsection*{Identifiability, Fisher information, profile likelihood}
+\begin{itemize}
+\item[I1] T.\,J.\ Rothenberg, ``Identification in parametric models'', \emph{Econometrica} 39 (1971) 577--591. Local identifiability $\Leftrightarrow$ non-singular Fisher information (under regularity), the basis of Computation~\ref{comp:fim}.
+\item[I2$^\star$] A.\ Raue et al., ``Structural and practical identifiability analysis of partially observed dynamical models by exploiting the profile likelihood'', \emph{Bioinformatics} 25 (2009) 1923--1929. The structural vs practical distinction and the profile-likelihood method used in \S\ref{sec:profile}.
+\item[I3$^\star$] F.-G.\ Wieland, A.\,L.\ Hauber, M.\ Rosenblatt, C.\ T\"onsing and J.\ Timmer, ``On structural and practical identifiability'', \emph{Curr.\ Opin.\ Syst.\ Biol.}\ 25 (2021) 60--69. A recent, readable review of the same distinction, with pitfalls.
+\item[I4] R.\,N.\ Gutenkunst et al., ``Universally sloppy parameter sensitivities in systems biology models'', \emph{PLoS Comput.\ Biol.}\ 3 (2007) e189; and M.\,K.\ Transtrum et al., ``Perspective: Sloppiness and emergent theories in physics, biology, and beyond'', \emph{J.\ Chem.\ Phys.}\ 143 (2015) 010901. Why Fisher eigenvalues spread over many decades (cf.\ Table~\ref{tab:fim}) and what that means.
+\item[I5] E.\,L.\ Lehmann and G.\ Casella, \emph{Theory of Point Estimation}, 2nd ed., Springer, 1998. Fisher information and the Cram\'er--Rao bound, with proofs.
+\item[I6] A.\,W.\ van der Vaart, \emph{Asymptotic Statistics}, Cambridge University Press, 1998. Asymptotics of the MLE and of posteriors (Bernstein--von Mises): why the CR bound is the right yardstick for large samples.
+\item[I7] S.\,G.\ Self and K.-Y.\ Liang, ``Asymptotic properties of maximum likelihood estimators and likelihood ratio tests under nonstandard conditions'', \emph{J.\ Amer.\ Statist.\ Assoc.}\ 82 (1987) 605--610. Parameters on the boundary (here $\delta=0$).
+\end{itemize}
+
+\subsection*{Simulation-based inference: methods, summaries, diagnostics}
+\begin{itemize}
+\item[S1$^\star$] K.\ Cranmer, J.\ Brehmer and G.\ Louppe, ``The frontier of simulation-based inference'', \emph{PNAS} 117 (2020) 30055--30062. Overview of NPE, NLE, NRE and where information is lost.
+\item[S2] G.\ Papamakarios and I.\ Murray, ``Fast $\epsilon$-free inference of simulation models with Bayesian conditional density estimation'', NeurIPS 2016; D.\,S.\ Greenberg, M.\ Nonnenmacher and J.\,H.\ Macke, ``Automatic posterior transformation for likelihood-free inference'', ICML 2019. Neural posterior estimation, amortised and sequential.
+\item[S3] G.\ Papamakarios, D.\ Sterratt and I.\ Murray, ``Sequential neural likelihood'', AISTATS 2019. Learning the likelihood instead of the posterior; an alternative when the posterior is hard to amortise.
+\item[S4] M.\ Deistler, P.\,J.\ Gon\c{c}alves and J.\,H.\ Macke, ``Truncated proposals for scalable and hassle-free simulation-based inference'', NeurIPS 2022. Concentrating simulations near the data: the remedy suggested by \S\ref{sec:e0large}.
+\item[S5] J.-M.\ Lueckmann et al., ``Benchmarking simulation-based inference'', AISTATS 2021. How methods compare against reference posteriors, the logic of item~4 of \S\ref{sec:toolkit}.
+\item[S6$^\star$] J.\ Hermans et al., ``A trust crisis in simulation-based inference? Your posterior approximations can be unfaithful'', \emph{TMLR} 2022. Over-confident or biased NPE posteriors, as at 4096 clones.
+\item[S7] P.\ Fearnhead and D.\ Prangle, ``Constructing summary statistics for approximate Bayesian computation: semi-automatic approximate Bayesian computation'', \emph{J.\ R.\ Stat.\ Soc.\ B} 74 (2012) 419--474; Y.\ Chen et al., ``Neural approximate sufficient statistics for implicit models'', ICLR 2021. Choosing or learning summaries that keep the information (cf.\ the 5\% kept by \code{moments}).
+\item[S8$^\star$] S.\,A.\ Sisson, Y.\ Fan and M.\ Beaumont (eds.), \emph{Handbook of Approximate Bayesian Computation}, CRC Press, 2018. Broad reference on likelihood-free inference, summary statistics and diagnostics.
+\item[S9] S.\ Talts, M.\ Betancourt, D.\ Simpson, A.\ Vehtari and A.\ Gelman, ``Validating Bayesian inference algorithms with simulation-based calibration'', arXiv:1804.06788 (2018). SBC and what it does \emph{not} check.
+\item[S10] A.\ Gelman et al., \emph{Bayesian Data Analysis}, 3rd ed., CRC Press, 2013, Ch.~6. Posterior predictive checks and their limits.
+\item[S11] D.\ Lopez-Paz and M.\ Oquab, ``Revisiting classifier two-sample tests'', ICLR 2017. The C2ST used in E0 and the two-point test of \S\ref{sec:e0large}.
+\item[S12] S.\,N.\ Wood, ``Statistical inference for noisy nonlinear ecological systems'', \emph{Nature} 466 (2010) 1102--1104. Synthetic likelihood: a Gaussian model of the summaries. Note its bias with noisy finite-difference derivatives, which made us drop such an estimate here.
+\item[S13] A.\ Tejero-Cantero et al., ``sbi: A toolkit for simulation-based inference'', \emph{J.\ Open Source Softw.}\ 5 (2020) 2505. The library used by this project.
+\end{itemize}
+
+\subsection*{Experimental design}
+\begin{itemize}
+\item[D1] A.\,C.\ Atkinson, A.\,N.\ Donev and R.\,D.\ Tobias, \emph{Optimum Experimental Designs, with SAS}, Oxford University Press, 2007. Fisher-information-based (D-, A-, c-optimal) design; the c-optimal criterion for one parameter is exactly the CR variance of Table~\ref{tab:cr}.
+\item[D2$^\star$] K.\ Chaloner and I.\ Verdinelli, ``Bayesian experimental design: a review'', \emph{Statist.\ Sci.}\ 10 (1995) 273--304. Design when the prior matters, as it does at realistic sizes here.
+\end{itemize}
+
 \raggedright
 \paragraph{Reproducibility.} \code{scripts/b_row_theory/}: \code{gwexact.py} (exact law, derivatives, Fisher information, KL), \code{fisher.py}, \code{fisher2.py} (Tables~\ref{tab:fim}, \ref{tab:cr}), \code{llr.py} (\S\ref{sec:e0large}, item 2; reads \code{results/e4/gw_xxl_two_type_*}), \code{summary_twopoint.py} (item 3), \code{varW.py} (Theorem~\ref{thm:varw} check), \code{profile.py} (\S\ref{sec:profile}). Run with \code{uv run python scripts/b_row_theory/<script>.py} from the repository root.
 
