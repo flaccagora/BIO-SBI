@@ -16,7 +16,7 @@ Every part of the pipeline is a swappable [Hydra](https://hydra.cc) config group
 | `simulator` | `galton_watson`, `galton_watson_hours`, `bellman_harris` | Generative model (time is generations or hours) |
 | `law` | `two_type` (all transitions), `reversible_ab`, `hierarchy_ab`, `minimal_ab`, `three_type`, `three_type_traj`, `multi_founder` | Cell types, transitions, founders, fixed values, prior |
 | `observation` | `perfect`, `noisy`, `all_clones`, `three_as_two`, `three_split` | Capture, type→label confusion, clone selection |
-| `summary` | `moments`, `means` | Summary statistics fed to the network |
+| `summary` | `moments`, `survivor_moments`, `means` | Summary statistics fed to the network (`survivor_moments`: moments of non-empty clones + extinct fraction, for `observation=all_clones`) |
 | `inference` | `npe`, `nle`, `nre` | sbi method family |
 | `budget` | `smoke`, `dev`, `full` | Simulations, epochs, posterior/SBC sample sizes |
 | `design` | `default`, `real_like`, `single_128`, `three_128`, `single_384` | Endpoints and clones per endpoint |

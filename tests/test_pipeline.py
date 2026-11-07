@@ -380,3 +380,17 @@ def test_ppc_simulates_measured_clone_counts(tmp_path, monkeypatch):
     monkeypatch.setattr(DataGenerator, "simulate_theta", spy)
     infer_measured(run, csv, tmp_path / "measured", n=10, ppc=3)
     assert seen == [("measured-ppc", (3, 6, 2))]
+
+
+def test_all_clones_with_survivor_moments(tmp_path):
+    cfg = config("observation=all_clones", "summary=survivor_moments",
+                 "budget.sbc_cases=0", "budget.ppc_samples=5")  # fmt: skip
+    comp = build_components(cfg)
+    assert type(comp.generator.summary).__name__ == "SurvivorMoments"
+    metrics = run_experiment(cfg, tmp_path)
+    x = np.load(tmp_path / "reference.npz")["x"]
+    assert np.isfinite(x).all() and len(x) == comp.generator.x_dim
+    assert "ppc" in metrics
+    e1b = config("+experiment=e1b_all_clones", "summary=survivor_moments")
+    assert e1b.summary._target_.endswith("SurvivorMoments")
+    assert e1b.observation == cfg.observation  # all_clones

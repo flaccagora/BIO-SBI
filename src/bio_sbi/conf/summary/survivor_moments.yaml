@@ -1,0 +1,8 @@
+# CohortMoments of the surviving (non-empty) clones + fraction of extinct clones per
+# cohort. Meant for observation=all_clones, where extinct organoids are zero rows;
+# identical to `moments` on data without empty clones (selection=detected).
+_target_: bio_sbi.summaries.SurvivorMoments
+quantiles: [0.1, 0.25, 0.5, 0.75, 0.9]
+# Rerun the E1b all-clones arm with it:
+#   bio-sbi -m +experiment=e1b_all_clones summary=survivor_moments \
+#     hydra.sweep.dir=results/e1b_all/all_clones_survivor
