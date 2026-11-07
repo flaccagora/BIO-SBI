@@ -118,3 +118,63 @@ def test_three_type_simulators_run(rng):
     counts = gw.simulate(p, 6, 5000, rng)
     assert counts.shape == (5000, 3)
     assert close(counts.mean(0), gw.expected_counts(p, 6), counts.std(0) / np.sqrt(5000))
+
+
+# ------------------------------------------------- Galton-Watson on an hour axis (X3)
+@pytest.mark.filterwarnings("ignore:Galton-Watson horizon")
+@pytest.mark.parametrize(
+    ("tau", "hours", "generations"),
+    [
+        (16, 144, 9), (16, 240, 15), (20, 144, 7), (20, 240, 12),
+        (24, 144, 6), (24, 240, 10), (30, 144, 5), (30, 240, 8),
+        (20, 50, 3),  # 2.5 rounds half up, not to the even 2
+    ],
+)  # fmt: skip
+def test_gw_hours_rounds_to_generations(law, tau, hours, generations):
+    gw = GaltonWatson(law, hours_per_generation=tau)
+    assert gw.time_unit == "hours" and gw.generations(hours) == generations
+    assert gw.validate_horizon(hours) == hours  # horizons stay keyed by hours
+
+
+def test_gw_default_time_unit_unchanged(gw):
+    assert gw.time_unit == "generations" and gw.hours_per_generation is None
+    assert gw.generations(6) == 6
+
+
+def test_gw_hours_warns_on_coarse_rounding_once(law):
+    gw = GaltonWatson(law, hours_per_generation=20)
+    with pytest.warns(UserWarning, match="9.6 generations"):
+        assert gw.generations(192) == 10
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        gw.generations(192)  # warned once per horizon
+        gw.generations(144)  # 7.2: within tolerance
+        gw.validate_horizon(192)
+
+
+@pytest.mark.filterwarnings("ignore:Galton-Watson horizon")
+def test_gw_hours_rejects_bad_values(law):
+    gw = GaltonWatson(law, hours_per_generation=24)
+    with pytest.raises(ValueError, match="half a generation"):
+        gw.generations(11)
+    gw.generations(12)  # 0.5 rounds up to 1 (with a warning)
+    with pytest.raises(ValueError):
+        GaltonWatson(law, hours_per_generation=0)
+
+
+def test_gw_hours_matches_plain_gw_at_g_generations(law, gw, gw_truth):
+    hours = GaltonWatson(law, hours_per_generation=16)
+    capture = np.array([0.6, 0.4])
+    assert np.allclose(hours.expected_counts(gw_truth, 144), gw.expected_counts(gw_truth, 9))
+    assert hours.detection_probability(gw_truth, 240, capture) == pytest.approx(
+        gw.detection_probability(gw_truth, 15, capture)
+    )
+    # Same random stream, same generation count -> identical draws.
+    a = hours.simulate(gw_truth, 80, 50, np.random.default_rng(0))
+    b = gw.simulate(gw_truth, 5, 50, np.random.default_rng(0))
+    assert np.array_equal(a, b)
+    a = hours.simulate_detected(gw_truth, 80, 50, capture, np.random.default_rng(1))
+    b = gw.simulate_detected(gw_truth, 5, 50, capture, np.random.default_rng(1))
+    assert np.array_equal(a, b)

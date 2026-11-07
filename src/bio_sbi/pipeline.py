@@ -86,7 +86,9 @@ def build_components(cfg: DictConfig) -> Components:
 def build_data_generator(cfg: DictConfig, model: DataGenerator) -> DataGenerator:
     """Instantiate the data-generating model and check it is comparable with ``model``.
 
-    Data and inference model must share the time unit and the measured labels; the
+    Data and inference model must share the *effective* time unit (e.g. Bellman-Harris
+    hours and Galton-Watson with ``hours_per_generation`` are both "hours") and the
+    measured labels; the
     number of *true* types, transitions, founders and parameters may differ. The data
     generator draws from :func:`data_seed`, the inference generator from ``seed``.
     """
@@ -94,7 +96,8 @@ def build_data_generator(cfg: DictConfig, model: DataGenerator) -> DataGenerator
     if data.simulator.time_unit != model.simulator.time_unit:
         raise ValueError(
             f"Data model counts time in {data.simulator.time_unit}, inference model in "
-            f"{model.simulator.time_unit}: horizons would mean different things"
+            f"{model.simulator.time_unit}: horizons would mean different things (a "
+            "Galton-Watson model can count hours via simulator=galton_watson_hours)"
         )
     if tuple(data.observation.labels) != tuple(model.observation.labels):
         raise ValueError(

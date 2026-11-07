@@ -142,6 +142,24 @@ def test_incompatible_data_models_rejected():
         build_data_generator(cfg, build_components(cfg).generator)
 
 
+def test_gw_in_hours_fits_bellman_harris_data(tmp_path):
+    # X3: data and inference both count hours; the design is keyed by hours.
+    cfg = config(
+        "+experiment=x3_gw_fit_bh", "hours_per_generation=16",
+        "budget.sbc_cases=0", "budget.ppc_samples=5",
+    )  # fmt: skip
+    comp = build_components(cfg)
+    assert comp.simulator.time_unit == "hours" and comp.simulator.hours_per_generation == 16
+    metrics = run_experiment(cfg, tmp_path)
+    assert metrics["simulator"] == "galton_watson_hours"
+    assert metrics["data_simulator"] == "bellman_harris"
+    assert metrics["design"]["horizons"] == [144.0, 240.0]
+    assert [d["horizon"] for d in metrics["reference_detection"]] == [144.0, 240.0]
+    rows = {r["parameter"]: r for r in metrics["recovery"]["per_parameter"]}
+    assert "A.mean_lifetime" not in rows and rows["A.div_AA"]["truth"] == pytest.approx(0.55)
+    assert "ppc" in metrics
+
+
 def test_fixed_override_from_command_line():
     cfg = config("+law.fixed.A.persist=0.0", "truth.values={A: {persist: 0.0, div_AA: 0.58}}")
     comp = build_components(cfg)

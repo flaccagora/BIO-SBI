@@ -1,0 +1,16 @@
+# Galton-Watson process on an HOUR axis (bio_sbi.simulators.GaltonWatson with
+# hours_per_generation). Same model as galton_watson, but horizons are hours: a horizon
+# h is simulated as g = round_half_up(h / hours_per_generation) synchronous generations
+# (warning if |h / tau - g| > 0.25; g >= 1 required). Designs and summaries stay keyed
+# by the hour value, so this model can be fitted to Bellman-Harris data, e.g.
+#   bio-sbi simulator=galton_watson_hours simulator@data.simulator=bellman_harris design=real_like
+# hours_per_generation is fixed (not inferred); sweep it with
+#   simulator.model.hours_per_generation=16,20,24,30
+defaults:
+  - galton_watson
+  - _self_
+name: galton_watson_hours
+horizons: [96, 192, 288]       # default design endpoints (hours; 4/8/12 generations at 24 h)
+real_horizons: [144, 240]      # day 6 / day 10 of the real data (design=real_like)
+model:
+  hours_per_generation: 24.0   # tau: hours per synchronous generation
