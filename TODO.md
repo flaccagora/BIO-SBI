@@ -347,6 +347,45 @@ for each parameter?
       then `bio-sbi-infer results/real/bh_hetero data/real/crc0322_3d_mean_bh.csv --out results/real/bh_hetero/fit_3d_mean --ppc 500`
       (and `_2d`; also the fate-only variant `'+law.clone_heterogeneity.outcomes=[div_AA,div_AB,div_BB]'`, `results/real/bh_hetero_div`);
       check SBC of `clone.log_kappa` and whether support mass / PPC improve.
+- [ ] **R-dd – density-dependent division (carrying capacity)**. BH fits of CRC0322 also
+      miss the growth curve (≈25 h per doubling to day 6, ≈60 h day 6→10: mean cells
+      ratio day 10 / day 6 = 3.05 3D mean, 2.40 2D; constant lifetimes give ≈14) and the
+      tight totals. Implemented `simulator=bellman_harris_dd`
+      (`model.density_dependence.capacity_bounds: [10, 1e5]`): a cell born when its
+      clone has `N` living cells (after the birth, persisting cells included) lives
+      Gamma with mean `tau_k (1 + N/K)`; inferred `density.capacity` (theta
+      `density.log_capacity`), event-driven kernel, off = bit-identical to
+      `bellman_harris`. Sanity check `scripts/analyse_density_dependence.py`
+      (two_type, founder B 0.7 / A 0.3, A: div_AA .75 death .1 persist .1 to_B .02;
+      B: div_BB .7 death .15 persist .05 div_AA .05; tau 20/18 h; 10 datasets of
+      165 + 101 clones):
+
+      | stat | real 3D mean | real 2D | K=30 | K=100 | K=300 | K=1000 | K=∞ |
+      |---|---|---|---|---|---|---|---|
+      | day 6 mean log total | 3.82 | 2.58 | 3.17 | 3.50 | 3.69 | 3.77 | 3.78 |
+      | day 6 sd log total | 0.55 | 0.33 | 0.42 | 0.53 | 0.55 | 0.60 | 0.64 |
+      | day 6 corr_A_B | −0.28 | −0.53 | −0.41 | −0.18 | −0.10 | 0.01 | 0.06 |
+      | day 6 A-fraction sd | 0.28 | 0.28 | 0.31 | 0.29 | 0.28 | 0.27 | 0.27 |
+      | day 10 mean log total | 4.85 | 3.34 | 4.37 | 5.11 | 5.63 | 6.04 | 6.39 |
+      | day 10 sd log total | 0.73 | 0.53 | 0.30 | 0.35 | 0.44 | 0.54 | 0.70 |
+      | day 10 corr_A_B | −0.08 | −0.29 | −0.43 | −0.11 | 0.22 | 0.52 | 0.71 |
+      | day 10 A-fraction sd | 0.29 | 0.30 | 0.23 | 0.19 | 0.17 | 0.15 | 0.14 |
+      | mean total 240 h / 144 h | 3.05 | 2.40 | 3.26 | 4.77 | 6.81 | 9.47 | 14.04 |
+
+      Small `K` bends the growth curve to the real ratio (K≈30–40) and pushes
+      `corr_A_B` negative (larger clones slow down; fewer joint A+B extremes). Hand-tuned
+      K = 40, tau 16/14.4 h matches the 3D mean sizes (day 6 49 vs 52, day 10 157 vs
+      157, ratio 3.2) and day-6 composition (corr −0.29, A-fraction sd 0.27, sd log
+      total 0.42 vs 0.55), but **over-compresses day 10** (sd log total 0.23 vs 0.73
+      3D / 0.53 2D; A-fraction sd 0.19 vs 0.29): in the data the spread of totals
+      *grows* from day 6 to day 10, with a carrying capacity it shrinks. Expect the
+      fit to trade growth curve against day-10 spread; combining with
+      `clone_heterogeneity` (or a per-organoid K) may restore the spread. Next: train
+      and fit
+      `bio-sbi simulator=bellman_harris_dd law=two_type '~law.fixed.founder' design=real_like budget=full hydra.run.dir=results/real/bh_dd`,
+      `bio-sbi-infer results/real/bh_dd data/real/crc0322_3d_mean_bh.csv --out results/real/bh_dd/fit_3d_mean --ppc 500`
+      (and `crc0322_2d_bh.csv` → `fit_2d`); then `law=two_type_hetero` →
+      `results/real/bh_dd_hetero`. Check SBC of `density.log_capacity`, support mass, PPC.
 
 ---
 

@@ -1,0 +1,18 @@
+# Bellman-Harris with density-dependent (carrying-capacity) lifetimes.
+# A cell born when its clone has N living cells (after the birth, newborns and
+# persisting cells included, dead cells excluded) lives Gamma(shape, mean * (1 + N/K) / shape):
+# larger clones divide more slowly (decelerating growth, tighter clone sizes).
+# K = density.capacity (theta density.log_capacity) is inferred with a log-uniform prior
+# on capacity_bounds; K -> inf is simulator=bellman_harris. Fix it with
+#   '+simulator.model.fixed.density.capacity=300'
+# Real data (founder type inferred):
+#   bio-sbi simulator=bellman_harris_dd law=two_type '~law.fixed.founder' design=real_like budget=full
+defaults:
+  - bellman_harris
+  - _self_
+name: bellman_harris_dd
+reference:
+  density: {capacity: 300.0}   # truth for K when this simulator generates the data
+model:
+  density_dependence:
+    capacity_bounds: [10.0, 100000.0]   # log-uniform prior on K (cells)

@@ -136,6 +136,27 @@ discrete and continuous time under the same biological hypothesis.
   The mean lifetimes per type are inferred with log-uniform priors
   (`lifetime_mean_bounds`), and `lifetime_shape` is fixed. `shape: 1` gives the Markov
   (exponential) process.
+* **Density-dependent Bellman-Harris** (`simulator=bellman_harris_dd`, i.e.
+  `model.density_dependence: {capacity_bounds: [10, 1e5]}`; absent/`null` = off): a cell
+  born when its clone has `N` living cells lives `Gamma(shape, mean·(1 + N/K)/shape)`
+  hours, so larger clones divide more slowly (decelerating growth, tighter clone
+  sizes). `N` counts the clone's living cells right after the birth (the newborn and
+  its sibling included, persisting/switched cells included, dead cells and the ended
+  parent excluded); founders are born at `t = 0` with `N` = number of founders; a
+  lifetime is fixed at birth. `K` is one scalar parameter `density.capacity`
+  (inference coordinate `density.log_capacity`, log-uniform prior on
+  `capacity_bounds`), stored after the mean lifetimes and before `clone.kappa`;
+  `K → ∞` is plain Bellman-Harris. Fix it with
+  `'+simulator.model.fixed.density.capacity=300'`; the data truth is
+  `simulator.reference.density.capacity` (300). The simulation is event-driven (events
+  in time order via a heap) instead of depth-first; without the option the original
+  kernel runs and outputs are bit-identical. It composes with founder rows,
+  multi-cell founders and `clone_heterogeneity` (`K` shared by all clones); detection
+  uses forward simulation plus rejection. A clone is invalid if its living cells exceed
+  `max_cells` at any time. `expected_counts` has no closed form here and returns a
+  fixed-seed Monte-Carlo mean over 4000 clones (any shape; the constant-lifetime mean
+  is an upper bound). `scripts/analyse_density_dependence.py` compares growth and
+  spread at the CRC0322 design for several `K` with the real data.
 
 ### Laws: types, transitions, founders, fixed values
 
@@ -390,6 +411,24 @@ uv run bio-sbi-infer results/real/bh_hetero data/real/crc0322_3d_mean_bh.csv \
 uv run bio-sbi simulator=bellman_harris law=two_type_hetero '~law.fixed.founder' \
   '+law.clone_heterogeneity.outcomes=[div_AA,div_AB,div_BB]' \
   design=real_like budget=full hydra.run.dir=results/real/bh_hetero_div
+```
+
+Growth also decelerates in the real data (≈25 h per doubling up to day 6, ≈60 h from
+day 6 to day 10) and organoid totals vary less than constant-lifetime branching
+predicts. Density-dependent lifetimes (see *Simulators*) address both:
+
+```bash
+uv run bio-sbi simulator=bellman_harris_dd law=two_type '~law.fixed.founder' \
+  design=real_like budget=full hydra.run.dir=results/real/bh_dd
+uv run bio-sbi-infer results/real/bh_dd data/real/crc0322_3d_mean_bh.csv \
+  --out results/real/bh_dd/fit_3d_mean --ppc 500
+uv run bio-sbi-infer results/real/bh_dd data/real/crc0322_2d_bh.csv \
+  --out results/real/bh_dd/fit_2d --ppc 500
+# density dependence + organoid-level heterogeneity:
+uv run bio-sbi simulator=bellman_harris_dd law=two_type_hetero '~law.fixed.founder' \
+  design=real_like budget=full hydra.run.dir=results/real/bh_dd_hetero
+uv run bio-sbi-infer results/real/bh_dd_hetero data/real/crc0322_3d_mean_bh.csv \
+  --out results/real/bh_dd_hetero/fit_3d_mean --ppc 500
 ```
 
 ## Hardware: CPU vs GPU
