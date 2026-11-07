@@ -61,21 +61,9 @@ BH cost is still to be measured (P0).
 
 ## P. Prerequisites (code changes, before the experiments that need them)
 
-- [ ] **P0 – BH timing**: `budget=smoke` and `budget=dev` with `simulator=bellman_harris`
-      at the real-like design. Record the seconds per run here. **Not run yet** (machine
-      busy); when it is idle, run one job at a time and read `total_seconds`,
-      `training[*].simulation_seconds` and `training[*].training_seconds` from each
-      `metrics.json` (or `uv run bio-sbi-collect results/p0_bh_timing`):
-      ```bash
-      uv run bio-sbi simulator=bellman_harris law=reversible_ab design=real_like \
-          budget=smoke hydra.run.dir=results/p0_bh_timing/smoke
-      uv run bio-sbi simulator=bellman_harris law=reversible_ab design=real_like \
-          budget=dev hydra.run.dir=results/p0_bh_timing/dev
-      # GW reference point at the same design and budget
-      uv run bio-sbi simulator=galton_watson law=reversible_ab design=real_like \
-          budget=dev hydra.run.dir=results/p0_bh_timing/gw_dev
-      ```
-      (`workers=4 torch_threads=4` are the defaults; note them with the timings.)
+- [x] **P0 – BH timing** (`results/p0_bh_timing/`, 2026-11-07, alone on the machine,
+      workers=4 torch_threads=4, real-like): BH smoke 3 s, BH dev 42 s (simulation 4 s,
+      training 35 s), GW dev 45 s. BH costs the same as GW at this design.
 - [x] **P1 – separate seeds**: `data_seed` (default `${seed}`) seeds the truth draw
       (`"truth"`) and the reference dataset (data generator, `"reference"`); `seed` keeps
       training simulations, training, posterior sampling (`"ref"`), prior samples
