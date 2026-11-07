@@ -18,6 +18,30 @@ A clone is seeded by ``N`` founder cells, ``P(N = n) = founder_size.<n>`` over
 ``founder_sizes`` (default ``[1]``), and each founder independently has type ``k`` with
 probability ``founder.<k>``.
 
+Organoid-level heterogeneity (random-effects law)
+-------------------------------------------------
+With ``clone_heterogeneity`` set, every clone (organoid) draws its *own* outcome
+probabilities, independently per clone and per type::
+
+    p_clone[k] ~ Dirichlet(kappa * p[k])
+
+over the *free* entries of row ``k`` with ``p[k] > 0`` (fixed entries keep their
+value, zeros stay zero; precisely, the free entries share their mass ``m_k`` as
+``m_k * Dirichlet(kappa * p_free / m_k)``), so ``E[p_clone] = p`` and
+``Var(p_clone[k, o]) = p[k, o] (m_k - p[k, o]) / (kappa + 1)``. All cells of a clone
+share its rows. ``kappa`` (``clone.kappa``) is one scalar parameter with a log-uniform
+prior on ``kappa_bounds`` (theta coordinate ``clone.log_kappa``); it can be fixed like
+any parameter (``+law.fixed.clone.kappa=30``). ``kappa -> inf`` recovers the
+homogeneous law; the option is off by default, which reproduces the homogeneous model
+bit for bit. Config::
+
+    clone_heterogeneity: {kappa_bounds: [1.0, 1000.0]}   # or null (off)
+
+Optionally ``outcomes`` restricts which entries vary, e.g. ``outcomes: [div_AA,
+div_AB, div_BB]``: each clone then redistributes its division mass among the division
+types while keeping death/persist/switch probabilities (hence its growth rate when
+all divisions have two daughters) fixed - fate (composition) heterogeneity only.
+
 Parameter space
 ---------------
 All probabilities live in *simplex rows*: one row per type (its outcomes), the
@@ -108,6 +132,10 @@ class ScalarParameter:
     def theta_bounds(self) -> tuple[float, float]:
         """Prior bounds in inference coordinates."""
         return (np.log(self.low), np.log(self.high)) if self.log else (self.low, self.high)
+
+
+#: Name of the clone-heterogeneity concentration parameter.
+KAPPA = "clone.kappa"
 
 
 @dataclass
@@ -394,6 +422,12 @@ class OffspringLaw:
         founder_sizes: Possible numbers of founder cells per clone.
         fixed: ``{parameter: value}`` not inferred (probabilities of this law).
         concentration: ``{parameter: alpha}`` Dirichlet concentrations.
+        clone_heterogeneity: ``None``/``False`` (default, homogeneous law) or
+            ``{kappa_bounds: [low, high]}`` (``True`` = ``[1, 1000]``): per-clone outcome
+            rows ``Dirichlet(kappa * p)`` with inferred ``clone.kappa`` (module docstring).
+            Optional ``outcomes``: a list of outcome names (every type) or
+            ``{type: [names]}`` restricting which entries vary between clones; the
+            others keep their value (default: all free entries).
         **_: Other law-config keys (``name``, ``reference``) are accepted and ignored.
     """
 
@@ -405,6 +439,7 @@ class OffspringLaw:
         founder_sizes: Sequence[int] = (1,),
         fixed: Mapping[str, float] | None = None,
         concentration: Mapping[str, float] | None = None,
+        clone_heterogeneity: Mapping | bool | None = None,
         **_: object,
     ) -> None:
         self.types = tuple(str(t) for t in types)
@@ -439,6 +474,42 @@ class OffspringLaw:
                 self.children[i, o, : len(kids)] = kids
         self.fixed = flatten(fixed)
         self.concentration = flatten(concentration)
+        self.scalars: tuple[ScalarParameter, ...] = ()
+        self.clone_outcomes: dict[str, tuple[str, ...]] | None = None
+        if clone_heterogeneity is True:
+            clone_heterogeneity = {}
+        if clone_heterogeneity not in (None, False):
+            spec = dict(clone_heterogeneity)
+            unknown = set(spec) - {"kappa_bounds", "outcomes"}
+            if unknown:
+                raise ValueError(f"Unknown clone_heterogeneity keys {sorted(unknown)}")
+            low, high = map(float, spec.get("kappa_bounds", (1.0, 1000.0)))
+            if not 0 < low < high < np.inf:
+                raise ValueError("kappa_bounds must satisfy 0 < low < high < inf")
+            self.scalars = (ScalarParameter(KAPPA, low, high, log=True),)
+            self.clone_outcomes = self._clone_outcomes(spec.get("outcomes"))
+
+    def _clone_outcomes(self, spec) -> dict[str, tuple[str, ...]] | None:
+        """Outcomes redrawn per clone: ``None`` (all) or ``{type: (names...)}``."""
+        if spec is None:
+            return None
+        if not isinstance(spec, Mapping):
+            spec = dict.fromkeys(self.types, spec)  # one list for every type
+        out = {}
+        for t, names in spec.items():
+            if t not in self.types:
+                raise ValueError(f"clone_heterogeneity.outcomes: unknown type {t}")
+            names = tuple(str(n) for n in names)
+            missing = set(names) - set(self.outcomes[t])
+            if missing:
+                raise ValueError(f"clone_heterogeneity.outcomes: {t} has no {sorted(missing)}")
+            out[t] = names
+        return out
+
+    @property
+    def heterogeneous(self) -> bool:
+        """Whether clones draw their own outcome rows (``clone_heterogeneity``)."""
+        return bool(self.scalars)
 
     @property
     def rows(self) -> list[tuple[str, tuple[str, ...]]]:
@@ -465,3 +536,49 @@ class OffspringLaw:
     def mean_matrix(self, P: np.ndarray) -> np.ndarray:
         """Mean offspring matrix ``M[k, j]`` from an outcome-probability matrix."""
         return np.einsum("ko,koj->kj", P, self.offspring)
+
+    def clone_matrices(
+        self,
+        space: ParameterSpace,
+        P: np.ndarray,
+        kappa: float,
+        n: int,
+        rng: np.random.Generator,
+    ) -> np.ndarray:
+        """Per-clone outcome matrices ``(n, n_types, max_outcomes)``.
+
+        Free entries of each type row with ``P > 0`` (restricted to
+        ``clone_heterogeneity.outcomes`` when given; mass ``m``) are redrawn as
+        ``m * Dirichlet(kappa * P_free / m)`` independently per clone; all other
+        entries are copied. Uses ``rng.gamma`` (one draw per redrawn entry and clone).
+        A row whose Gamma draws all underflow to zero (tiny ``kappa * p``, the
+        ``kappa -> 0`` limit) puts its whole free mass on one entry drawn with
+        probabilities ``P_free / m``.
+        """
+        mask = np.zeros(P.shape, dtype=bool)
+        for i, t in enumerate(self.types):
+            row = next(r for r in space.rows if r.prefix == t)
+            mask[i, list(row.free)] = True
+            if self.clone_outcomes is not None:
+                chosen = [o for o, name in enumerate(self.outcomes[t])
+                          if name in self.clone_outcomes.get(t, ())]  # fmt: skip
+                keep = np.zeros(P.shape[1], dtype=bool)
+                keep[chosen] = True
+                mask[i] &= keep
+        mask &= P > 0
+        out = np.broadcast_to(P, (int(n), *P.shape)).copy()
+        k_idx, o_idx = np.nonzero(mask)
+        if len(k_idx) == 0 or n == 0:
+            return out
+        mass = np.bincount(k_idx, weights=P[mask], minlength=P.shape[0])
+        share = P[mask] / mass[k_idx]  # within-row free probabilities
+        g = rng.gamma(kappa * share, size=(int(n), len(k_idx)))
+        onehot = (k_idx[:, None] == np.arange(P.shape[0])[None, :]).astype(float)
+        total = g @ onehot  # (n, K) row sums
+        empty = np.argwhere((total == 0) & (mass > 0)[None, :])
+        for c, k in empty:  # all draws underflowed: limit kappa -> 0 of the Dirichlet
+            entries = np.flatnonzero(k_idx == k)
+            g[c, rng.choice(entries, p=share[entries])] = 1.0
+            total[c, k] = 1.0
+        out[:, k_idx, o_idx] = g / total[:, k_idx] * mass[k_idx]
+        return out

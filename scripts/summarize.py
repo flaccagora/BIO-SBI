@@ -61,8 +61,9 @@ def load(root: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
 
 
 def is_probability(parameter: str, truth: float) -> bool:
-    """Heuristic: outcome/founder probabilities lie in [0, 1]; lifetimes etc. do not."""
-    return not parameter.endswith("mean_lifetime") and (pd.isna(truth) or 0 <= truth <= 1)
+    """Heuristic: outcome/founder probabilities lie in [0, 1]; lifetimes, kappa etc. do not."""
+    scalar = parameter.endswith("mean_lifetime") or parameter == "clone.kappa"
+    return not scalar and (pd.isna(truth) or 0 <= truth <= 1)
 
 
 def add_unit_aware_errors(runs: pd.DataFrame, params: pd.DataFrame) -> pd.DataFrame:

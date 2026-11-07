@@ -197,6 +197,51 @@ reference:               # ground truth when this law generates the reference da
 * Bellman-Harris adds `<type>.mean_lifetime`, which you can fix with
   `+simulator.model.fixed.B.mean_lifetime=30`.
 
+### Organoid-level heterogeneity (random-effects law)
+
+By default all clones share one set of outcome probabilities. With
+`clone_heterogeneity` in the law (`law=two_type_hetero`, `law=reversible_ab_hetero`,
+or `+law.clone_heterogeneity.kappa_bounds=[1,1000]` on any law) every clone
+(organoid) draws its **own** outcome rows, independently per clone and type:
+
+```
+p_clone[k] ~ m_k * Dirichlet(kappa * p[k]_free / m_k)
+```
+
+over the free, nonzero entries of row `k` (mass `m_k`; fixed entries and zeros are
+unchanged), so `E[p_clone] = p` and `Var(p_clone[k,o]) = p (m_k - p) / (kappa + 1)`.
+All cells of a clone share its rows. `kappa` is one extra scalar parameter
+`clone.kappa` (inference coordinate `clone.log_kappa`, log-uniform prior on
+`kappa_bounds`, default `[1, 1000]`), scored in `recovery.csv` like the lifetimes
+(relative error); `kappa → ∞` is the homogeneous model, and without the key the
+model is bit-for-bit the homogeneous one. Fix it like any parameter
+(`+law.fixed.clone.kappa=30`; give the truth with `law.reference.clone.kappa`).
+
+```yaml
+clone_heterogeneity:
+  kappa_bounds: [1.0, 1000.0]
+  outcomes: [div_AA, div_AB, div_BB]   # optional: only these entries vary between clones
+```
+
+`outcomes` (a list for every type, or `{type: [names]}`) restricts which entries vary:
+with the three divisions each clone redistributes its division mass among AA/AB/BB
+while death, persist and switching stay at the population values — fate
+(composition) heterogeneity without changing how many cells divide.
+
+* **Simulation**: per-clone rows are drawn with NumPy Gammas and passed to the same
+  Numba kernels (`(n, K, O)` instead of one shared matrix), so the cost is a few Gamma
+  draws per clone. Galton-Watson's exact detection-conditioned sampler stays exact: a
+  clone's rows are drawn conditional on detection by rejection on their analytic
+  detection probability (no clone is simulated for rejected draws; budget
+  `simulator.model.max_detection_draws`, default 1000 per clone, else the cohort is
+  invalid), then the pruned sampler runs per clone. Bellman-Harris uses forward
+  simulation plus rejection as before.
+* `expected_counts` (`reference_expected_counts` in `metrics.json`) uses the **mean
+  model** (rows at their expectation `p`), which underestimates the mean over clones;
+  GW `detection_probability` is a Monte-Carlo average over 4096 clone draws.
+* `scripts/analyse_clone_heterogeneity.py` compares A–B correlation, total spread and
+  A-fraction spread at the CRC0322 design for several `kappa` with the real data.
+
 ### Observation model
 
 * `capture`: detection probability per *true* type (one value, a list or
@@ -331,6 +376,21 @@ uv run bio-sbi-infer results/real/bh_full data/real/crc0322_3d_mean_bh.csv \
 
 Galton-Watson at one generation per day cannot reach the day-6 3D sizes (43 of 165
 organoids exceed 2^6 cells); see `data/real/README.md`.
+
+The homogeneous models do not reproduce the negative A–B correlation and the spread
+of A fractions across organoids. The random-effects law (see *Organoid-level
+heterogeneity*) adds per-organoid fate heterogeneity:
+
+```bash
+uv run bio-sbi simulator=bellman_harris law=two_type_hetero '~law.fixed.founder' \
+  design=real_like budget=full hydra.run.dir=results/real/bh_hetero
+uv run bio-sbi-infer results/real/bh_hetero data/real/crc0322_3d_mean_bh.csv \
+  --out results/real/bh_hetero/fit_3d_mean --ppc 500
+# fate-only heterogeneity (divisions vary, death/persist/switch shared):
+uv run bio-sbi simulator=bellman_harris law=two_type_hetero '~law.fixed.founder' \
+  '+law.clone_heterogeneity.outcomes=[div_AA,div_AB,div_BB]' \
+  design=real_like budget=full hydra.run.dir=results/real/bh_hetero_div
+```
 
 ## Hardware: CPU vs GPU
 

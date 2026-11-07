@@ -12,6 +12,12 @@ A simulator combines
 To add a model, subclass :class:`BranchingSimulator`, implement ``simulate`` (and
 optionally ``simulate_detected``/``expected_counts``), pass any scalar parameters to
 ``super().__init__``, and add ``conf/simulator/<name>.yaml`` pointing at the class.
+
+Organoid-level heterogeneity (``law.clone_heterogeneity``, see
+:mod:`bio_sbi.simulators.law`) is handled here for every simulator: the law adds the
+scalar ``clone.kappa`` *after* the simulator's own scalars, and
+:meth:`BranchingSimulator.clone_matrices` draws one outcome matrix per clone, which
+the kernels consume instead of the shared matrix.
 """
 
 from __future__ import annotations
@@ -55,9 +61,10 @@ class BranchingSimulator(ABC):
         scalars: Sequence[ScalarParameter] = (),
     ) -> None:
         self.law = OffspringLaw(**dict(law))
+        self.n_model_scalars = len(scalars)
         self.space = ParameterSpace(
             self.law.rows,
-            scalars,
+            tuple(scalars) + self.law.scalars,  # law scalars (clone.kappa) last
             fixed={**self.law.fixed, **flatten(fixed)},
             concentration=self.law.concentration,
         )
@@ -106,9 +113,29 @@ class BranchingSimulator(ABC):
         return self.space.validate(physical)
 
     def scalar_values(self, physical: np.ndarray) -> np.ndarray:
-        """Scalar parameter values (stored after the probability rows)."""
+        """Values of the simulator's own scalars (stored after the probability rows).
+
+        Law scalars (``clone.kappa``) are excluded; see :meth:`clone_kappa`.
+        """
         n = len(self.space.names) - len(self.space.scalars)
-        return np.asarray(physical, dtype=float)[n:]
+        return np.asarray(physical, dtype=float)[n : n + self.n_model_scalars]
+
+    @property
+    def heterogeneous(self) -> bool:
+        """Whether clones draw their own outcome rows (``law.clone_heterogeneity``)."""
+        return self.law.heterogeneous
+
+    def clone_kappa(self, physical: np.ndarray) -> float | None:
+        """Clone-heterogeneity concentration ``kappa``; ``None`` for a homogeneous law."""
+        if not self.heterogeneous:
+            return None
+        return float(np.asarray(physical, dtype=float)[self.space.names.index("clone.kappa")])
+
+    def clone_matrices(
+        self, physical: np.ndarray, P: np.ndarray, n: int, rng: np.random.Generator
+    ) -> np.ndarray:
+        """Per-clone outcome matrices ``(n, K, O)`` drawn around ``P`` (heterogeneous law)."""
+        return self.law.clone_matrices(self.space, P, self.clone_kappa(physical), n, rng)
 
     # ------------------------------------------------------------------ simulation
     def validate_horizon(self, horizon: float) -> float:

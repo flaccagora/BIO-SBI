@@ -1,0 +1,21 @@
+# reversible_ab (B never divides) with organoid-level heterogeneity: every clone draws
+# its own outcome rows p_clone[k] ~ Dirichlet(kappa * p[k]) over the free nonzero
+# entries of row k (the fixed zero B divisions stay zero), independently per clone.
+# kappa (clone.kappa, theta clone.log_kappa) is inferred with a log-uniform prior on
+# kappa_bounds; kappa -> inf is the homogeneous reversible_ab law. See two_type_hetero.
+name: reversible_ab_hetero
+types: [A, B]
+outcomes: all
+max_daughters: 2
+founder_sizes: [1]
+fixed:
+  founder: {A: 1.0}
+  B: {div_AA: 0.0, div_AB: 0.0, div_BB: 0.0}
+concentration: {}
+clone_heterogeneity:
+  kappa_bounds: [1.0, 1000.0]   # log-uniform prior on the Dirichlet concentration kappa
+reference:
+  A: {death: 0.03, persist: 0.03, to_B: 0.05, div_AB: 0.05, div_AA: 0.55, div_BB: 0.29}
+  B: {death: 0.10, persist: 0.10, to_A: 0.80}
+  founder: {A: 1.0}             # also valid when founder is freed with '~law.fixed.founder'
+  clone: {kappa: 10.0}

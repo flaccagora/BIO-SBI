@@ -327,6 +327,26 @@ for each parameter?
       `ppc.csv`. Still open: choose 2D vs 3D (Q3).
 - [ ] Train with the final model from E1–E4 at the real design (`budget=full`), check
       SBC, fit with `bio-sbi-infer`, and run the PPC on the real data.
+- [ ] **R-het – organoid-level fate heterogeneity (random-effects law)**. All homogeneous
+      models fail on CRC0322 (support mass ≈ 0, 40–60% of PPC features outside 95%):
+      real organoids have a *negative* A–B correlation (day 6: −0.53 2D / −0.28 3D;
+      day 10: −0.29 / −0.08; models +0.3…+0.95), A-fraction sd ≈ 0.28–0.30, and totals
+      *less* variable (`total.sd_log` 0.33/0.53 2D, 0.55/0.73 3D) than predicted.
+      Implemented `law.clone_heterogeneity` (`law=two_type_hetero`,
+      `reversible_ab_hetero`): per-clone rows `Dirichlet(kappa p)`, inferred
+      `clone.kappa` ~ log-U[1, 1000]; optional `outcomes: [div_AA, div_AB, div_BB]`
+      (fate-only). Sanity check `scripts/analyse_clone_heterogeneity.py` (homogeneous
+      fit means as population parameters, 20 datasets): small kappa moves `corr_A_B`
+      down (2D day 6: +0.04 → −0.34 at kappa = 3; day 10: +0.68 → −0.07 fate-only) and
+      raises the A-fraction sd to the real 0.3, but **never lowers `total.sd_log`**
+      (whole-row heterogeneity inflates it and the mean size; fate-only leaves it at
+      the homogeneous ~0.6–0.8 vs real 0.33–0.53) — the total under-dispersion needs a
+      different mechanism (less death / more regular growth), to be checked by the fit.
+      Next: train and fit
+      `bio-sbi simulator=bellman_harris law=two_type_hetero '~law.fixed.founder' design=real_like budget=full hydra.run.dir=results/real/bh_hetero`,
+      then `bio-sbi-infer results/real/bh_hetero data/real/crc0322_3d_mean_bh.csv --out results/real/bh_hetero/fit_3d_mean --ppc 500`
+      (and `_2d`; also the fate-only variant `'+law.clone_heterogeneity.outcomes=[div_AA,div_AB,div_BB]'`, `results/real/bh_hetero_div`);
+      check SBC of `clone.log_kappa` and whether support mass / PPC improve.
 
 ---
 

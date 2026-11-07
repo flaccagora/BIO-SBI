@@ -11,6 +11,11 @@ Compared with :class:`~bio_sbi.simulators.galton_watson.GaltonWatson`, the extra
 physical parameters are the mean lifetimes per type (log-uniform priors; can be fixed
 like any other parameter). Lifetime shapes are fixed by configuration. ``persist``
 means "replaced by one cell of the same type", i.e. a lifetime renewal.
+
+With ``law.clone_heterogeneity`` every clone draws its own outcome rows (Dirichlet
+around the law's rows, see :mod:`bio_sbi.simulators.law`) before it is simulated;
+lifetimes are not affected. Detection is handled by forward simulation plus rejection
+as for the homogeneous model.
 """
 
 from __future__ import annotations
@@ -29,13 +34,19 @@ def bh_forward(
     P, n_out, children, n_children, founder, sizes, size_probs, shape, mean, horizon, n, rng,
     max_cells, max_events,
 ):  # fmt: skip
-    """Simulate ``n`` clones depth-first; returns ``(n, K)`` true counts at ``horizon``."""
-    k_types = P.shape[0]
+    """Simulate ``n`` clones depth-first; returns ``(n, K)`` true counts at ``horizon``.
+
+    ``P`` is ``(1, K, O)`` (one outcome matrix shared by all clones) or ``(n, K, O)``
+    (clone ``c`` uses ``P[c]``, heterogeneous law).
+    """
+    k_types = P.shape[1]
+    shared = P.shape[0] == 1
     out = np.zeros((n, k_types), dtype=np.int64)
     capacity = max_cells + children.shape[2] + sizes.max() + 1
     stack_type = np.empty(capacity, dtype=np.int64)
     stack_time = np.empty(capacity)
     for c in range(n):
+        Pc = P[0] if shared else P[c]
         counts = np.zeros(k_types, dtype=np.int64)
         size = draw_founders(founder, sizes, size_probs, rng, stack_type)
         stack_time[:size] = 0.0
@@ -55,7 +66,7 @@ def bh_forward(
             if events > max_events:
                 ok = False
                 break
-            o = categorical(P[k], n_out[k], rng)
+            o = categorical(Pc[k], n_out[k], rng)
             for i in range(n_children[k, o]):
                 if size >= capacity:
                     ok = False
@@ -123,6 +134,7 @@ class BellmanHarris(BranchingSimulator):
         h = self.validate_horizon(horizon)
         p = self.validate(physical)
         P, founder, size_probs = self.law.unpack(self.space, p)
+        P = self.clone_matrices(p, P, int(n), rng) if self.heterogeneous else P[None]
         return bh_forward(
             P, self.law.n_outcomes, self.law.children, self.law.n_children, founder,
             self.law.founder_sizes, size_probs, self.shape, self.scalar_values(p), h,
@@ -130,7 +142,12 @@ class BellmanHarris(BranchingSimulator):
         )  # fmt: skip
 
     def expected_counts(self, physical, horizon):
-        """Exact means for exponential lifetimes (``shape == 1``) via a matrix exponential."""
+        """Exact means for exponential lifetimes (``shape == 1``) via a matrix exponential.
+
+        With ``law.clone_heterogeneity`` this is the *mean model* (clone rows replaced by
+        their expectation ``p``), not the exact mean over clones (which is larger: the
+        mean of ``expm`` over Dirichlet rows exceeds ``expm`` of the mean).
+        """
         from scipy.linalg import expm
 
         if not np.allclose(self.shape, 1.0):

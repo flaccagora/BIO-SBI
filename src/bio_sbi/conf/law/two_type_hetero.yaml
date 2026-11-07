@@ -1,0 +1,23 @@
+# two_type with organoid-level heterogeneity ("random-effects law"): every clone draws
+# its own outcome rows p_clone[k] ~ Dirichlet(kappa * p[k]) over the free nonzero
+# entries of row k (fixed entries and zeros unchanged), independently per clone.
+# kappa (clone.kappa, theta clone.log_kappa) is inferred with a log-uniform prior on
+# kappa_bounds; kappa -> inf is the homogeneous two_type law. Fix it with
+# +law.fixed.clone.kappa=30. Real data (founder type inferred):
+#   bio-sbi simulator=bellman_harris law=two_type_hetero '~law.fixed.founder' design=real_like budget=full
+name: two_type_hetero
+types: [A, B]
+outcomes: all
+max_daughters: 2
+founder_sizes: [1]
+fixed:
+  founder:
+    A: 1.0
+concentration: {}
+clone_heterogeneity:
+  kappa_bounds: [1.0, 1000.0]   # log-uniform prior on the Dirichlet concentration kappa
+reference:
+  A: {death: 0.03, persist: 0.03, to_B: 0.05, div_AB: 0.05, div_AA: 0.55, div_BB: 0.29}
+  B: {death: 0.10, persist: 0.10, to_A: 0.80}
+  founder: {A: 1.0}             # also valid when founder is freed with '~law.fixed.founder'
+  clone: {kappa: 10.0}
