@@ -7,14 +7,17 @@ pointing forward.
 
 | File | Content |
 |---|---|
-| `report.tex` | the report: executive summary (in narrative order), roadmap (dependency graph + experiment index with section numbers here and in `report/report.pdf`), methods, Parts I–V, appendices (device benchmark, reproducibility, glossary) |
+| `report.tex` | the report: executive summary (in narrative order), roadmap (dependency graph + experiment index with section numbers here and in `report/report.pdf`), methods, Parts I–VI, appendices (device benchmark, P0 timing, reproducibility, glossary) |
 | `report.pdf` | compiled report |
 
 Order: methodological check (X2) → I identifiability and the prior (E0, X5a, X5c, E0 at
 4096 clones) → II design and amount of data
-(design comparison, E4 GW, E4 BH) → III BH timing (BH ridge, X5d, X5b, E3a, E3b, E3c) →
-IV misspecified biology and assay (E1a type, E1a number BH/GW, E1b, E1c BH/GW, E2a/b BH/GW,
-E2c, E2c modelled, E2c rerun, detectability synthesis) → V planned (X1/X3/X4/R/P0, measurements).
+(design comparison, E4 GW, E4 BH) → III BH timing (BH ridge, X5d, X5b, E3a, E3b, E3c, X3 GW
+fitted to BH data) → IV misspecified biology and assay (E1a type, E1a number BH/GW, E1b,
+E1b follow-up, E1c BH/GW, E2a/b BH/GW, E2 asymmetric follow-up, E2c, E2c modelled, E2c rerun,
+detectability synthesis) → V real data (CRC0322: data, model ladder, final model) → VI running
+and planned (X1, X4 running; follow-ups, measurements). Appendix: device benchmark, P0 timing,
+reproducibility, glossary.
 
 ## Dependency on `../report/`
 
@@ -23,7 +26,9 @@ This folder has **no figures of its own**. `report.tex` sets
 so it needs `report/figures/*.pdf` (written by `report/make_figures.py`). A missing figure
 is shown as an orange pending box. The text and tables were taken from
 `report/report.tex`; if that report is updated, the matching section here must be updated
-by hand (sections keep the same labels, e.g. `sec:e0`, `sec:x5b`).
+by hand (sections keep the same labels, e.g. `sec:e0`, `sec:x5b`). The "ID-ord." column of
+the experiment index (Table 1) holds the section numbers of `report/report.pdf` as literal
+text: update it when sections are added there.
 
 ## Rebuild
 

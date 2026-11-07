@@ -1788,6 +1788,278 @@ def fig_detectability_gw():
     save(fig, "detectability_gw")
 
 
+# ======================================================================= X3, real data
+def fig_x3():
+    """X3: Galton-Watson (fixed hours per generation tau) fitted to Bellman-Harris data.
+    Per-seed posterior means of A->AA, B persist, B->A per arm vs truth and the BH
+    control; support mass and PPC per arm."""
+    require("x3/gw", 20)
+    require("x3/bh_control", 5)
+    rows, runs = [], []
+    for path in sorted((RES / "x3").glob("*/*/metrics.json")):
+        m = json.loads(path.read_text())
+        ovr = (path.parent / ".hydra" / "overrides.yaml").read_text()
+        arm = ("BH" if "bellman_harris" in ovr
+               else "τ " + ovr.split("hours_per_generation=")[1].split()[0] + " h")
+        runs.append(dict(arm=arm, seed=m["seed"], support=m.get("posterior_support_mass"),
+                         ppc=(m.get("ppc") or {}).get("fraction_outside_95", np.nan),
+                         drawn=m.get("posterior_samples_drawn")))
+        if (m.get("posterior_samples_drawn") or 0) < 100:
+            continue
+        for r in m["recovery"]["per_parameter"]:
+            rows.append(dict(arm=arm, seed=m["seed"], parameter=r["parameter"],
+                             mean=r["posterior_mean"], sd=r["posterior_std"],
+                             covered=r["covered"], truth=r["truth"]))
+    p, r = pd.DataFrame(rows), pd.DataFrame(runs)
+    arms = ["BH", "τ 16 h", "τ 20 h", "τ 24 h", "τ 30 h"]
+    cols = {"BH": INK2, "τ 16 h": BLUE, "τ 20 h": AQUA, "τ 24 h": ORANGE, "τ 30 h": RED}
+    pars = [("A.div_AA", "a  A→AA"), ("B.persist", "b  B persist"),
+            ("B.to_A", "c  B→A")]
+    fig, axes = plt.subplots(1, 4, figsize=(W_FULL, 2.2),
+                             gridspec_kw=dict(wspace=0.42, width_ratios=[1, 1, 1, 1.15]))
+    for ax, (par, title) in zip(axes[:3], pars, strict=True):
+        q = p[p.parameter == par]
+        for k, a in enumerate(arms):
+            s = q[q.arm == a].sort_values("seed")
+            if s.empty:
+                ax.text(k, 0.05, "no\nfit", ha="center", va="bottom", fontsize=6, color=RED)
+                continue
+            x = k + np.linspace(-0.22, 0.22, len(s))
+            ax.errorbar(x, s["mean"], yerr=s["sd"], fmt="none", ecolor=cols[a], elinewidth=0.6,
+                        alpha=0.6)
+            ax.scatter(x[s.covered.values], s["mean"][s.covered.values], s=12, color=cols[a],
+                       zorder=3, lw=0.4, ec="white")
+            ax.scatter(x[~s.covered.values], s["mean"][~s.covered.values], s=12, color="white",
+                       ec=cols[a], lw=0.9, zorder=3)
+            ax.plot([k - 0.3, k + 0.3], [s["mean"].mean()] * 2, color=cols[a], lw=1.6)
+        truth_line(ax, q.truth.iloc[0])
+        ax.set_xticks(range(len(arms)), ["BH", "16", "20", "24", "30"], fontsize=6.3)
+        ax.set_xlabel("BH (true) | GW τ (h)")
+        ax.set_ylim(0, 1)
+        ax.set_title(title)
+        ax.grid(axis="x", visible=False)
+    axes[0].set_ylabel("posterior mean ± sd per seed")
+    g = r.groupby("arm")[["support", "ppc"]].mean().reindex(arms)
+    ax = axes[3]
+    x = np.arange(len(arms))
+    ax.bar(x - 0.18, g.support, width=0.36, color=BLUE, label="support mass")
+    ax.bar(x + 0.18, g.ppc.fillna(0), width=0.36, color=ORANGE, label="PPC outside 95%")
+    for k, a in enumerate(arms):
+        if np.isnan(g.ppc.loc[a]):
+            ax.text(k + 0.18, 0.02, "–", ha="center", fontsize=7, color=ORANGE)
+    ax.axhspan(0.5, 0.9, color=GRID, alpha=0.5, zorder=0, lw=0)
+    ax.set_xticks(x, ["BH", "16", "20", "24", "30"], fontsize=6.3)
+    ax.set_xlabel("BH (true) | GW τ (h)")
+    ax.set_ylim(0, 1)
+    ax.set_title("d  checks (mean of 5)")
+    ax.legend(fontsize=5.8, loc="upper right")
+    ax.grid(axis="x", visible=False)
+    save(fig, "x3")
+    tab = p[p.parameter.isin([q for q, _ in pars])].groupby(["parameter", "arm"]).agg(
+        mean=("mean", "mean"), sd=("sd", "mean"), covered=("covered", "sum"), truth=("truth", "first"))
+    table(tab.reset_index().merge(g.reset_index(), on="arm", how="left"), "x3")
+
+
+REAL_VARIANTS = [("3d_mean", "3D mean"), ("3d_sample1", "3D s1"), ("3d_sample2", "3D s2"),
+                 ("3d_sample3", "3D s3"), ("2d", "2D")]
+REAL_MODELS = [
+    ("bh_rev", "bh_rev (baseline)"), ("bh_rev_s1", "bh_rev, seed 1"),
+    ("bh_rev_founder", "bh_rev_founder"), ("gw_rev", "gw_rev (GW)"), ("bh_two", "bh_two"),
+    ("bh_two_founder", "bh_two_founder"), ("bh_multi", "bh_multi (1–8 cells)"),
+    ("bh_hetero_div", "bh_hetero_div"), ("bh_hetero", "bh_hetero"), ("bh_dd", "bh_dd"),
+    ("bh_dd_hetero_div", "bh_dd_hetero_div"), ("bh_dd_hetero", "bh_dd_hetero (final)"),
+    ("bh_dd_hetero_s1", "bh_dd_hetero, seed 1"),
+]
+
+
+def fig_real_ladder():
+    """R: posterior support mass and PPC fraction outside 95% for every real-data model
+    x data variant (results/real/real_fits.csv)."""
+    f = RES / "real" / "real_fits.csv"
+    if not f.exists():
+        raise FileNotFoundError(f)
+    d = pd.read_csv(f)
+    models = [m for m, _ in REAL_MODELS if m in set(d.model)]
+    labels = dict(REAL_MODELS)
+    sup = d.pivot(index="model", columns="variant", values="support").reindex(
+        index=models, columns=[v for v, _ in REAL_VARIANTS])
+    ppc = d.pivot(index="model", columns="variant", values="ppc_out95").reindex(
+        index=models, columns=[v for v, _ in REAL_VARIANTS])
+    drawn = d.pivot(index="model", columns="variant", values="drawn").reindex(
+        index=models, columns=[v for v, _ in REAL_VARIANTS])
+    ppc_raw = ppc.copy()
+    ppc = ppc.where(drawn >= 100)  # PPC from < 100 posterior samples: grey text, no colour
+    cols = [lab for _, lab in REAL_VARIANTS]
+    fig, axes = plt.subplots(1, 2, figsize=(W_FULL, 3.3), gridspec_kw=dict(wspace=0.08))
+    for ax, mat, cmap, title, vmax in [
+            (axes[0], sup, SEQ, "a  posterior support mass", 1.0),
+            (axes[1], ppc, LinearSegmentedColormap.from_list(
+                "seq_or", ["#fff6f0", "#f8c3a6", "#eb6834", "#a8401a"]),
+             "b  PPC: share of features outside 95%", 0.7)]:
+        m = mat.copy()
+        m.index = [labels[i] for i in m.index]
+        m.columns = cols
+        cmap = cmap.copy()
+        cmap.set_bad("#f7f6f2")
+        heat(ax, m, cmap, vmin=0, vmax=vmax, fmt="{:.2f}", fs=6)
+        for i in range(m.shape[0]):
+            for j in range(m.shape[1]):
+                if np.isnan(m.values[i, j]):
+                    raw = ppc_raw.values[i, j] if ax is axes[1] else np.nan
+                    ax.text(j, i, "–" if np.isnan(raw) else f"({raw:.2f})", ha="center",
+                            va="center", fontsize=5.6, color=MUTED)
+        ax.set_title(title, fontsize=7.3)
+        ax.xaxis.tick_top()
+        ax.tick_params(axis="x", labelsize=6.3)
+        k = models.index("bh_dd_hetero")
+        ax.add_patch(plt.Rectangle((-0.5, k - 0.5), m.shape[1], 2, fill=False, ec=INK, lw=1.0))
+    axes[1].set_yticklabels([])
+    axes[0].tick_params(axis="y", labelsize=6.5)
+    fig.text(0.5, 0.06, "–: not fitted (gw_rev: 2D only) or no posterior sample inside the "
+             "prior. Grey (0.xx): PPC from < 100 posterior samples (support ≈ 0), not reliable.",
+             ha="center", fontsize=6, color=INK2)
+    save(fig, "real_ladder")
+    out = sup.add_prefix("support_").join(ppc.add_prefix("ppc_")).reset_index()
+    table(out, "real_ladder")
+
+
+REAL_FEATS = [("total.mean_log", "total: mean"), ("total.sd_log", "total: sd"),
+              ("A.mean_log", "A: mean"), ("B.mean_log", "B: mean"),
+              ("corr_A_B", "corr(A, B)")]
+
+
+def fig_real_ppc():
+    """R: posterior predictive 95% intervals vs the observed 3D-mean summaries for the
+    baseline (bh_rev) and the final model (bh_dd_hetero), day 6 and day 10."""
+    arms = [("bh_rev", "bh_rev (baseline)", ORANGE), ("bh_dd_hetero", "bh_dd_hetero (final)", BLUE),
+            ("bh_dd_hetero_s1", "final, seed 1", AQUA)]
+    ppcs = {}
+    for m, _, _ in arms:
+        f = RES / "real" / m / "fit_3d_mean" / "ppc.csv"
+        if not f.exists():
+            raise FileNotFoundError(f)
+        ppcs[m] = pd.read_csv(f).set_index("feature")
+    fig, axes = plt.subplots(2, len(REAL_FEATS), figsize=(W_FULL, 3.1),
+                             gridspec_kw=dict(wspace=0.6, hspace=0.25))
+    rows = []
+    for i, (h, day) in enumerate([("h144", "day 6"), ("h240", "day 10")]):
+        for j, (feat, lab) in enumerate(REAL_FEATS):
+            ax = axes[i, j]
+            key = f"{h}.{feat}"
+            obs = ppcs["bh_dd_hetero"].loc[key, "observed"]
+            for k, (m, name, c) in enumerate(arms):
+                r = ppcs[m].loc[key]
+                ax.plot([k, k], [r["q2.5"], r["q97.5"]], color=c, lw=3.2, solid_capstyle="butt",
+                        alpha=0.85)
+                ax.scatter([k], [r["predictive_mean"]], s=9, color="white", ec=c, lw=0.8,
+                           zorder=3)
+                rows.append(dict(model=m, feature=key, observed=r["observed"],
+                                 q025=r["q2.5"], q975=r["q97.5"], z=r["z"],
+                                 outside=r["outside_95"]))
+            ax.axhline(obs, color=INK, lw=0.9, ls=(0, (4, 2)), zorder=4)
+            ax.set_xticks([])
+            ax.set_xlim(-0.6, len(arms) - 0.4)
+            ax.grid(axis="x", visible=False)
+            ax.tick_params(axis="y", labelsize=6)
+            if i == 0:
+                ax.set_title(lab, fontsize=6.6)
+            if j == 0:
+                ax.set_ylabel(day)
+    handles = [plt.Line2D([], [], color=c, lw=3.2, label=f"{name}: 95% predictive interval")
+               for _, name, c in arms]
+    handles.append(plt.Line2D([], [], color=INK, lw=0.9, ls=(0, (4, 2)),
+                              label="observed (CRC0322, 3D mean)"))
+    fig.legend(handles=handles, loc="lower center", ncol=2, bbox_to_anchor=(0.5, 0.94),
+               fontsize=6.3)
+    save(fig, "real_ppc")
+    table(pd.DataFrame(rows), "real_ppc")
+
+
+def _loguni_q(lo, hi, q):
+    return float(np.exp(np.log(lo) + q * (np.log(hi) - np.log(lo))))
+
+
+def fig_real_posterior():
+    """R: posterior marginals of the final model (bh_dd_hetero, two training seeds) for
+    every data variant: identifiable parameters (top) and non-identifiable ones (bottom),
+    with the prior's central 90% interval as a grey band."""
+    seeds = [("bh_dd_hetero", "seed 0", BLUE), ("bh_dd_hetero_s1", "seed 1", ORANGE)]
+    samp = {}
+    for m, _, _ in seeds:
+        for v, _ in REAL_VARIANTS:
+            f = RES / "real" / m / f"fit_{v}" / "posterior_samples.csv.gz"
+            if not f.exists():
+                raise FileNotFoundError(f)
+            s = pd.read_csv(f)
+            s["B.divides"] = s[["B.div_AA", "B.div_AB", "B.div_BB"]].sum(axis=1)
+            samp[(m, v)] = s
+    rng = np.random.default_rng(0)
+    dir6 = rng.dirichlet(np.ones(6), 200_000)
+    prior = {
+        "A.div_AA": tuple(np.quantile(dir6[:, 3], [0.05, 0.5, 0.95])),
+        "B.to_A": tuple(np.quantile(dir6[:, 1], [0.05, 0.5, 0.95])),
+        "B.divides": tuple(np.quantile(dir6[:, 3:].sum(1), [0.05, 0.5, 0.95])),
+        "B.death": tuple(np.quantile(dir6[:, 0], [0.05, 0.5, 0.95])),
+        "founder.A": (0.05, 0.5, 0.95),
+        "A.mean_lifetime": tuple(_loguni_q(10, 80, q) for q in (0.05, 0.5, 0.95)),
+        "B.mean_lifetime": tuple(_loguni_q(10, 80, q) for q in (0.05, 0.5, 0.95)),
+        "density.capacity": tuple(_loguni_q(10, 1e5, q) for q in (0.05, 0.5, 0.95)),
+        "clone.kappa": tuple(_loguni_q(1, 1000, q) for q in (0.05, 0.5, 0.95)),
+    }
+    panels = [
+        [("A.div_AA", "A→AA (self-renewal)", False), ("A.mean_lifetime", "A lifetime (h)", False),
+         ("density.capacity", "capacity K (cells)", True),
+         ("clone.kappa", "heterogeneity κ", True)],
+        [("founder.A", "founder A fraction", False), ("B.to_A", "B→A", False),
+         ("B.divides", "B divides (sum)", False), ("B.death", "B death", False)],
+    ]
+    fig, axes = plt.subplots(2, 4, figsize=(W_FULL, 3.9),
+                             gridspec_kw=dict(wspace=0.2, hspace=0.62))
+    nv = len(REAL_VARIANTS)
+    rows = []
+    for i, prow in enumerate(panels):
+        for j, (par, lab, logx) in enumerate(prow):
+            ax = axes[i, j]
+            lo, med, hi = prior[par]
+            ax.axvspan(lo, hi, color=GRID, alpha=0.7, lw=0, zorder=0)
+            ax.axvline(med, color=MUTED, lw=0.6, ls=":", zorder=0)
+            for k, (v, vlab) in enumerate(REAL_VARIANTS):
+                for si, (m, slab, c) in enumerate(seeds):
+                    x = samp[(m, v)][par].values
+                    q = np.quantile(x, [0.05, 0.25, 0.5, 0.75, 0.95])
+                    y = nv - 1 - k + (0.17 if si == 0 else -0.17)
+                    ax.plot([q[0], q[4]], [y, y], color=c, lw=0.8)
+                    ax.plot([q[1], q[3]], [y, y], color=c, lw=2.6, solid_capstyle="butt")
+                    ax.scatter([q[2]], [y], s=8, color="white", ec=c, lw=0.7, zorder=3)
+                    rows.append(dict(model=m, variant=v, parameter=par, mean=x.mean(),
+                                     sd=x.std(), q05=q[0], q50=q[2], q95=q[4]))
+            if logx:
+                ax.set_xscale("log")
+            ax.set_yticks(range(nv), [lab_ for _, lab_ in REAL_VARIANTS][::-1] if j == 0 else [],
+                          fontsize=6.3)
+            ax.set_ylim(-0.6, nv - 0.4)
+            ax.grid(axis="y", visible=False)
+            ax.tick_params(axis="x", labelsize=6)
+            ax.set_title(lab, fontsize=6.8)
+    for ax in (axes[0, 0], axes[1, 0], axes[1, 1], axes[1, 2], axes[1, 3]):
+        ax.set_xlim(0, 1)
+        ax.set_xticks([0, 0.25, 0.5, 0.75, 1], ["0", "", "0.5", "", "1"])
+    axes[0, 2].set_xlim(10, 1e5)
+    axes[0, 3].set_xlim(1, 1000)
+    fig.text(0.075, 0.935, "Identifiable (recovered in the synthetic check)", fontsize=7.3,
+             fontweight="bold", color=INK)
+    fig.text(0.075, 0.455, "Not recovered in the synthetic check (founder mix, B's row; cf. E0, "
+             "E1a)", fontsize=7.3,
+             fontweight="bold", color=INK)
+    handles = [plt.Line2D([], [], color=c, lw=2.6, label=f"bh_dd_hetero, {slab}: 50% / 90% interval")
+               for _, slab, c in seeds]
+    handles.append(plt.matplotlib.patches.Patch(color=GRID, label="prior, central 90%"))
+    fig.legend(handles=handles, loc="lower center", ncol=3, bbox_to_anchor=(0.5, 0.975),
+               fontsize=6.3)
+    save(fig, "real_posterior")
+    table(pd.DataFrame(rows), "real_posterior")
+
+
 # ======================================================================= main
 FIGURES = [
     fig_e0_bto_a, fig_e0_c2st, fig_design, fig_gpu, fig_e4, fig_ridge, fig_e1b,
@@ -1798,6 +2070,7 @@ FIGURES = [
     fig_e2c_arms, fig_detectability_gw,
     fig_e2c_prior, fig_x5a_priors, fig_x5a, fig_x5b, fig_x5c, fig_x5d,
     fig_x2, fig_e0_large,
+    fig_x3, fig_real_ladder, fig_real_ppc, fig_real_posterior,
 ]
 
 

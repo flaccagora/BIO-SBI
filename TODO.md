@@ -293,7 +293,9 @@ for each parameter?
       posterior sd; training ≈ half (GW) to 70% (BH) of the seed-to-seed variance;
       quote posterior sd, not seed sd. The BH ridge bias is identical across datasets
       and training seeds.
-- [ ] **X3 – Model**: GW vs BH on the same question. Can a GW fit describe BH data?
+- [x] **X3 – Model** (`results/x3/`, DONE: GW with τ = A's lifetime fits BH data silently,
+      B's slower cycle absorbed as persistence; τ longer than A's lifetime is rejected).
+      GW vs BH on the same question. Can a GW fit describe BH data?
       GW ↔ hours mapping implemented (`simulator=galton_watson_hours`,
       `hours_per_generation` τ, h → round_half_up(h/τ) generations); preset
       `x3_gw_fit_bh` sweeps τ ∈ {16, 20, 24, 30} × 5 seeds, BH control arm in its header.
@@ -325,9 +327,12 @@ for each parameter?
       cells). `bio-sbi-infer` now writes `measured/metrics.json` (support mass,
       posterior mean/sd/quantiles, PPC at the measured clone counts, `--ppc N`) and
       `ppc.csv`. Still open: choose 2D vs 3D (Q3).
-- [ ] Train with the final model from E1–E4 at the real design (`budget=full`), check
-      SBC, fit with `bio-sbi-infer`, and run the PPC on the real data.
-- [ ] **R-het – organoid-level fate heterogeneity (random-effects law)**. All homogeneous
+- [x] Train with the final model from E1–E4 at the real design (`budget=full`), check
+      SBC, fit with `bio-sbi-infer`, and run the PPC on the real data. DONE
+      (`results/real/info.md`): every homogeneous model fails; final model `bh_dd_hetero`
+      (organoid fate heterogeneity + density-dependent lifetimes, founder inferred) fits
+      2D and 3D (support 0.73–0.94, PPC 0–15%), two training seeds agree.
+- [x] **R-het – organoid-level fate heterogeneity (random-effects law)**. All homogeneous
       models fail on CRC0322 (support mass ≈ 0, 40–60% of PPC features outside 95%):
       real organoids have a *negative* A–B correlation (day 6: −0.53 2D / −0.28 3D;
       day 10: −0.29 / −0.08; models +0.3…+0.95), A-fraction sd ≈ 0.28–0.30, and totals
@@ -347,7 +352,7 @@ for each parameter?
       then `bio-sbi-infer results/real/bh_hetero data/real/crc0322_3d_mean_bh.csv --out results/real/bh_hetero/fit_3d_mean --ppc 500`
       (and `_2d`; also the fate-only variant `'+law.clone_heterogeneity.outcomes=[div_AA,div_AB,div_BB]'`, `results/real/bh_hetero_div`);
       check SBC of `clone.log_kappa` and whether support mass / PPC improve.
-- [ ] **R-dd – density-dependent division (carrying capacity)**. BH fits of CRC0322 also
+- [x] **R-dd – density-dependent division (carrying capacity)**. BH fits of CRC0322 also
       miss the growth curve (≈25 h per doubling to day 6, ≈60 h day 6→10: mean cells
       ratio day 10 / day 6 = 3.05 3D mean, 2.40 2D; constant lifetimes give ≈14) and the
       tight totals. Implemented `simulator=bellman_harris_dd`
