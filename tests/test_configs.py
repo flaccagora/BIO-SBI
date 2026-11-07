@@ -44,7 +44,12 @@ def test_three_split_q_and_three_type_traj():
 
 
 @pytest.mark.parametrize(
-    ("simulator", "horizons"), [("galton_watson", (6.0, 10.0)), ("bellman_harris", (144.0, 240.0))]
+    ("simulator", "horizons"),
+    [
+        ("galton_watson", (6.0, 10.0)),
+        ("galton_watson_hours", (144.0, 240.0)),
+        ("bellman_harris", (144.0, 240.0)),
+    ],
 )
 def test_real_like_design_follows_simulator(simulator, horizons):
     comp, _, _ = build(compose_cfg(f"simulator={simulator}", "design=real_like"))
@@ -66,7 +71,7 @@ def sweep_points(name):
 @pytest.mark.parametrize("name", PRESETS)
 def test_experiment_presets_compose_and_build(name):
     hcfg, points = sweep_points(name)
-    if name.startswith(("e1", "e2", "e3", "e4", "x2")):
+    if name.startswith(("e1", "e2", "e3", "e4", "x2", "x3")):
         assert hcfg.info.title and hcfg.info.question
         assert hcfg.info.title in render_info(hcfg)
     for point in points:

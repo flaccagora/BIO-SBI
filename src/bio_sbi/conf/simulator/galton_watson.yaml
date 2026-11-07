@@ -1,5 +1,6 @@
 # Discrete-generation multi-type Galton-Watson process (bio_sbi.simulators.GaltonWatson).
 # Every living cell has exactly one event per generation. Horizons are generations.
+# For horizons in hours (e.g. to fit Bellman-Harris data) use simulator=galton_watson_hours.
 name: galton_watson
 horizons: [4, 8, 12]           # default design endpoints (generations)
 real_horizons: [6, 10]         # day 6 / day 10 of the real data (design=real_like)
@@ -10,3 +11,4 @@ model:
   fixed: {}
   max_cells: 100000            # per-clone cap; larger clones invalidate the dataset
   max_events: 5000000
+  hours_per_generation: null   # null: horizons are generations; a number: hours (see _hours)

@@ -12,9 +12,21 @@ Two samplers are provided:
   one captured endpoint cell. Founders and subtrees without captured descendants are
   pruned analytically using the extinction-type recursion, so rare survivors under
   broad priors cost nothing extra (no rejection loop).
+
+Time axis: by default horizons are integer generations (``time_unit = "generations"``).
+With ``hours_per_generation = tau`` the process is placed on an hour axis instead
+(``time_unit = "hours"``): an hour-valued horizon ``h`` is simulated as
+``g = round_half_up(h / tau)`` synchronous generations. Designs, summaries and
+reference counts stay keyed by ``h``, so a Galton-Watson inference model can be fitted
+to Bellman-Harris data measured at the same hours.
 """
 
 from __future__ import annotations
+
+import logging
+import math
+import warnings
+from collections.abc import Mapping
 
 import numpy as np
 from numba import njit
@@ -173,22 +185,78 @@ def gw_detected(
     return out
 
 
+LOG = logging.getLogger(__name__)
+
+#: Largest tolerated |h / tau - g| before a horizon-rounding warning is emitted.
+ROUNDING_TOLERANCE = 0.25
+
+
 class GaltonWatson(BranchingSimulator):
     """Synchronous discrete-generation branching process.
 
-    Physical parameters are the outcome, founder-type and founder-size probabilities;
-    horizons are integer generations. Constructor arguments are documented in
-    :class:`~bio_sbi.simulators.base.BranchingSimulator`.
+    Physical parameters are the outcome, founder-type and founder-size probabilities.
+
+    Args:
+        law, fixed, max_cells, max_events: As in
+            :class:`~bio_sbi.simulators.base.BranchingSimulator`.
+        hours_per_generation: ``None`` (default): horizons are integer generations and
+            ``time_unit == "generations"``. A positive number ``tau``: horizons are
+            hours (``time_unit == "hours"``) and ``h`` hours are simulated as
+            ``g = floor(h / tau + 0.5)`` generations (round half up, so 2.5 -> 3, not
+            Python's banker's rounding). A warning is emitted (once per horizon) when
+            ``|h / tau - g| > 0.25``; horizons with ``g < 1`` are rejected. ``tau`` is
+            fixed, not inferred.
     """
 
-    time_unit = "generations"
+    def __init__(
+        self,
+        law: Mapping,
+        fixed: Mapping[str, float] | None = None,
+        max_cells: int = 100_000,
+        max_events: int = 5_000_000,
+        hours_per_generation: float | None = None,
+    ) -> None:
+        super().__init__(law, fixed, max_cells, max_events)
+        if hours_per_generation is not None:
+            hours_per_generation = float(hours_per_generation)
+            if not np.isfinite(hours_per_generation) or hours_per_generation <= 0:
+                raise ValueError("hours_per_generation must be a positive number or None")
+        self.hours_per_generation = hours_per_generation
+        self.time_unit = "generations" if hours_per_generation is None else "hours"
+        self._warned: set[float] = set()
+
+    def generations(self, horizon: float) -> int:
+        """Return the number of synchronous generations simulated for ``horizon``.
+
+        Without ``hours_per_generation`` the horizon must be a positive integer; with
+        it, ``horizon`` is in hours and is rounded half up to whole generations.
+        """
+        h = super().validate_horizon(horizon)
+        tau = self.hours_per_generation
+        if tau is None:
+            if not h.is_integer():
+                raise ValueError("Galton-Watson horizons must be integer generations")
+            return int(h)
+        exact = h / tau
+        g = math.floor(exact + 0.5)
+        if g < 1:
+            raise ValueError(
+                f"Horizon {h:g} h is less than half a generation ({tau:g} h per generation)"
+            )
+        if abs(exact - g) > ROUNDING_TOLERANCE and h not in self._warned:
+            self._warned.add(h)
+            msg = (
+                f"Galton-Watson horizon {h:g} h = {exact:.3g} generations of {tau:g} h, "
+                f"simulated as {g} generations ({g * tau:g} h)"
+            )
+            LOG.warning(msg)
+            warnings.warn(msg, stacklevel=2)
+        return g
 
     def validate_horizon(self, horizon: float) -> float:
-        """Require a positive integer number of generations."""
-        h = super().validate_horizon(horizon)
-        if not h.is_integer():
-            raise ValueError("Galton-Watson horizons must be integer generations")
-        return h
+        """Check ``horizon`` (generations, or hours with ``hours_per_generation``)."""
+        self.generations(horizon)
+        return float(horizon)
 
     def _arrays(self, physical):
         P, founder, size_probs = self.law.unpack(self.space, self.validate(physical))
@@ -196,7 +264,7 @@ class GaltonWatson(BranchingSimulator):
 
     def simulate(self, physical, horizon, n, rng):
         """See :meth:`BranchingSimulator.simulate`."""
-        g = int(self.validate_horizon(horizon))
+        g = self.generations(horizon)
         P, founder, sizes, size_probs = self._arrays(physical)
         return gw_forward(
             P, self.law.n_outcomes, self.law.offspring, founder, sizes, size_probs, g,
@@ -210,7 +278,7 @@ class GaltonWatson(BranchingSimulator):
 
     def simulate_detected(self, physical, horizon, n, capture, rng):
         """See :meth:`BranchingSimulator.simulate_detected`."""
-        g = int(self.validate_horizon(horizon))
+        g = self.generations(horizon)
         P, founder, sizes, size_probs = self._arrays(physical)
         return gw_detected(
             P, self.law.n_outcomes, self.law.offspring, self.law.children,
@@ -220,14 +288,14 @@ class GaltonWatson(BranchingSimulator):
 
     def expected_counts(self, physical, horizon):
         """``E[N] * founder @ M**G`` with ``M`` the mean offspring matrix."""
-        g = int(self.validate_horizon(horizon))
+        g = self.generations(horizon)
         P, founder, sizes, size_probs = self._arrays(physical)
         m = self.law.mean_matrix(P)
         return float(sizes @ size_probs) * founder @ np.linalg.matrix_power(m, g)
 
     def detection_probability(self, physical, horizon, capture):
         """P(a clone has >= 1 captured cell at ``horizon``)."""
-        g = int(self.validate_horizon(horizon))
+        g = self.generations(horizon)
         P, founder, sizes, size_probs = self._arrays(physical)
         s = detection_success(P, self.law.n_outcomes, self.law.offspring, g, np.asarray(capture))
         q = float(founder @ s[g])

@@ -60,6 +60,14 @@ def _field(key: str, value, defaults: dict) -> str:
     return _fmt(value)
 
 
+def _time_unit(model) -> str:
+    """Effective time unit of a simulator config (GW may count hours, see GaltonWatson)."""
+    tau = _value(model, "model.hours_per_generation")
+    if tau is not None:
+        return f"hours ({_fmt(float(tau))} h per generation)"
+    return _value(model, "model.time_unit", "generations")
+
+
 def job_record(job: Path) -> dict:
     """Data-side description of one run (from its saved config and reference data)."""
     cfg = OmegaConf.load(job / ".hydra" / "config.yaml")
@@ -79,7 +87,7 @@ def job_record(job: Path) -> dict:
     data_seed = _value(cfg, "data_seed", None)
     fields = {
         "simulator": _value(model, "name"),
-        "time unit": _value(model, "model.time_unit", "generations"),
+        "time unit": _time_unit(model),
         "lifetime shape": _value(model, "model.lifetime_shape"),
         "law": _value(law, "name"),
         "types": _value(law, "types"),

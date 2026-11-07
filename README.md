@@ -13,7 +13,7 @@ Every part of the pipeline is a swappable [Hydra](https://hydra.cc) config group
 
 | Group | Options | What it controls |
 |---|---|---|
-| `simulator` | `galton_watson`, `bellman_harris` | Generative model (time is generations or hours) |
+| `simulator` | `galton_watson`, `galton_watson_hours`, `bellman_harris` | Generative model (time is generations or hours) |
 | `law` | `two_type` (all transitions), `reversible_ab`, `hierarchy_ab`, `minimal_ab`, `three_type`, `three_type_traj`, `multi_founder` | Cell types, transitions, founders, fixed values, prior |
 | `observation` | `perfect`, `noisy`, `all_clones`, `three_as_two`, `three_split` | Capture, type→label confusion, clone selection |
 | `summary` | `moments`, `means` | Summary statistics fed to the network |
@@ -124,6 +124,13 @@ discrete and continuous time under the same biological hypothesis.
   `selection: detected` it uses an **exact detection-conditioned sampler**, which prunes
   subtrees that leave no captured cells and so needs no rejection loop for rare
   survivors.
+* **Galton-Watson in hours** (`simulator=galton_watson_hours`): the same model with a
+  fixed `model.hours_per_generation` τ (default 24). Horizons are then **hours** (default
+  `[96, 192, 288]`, real-like `[144, 240]`) and an endpoint of h hours is simulated as
+  `g = round_half_up(h / τ)` generations (a warning is logged when `|h/τ − g| > 0.25`;
+  `g ≥ 1` is required). Designs, summaries and `counts_h<h>` stay keyed by hours, so a GW
+  model can be fitted to Bellman-Harris data (experiment X3, `x3_gw_fit_bh`). τ is not
+  inferred; sweep it with `simulator.model.hours_per_generation=16,20,24,30`.
 * **Bellman-Harris** (`simulator=bellman_harris`): an age-dependent continuous-time
   process. Each cell lives `Gamma(shape, mean/shape)` hours and then draws an outcome.
   The mean lifetimes per type are inferred with log-uniform priors
@@ -226,9 +233,13 @@ uv run bio-sbi +law.fixed.A.persist=0.2
 # Continuous-time data with a two-type BH inference model, three types in the data
 uv run bio-sbi simulator=bellman_harris law@data.law=three_type \
   observation@data.observation=three_as_two
+
+# Bellman-Harris data, Galton-Watson inference with 20 h per generation
+uv run bio-sbi simulator=galton_watson_hours simulator.model.hours_per_generation=20 \
+  simulator@data.simulator=bellman_harris design=real_like
 ```
 
-Data and inference models must use the same time unit and produce the same
+Data and inference models must use the same (effective) time unit and produce the same
 measured labels; the number of true types, the transitions and the parameters may
 differ. In `recovery.csv`, the truth is matched **by parameter name**; a parameter the
 data model does not have gets `truth = NaN`. Look at the parameters' meaning before

@@ -294,8 +294,9 @@ for each parameter?
       quote posterior sd, not seed sd. The BH ridge bias is identical across datasets
       and training seeds.
 - [ ] **X3 – Model**: GW vs BH on the same question. Can a GW fit describe BH data?
-      This needs a GW ↔ hours mapping, because the two must share a time unit; it is
-      currently not possible without a code change.
+      GW ↔ hours mapping implemented (`simulator=galton_watson_hours`,
+      `hours_per_generation` τ, h → round_half_up(h/τ) generations); preset
+      `x3_gw_fit_bh` sweeps τ ∈ {16, 20, 24, 30} × 5 seeds, BH control arm in its header.
 - [ ] **X4 – Combined errors**: the realistic combination (organoid death + `e` + C +
       lifetime CV) at the real design, `budget=full`, 5 seeds. This is the error budget
       to quote alongside the real-data fit.

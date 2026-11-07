@@ -1,0 +1,45 @@
+# @package _global_
+# X3: can a Galton-Watson fit describe Bellman-Harris data? Data: BH reversible_ab at
+# the real-like design (144 h / 240 h, 165 / 101 clones) with the reference truth
+# (A 20 h, B 30 h mean lifetimes, Gamma shape 8). Inference: GW reversible_ab on an
+# hour axis (simulator=galton_watson_hours), h hours simulated as
+# g = round_half_up(h / tau) generations; tau = hours_per_generation is swept, not
+# inferred. Generations at 144 h / 240 h:
+#   tau 16 -> 9 / 15, tau 20 -> 7 / 12 (7.2), tau 24 -> 6 / 10, tau 30 -> 5 / 8 (4.8)
+# (no rounding warning: every |h / tau - g| <= 0.25).
+#   bio-sbi -m +experiment=x3_gw_fit_bh hydra.sweep.dir=results/x3/gw
+# Control arm, BH inference on the same data (same seeds, so same reference datasets):
+#   bio-sbi -m +experiment=x3_gw_fit_bh simulator=bellman_harris \
+#     '~simulator.model.hours_per_generation' hours_per_generation=null \
+#     hydra.sweep.dir=results/x3/bh_control
+# (the command-line hours_per_generation=null replaces the tau sweep; the `~` removes
+# the GW-only constructor argument from the BH inference model.)
+# GW arm: 4 tau x 5 seeds = 20 runs; control: 5 runs.
+defaults:
+  - override /simulator: galton_watson_hours
+  - override /simulator@data.simulator: bellman_harris
+  - override /law: reversible_ab
+  - override /design: real_like
+  - override /budget: dev
+hours_per_generation: 24   # tau (h); swept below, copied into the GW inference model
+simulator:
+  model:
+    hours_per_generation: ${hours_per_generation}
+info:
+  title: "X3: Galton-Watson fit to Bellman-Harris data"
+  question: |
+    Bellman-Harris data (A 20 h, B 30 h, lifetime shape 8) measured at 144 h and 240 h
+    are fitted with a synchronous Galton-Watson model of tau hours per generation,
+    tau in {16, 20, 24, 30}. Are the outcome probabilities recovered or biased, which
+    tau fits best, and do the PPC and support mass flag the wrong time model?
+    Compare with the BH control arm (results/x3/bh_control).
+  notes: |
+    Horizons are hours on both sides (GW: g = round_half_up(h / tau)); 144 h / 240 h
+    -> 9/15, 7/12, 6/10, 5/8 generations for tau 16/20/24/30. GW has no lifetime
+    parameters: recovery is scored on the shared probability parameters only (BH
+    lifetimes have no GW counterpart). The BH mean lifetimes (20, 30 h) bracket tau.
+hydra:
+  sweeper:
+    params:
+      hours_per_generation: 16,20,24,30
+      seed: 0,1,2,3,4
