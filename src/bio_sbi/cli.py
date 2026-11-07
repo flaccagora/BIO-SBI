@@ -2,12 +2,14 @@
 
 * ``bio-sbi`` - Hydra app running one experiment per (multi)run job, e.g.
   ``bio-sbi simulator=bellman_harris inference=nle budget=smoke``.
-* ``bio-sbi-infer RUN_DIR DATA.csv`` - condition a trained run on measured counts.
+* ``bio-sbi-infer RUN_DIR DATA.csv [--ppc N]`` - condition a trained run on measured
+  counts and check the fit (support mass, posterior predictive check).
 """
 
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 from pathlib import Path
 
@@ -38,13 +40,27 @@ def infer_main(argv: list[str] | None = None) -> None:
     parser.add_argument("run_dir", help="Finished amortised run (contains posterior.pt)")
     parser.add_argument("data", help="CSV with columns horizon,<type names...>")
     parser.add_argument("--out", default=None, help="Output directory (default: RUN/measured)")
-    parser.add_argument("--samples", type=int, default=4096)
+    parser.add_argument("--samples", type=int, default=4096, help="Posterior samples")
+    parser.add_argument(
+        "--ppc", type=int, default=200, help="Posterior predictive datasets (0 disables)"
+    )
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     out = infer_measured(
-        args.run_dir, args.data, args.out or Path(args.run_dir) / "measured", args.samples
+        args.run_dir,
+        args.data,
+        args.out or Path(args.run_dir) / "measured",
+        args.samples,
+        ppc=args.ppc,
     )
-    print(f"Posterior samples written to {out}")
+    metrics = json.loads((out / "metrics.json").read_text())
+    ppc = metrics.get("ppc", {})
+    print(
+        f"Posterior samples drawn: {metrics['posterior_samples_drawn']}, "
+        f"support mass: {metrics['posterior_support_mass']}, "
+        f"PPC features outside 95%: {ppc.get('fraction_outside_95', 'n/a')}"
+    )
+    print(f"Results written to {out}")
 
 
 if __name__ == "__main__":

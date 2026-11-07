@@ -280,12 +280,46 @@ horizon,A,B
 ```bash
 uv run bio-sbi budget=full design.horizons=[12] design.clones=100 \
   '++law.fixed.founder={A: 0.7, B: 0.3}'
-uv run bio-sbi-infer outputs/<run> my_counts.csv --out results/sample1
+uv run bio-sbi-infer outputs/<run> my_counts.csv --out results/sample1 [--samples 4096] [--ppc 200]
 ```
 
-This writes `posterior_samples.csv.gz`, `posterior_summary.csv` and `posterior.png`.
-Horizons must match the trained design; a different clone count only produces a
-warning. Before trusting a real-data fit, check calibration (SBC) for that design.
+Outputs in `--out` (default `<run>/measured`):
+
+* `posterior_samples.csv.gz`, `posterior_summary.csv`, `posterior.png`;
+* `metrics.json`: `posterior_support_mass` (NPE: share of the flow's mass inside the
+  prior support at the measured `x`; near 0 means the model cannot explain the data),
+  per-parameter posterior `mean`, `sd`, `quantiles` (2.5-97.5%), prior mean/sd and
+  `contraction`, the measured clones per horizon, and the posterior predictive check
+  `ppc` (fraction of summary features outside the 95% predictive interval, mean and
+  max |z|) with the per-feature `ppc_table`;
+* `ppc.csv` (the same table: feature name, observed value, predictive mean/sd/95%
+  interval, tail probability, z) and `ppc.npz` (predictive summaries).
+
+`--ppc N` sets the number of posterior predictive datasets (default 200, 0 disables
+it). Horizons must match the trained design; a different clone count per horizon
+only produces a warning, and the PPC then simulates the *measured* clone counts.
+Before trusting a real-data fit, check calibration (SBC) for that design.
+
+### CRC0322 organoids
+
+`scripts/prepare_real_data.py` converts the organoid tables in `submodules/GW/data`
+(day 6: 165 organoids, day 10: 101) into `data/real/` (A = LGR5, B = KRT20):
+`crc0322_3d_mean_*` (rounded mean of the three 3D whole-organoid estimates),
+`crc0322_3d_sample{1,2,3}_*` (sensitivity) and `crc0322_2d_*` (2D section counts),
+each as `_bh` (horizons 144, 240 h) and `_gw` (6, 10 generations).
+`data/real/README.md` has descriptive statistics and data-quality flags. Example
+(Bellman-Harris, real design):
+
+```bash
+uv run python scripts/prepare_real_data.py   # needs `git submodule update --init`
+uv run bio-sbi simulator=bellman_harris design=real_like budget=full \
+  hydra.run.dir=results/real/bh_full
+uv run bio-sbi-infer results/real/bh_full data/real/crc0322_3d_mean_bh.csv \
+  --out results/real/bh_full/3d_mean
+```
+
+Galton-Watson at one generation per day cannot reach the day-6 3D sizes (43 of 165
+organoids exceed 2^6 cells); see `data/real/README.md`.
 
 ## Hardware: CPU vs GPU
 
@@ -370,6 +404,7 @@ src/bio_sbi/
 tests/            unit tests (law, simulators vs theory, generator) + end-to-end runs
 docs/models.md    model definitions, coordinates and glossary
 submodules/GW     earlier Julia/Python reference work and organoid count data
+data/real/        CRC0322 counts in bio-sbi-infer format (scripts/prepare_real_data.py)
 ```
 
 ## Development

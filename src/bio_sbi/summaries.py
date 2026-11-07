@@ -37,6 +37,14 @@ class Summary(ABC):
     def __call__(self, cohorts: Sequence[Cohort]) -> np.ndarray:
         """Return a 1-D float32 summary vector."""
 
+    def feature_names(self, horizons: Sequence[float], labels: Sequence[str]) -> list[str]:
+        """Names of the summary features for cohorts at ``horizons`` (for reports).
+
+        Subclasses override this; the default numbers the features.
+        """
+        dummy = [Cohort(h, np.ones((2, len(labels)), dtype=np.int64)) for h in horizons]
+        return [f"x{i}" for i in range(len(self(dummy)))]
+
 
 @dataclass
 class CohortMoments(Summary):
@@ -75,6 +83,17 @@ class CohortMoments(Summary):
                 out += list(corr[np.triu_indices(counts.shape[1], 1)])
         return np.nan_to_num(np.asarray(out, dtype=np.float32))
 
+    def feature_names(self, horizons: Sequence[float], labels: Sequence[str]) -> list[str]:
+        """See :meth:`Summary.feature_names` (``h<horizon>.<label|total>.<statistic>``)."""
+        stats = ["mean_log", "sd_log", *[f"q{q:g}_log" for q in self.quantiles]]
+        names: list[str] = []
+        for h in horizons:
+            for label in labels:
+                names += [f"h{h:g}.{label}.{s}" for s in stats] + [f"h{h:g}.{label}.present"]
+            names += [f"h{h:g}.total.{s}" for s in stats] + [f"h{h:g}.total.empty"]
+            names += [f"h{h:g}.corr_{a}_{b}" for i, a in enumerate(labels) for b in labels[i + 1 :]]
+        return names
+
 
 @dataclass
 class CohortMeans(Summary):
@@ -88,3 +107,11 @@ class CohortMeans(Summary):
             out += list(np.log1p(counts).mean(0))
             out.append(np.mean(counts.sum(1) == 0))
         return np.asarray(out, dtype=np.float32)
+
+    def feature_names(self, horizons: Sequence[float], labels: Sequence[str]) -> list[str]:
+        """See :meth:`Summary.feature_names`."""
+        return [
+            name
+            for h in horizons
+            for name in (*[f"h{h:g}.{label}.mean_log" for label in labels], f"h{h:g}.empty")
+        ]

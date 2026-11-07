@@ -322,10 +322,20 @@ for each parameter?
 
 ## R. Real data (CRC0322)
 
-- [ ] Convert `submodules/GW/data/df_6D_withmapping.csv` (tab-separated, 165
-      organoids) and `df_10D_withmapping_new.csv` (101) into the `horizon,A,B` format
-      (A = `n_LGR5`, B = `n_KRT20`). Decide between the 2D counts (`n_*`) and the 3D
-      estimates (`*_sample1..3`) (Q3).
+- [x] **Preparation**: `scripts/prepare_real_data.py` writes `data/real/`
+      (`crc0322_3d_mean_*`, `crc0322_3d_sample{1,2,3}_*`, `crc0322_2d_*`, each `_bh`
+      in hours 144/240 and `_gw` in generations 6/10; A = LGR5, B = KRT20) and
+      `data/real/README.md` (stats, flags). The day-10 file is comma-separated with two
+      index columns. Findings: no missing values; every cell is LGR5 or KRT20 (no
+      "neither" cells, so typing is a forced binary call); 10 organoids have a 0-cell
+      3D estimate in one or two of the 3 samples (failed estimate; dropped in the
+      per-sample files, averaged into `3d_mean`); 3D ≈ 2D × 4–5 with the same A fraction (corr 0.996), so
+      the 3D estimates are not independent of the 2D section. Mean cells (2D / 3D mean):
+      day 6 12.9 / 51.7, day 10 31.0 / 157.4; A fraction 0.71 (day 6), 0.63 (day 10).
+      Galton-Watson at 1 generation/day cannot fit 3D day 6 (43/165 organoids > 2^6
+      cells). `bio-sbi-infer` now writes `measured/metrics.json` (support mass,
+      posterior mean/sd/quantiles, PPC at the measured clone counts, `--ppc N`) and
+      `ppc.csv`. Still open: choose 2D vs 3D (Q3).
 - [ ] Train with the final model from E1–E4 at the real design (`budget=full`), check
       SBC, fit with `bio-sbi-infer`, and run the PPC on the real data.
 

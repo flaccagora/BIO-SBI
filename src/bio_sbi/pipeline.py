@@ -22,7 +22,7 @@ from __future__ import annotations
 import json
 import logging
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import numpy as np
@@ -31,13 +31,21 @@ from hydra.utils import instantiate
 from omegaconf import DictConfig, OmegaConf
 
 from . import plots
-from .evaluation import calibration, posterior_predictive_check, recovery_table
+from .design import Design
+from .evaluation import (
+    calibration,
+    posterior_predictive_check,
+    ppc_metrics,
+    predictive_table,
+    recovery_table,
+)
 from .inference import FittedPosterior, InferenceMethod
 from .provenance import write_manifest
 from .rng import seed_for, seed_torch
 from .simulate import DataGenerator
 from .simulators import BranchingSimulator
 from .simulators.law import flatten
+from .summaries import Cohort
 
 LOG = logging.getLogger(__name__)
 
@@ -359,8 +367,43 @@ def load_run(run_dir: str | Path) -> tuple[DictConfig, Components, FittedPosteri
     return cfg, build_components(cfg), FittedPosterior.load(run_dir / "posterior.pt")
 
 
-def infer_measured(run_dir: str | Path, data: str | Path, out: str | Path, n: int = 4096) -> Path:
-    """Condition a trained posterior on measured counts and save posterior samples.
+def measured_cohorts(table: pd.DataFrame, design: Design, labels: list[str]) -> list[Cohort]:
+    """Split a measured ``horizon,<labels>`` table into cohorts in design order.
+
+    Horizons absent from the trained design, or design horizons without clones, raise
+    ``ValueError``; a clone count different from the design only logs a warning.
+    """
+    missing = {"horizon", *labels} - set(table.columns)
+    if missing:
+        raise ValueError(f"CSV is missing columns {sorted(missing)}")
+    counts = table[labels].to_numpy()
+    if not np.all(np.isfinite(counts)) or np.any(counts < 0) or np.any(counts % 1):
+        raise ValueError("Counts must be finite non-negative integers")
+    extra = {float(h) for h in table["horizon"] if not np.any(np.isclose(h, design.horizons))}
+    if extra:
+        raise ValueError(f"Horizons {sorted(extra)} were not part of the trained design")
+    cohorts = []
+    for horizon, size in design.cohorts:
+        rows = table[np.isclose(table["horizon"], horizon)]
+        if len(rows) == 0:
+            raise ValueError(f"No clones at horizon {horizon:g}; trained design: {design}")
+        if len(rows) != size:
+            LOG.warning("Horizon %g: %d clones measured, %d trained", horizon, len(rows), size)
+        cohorts.append(Cohort(horizon, rows[labels].to_numpy(dtype=np.int64)))
+    return cohorts
+
+
+def infer_measured(
+    run_dir: str | Path, data: str | Path, out: str | Path, n: int = 4096, ppc: int = 200
+) -> Path:
+    """Condition a trained posterior on measured counts and check the fit.
+
+    Writes to ``out``: ``posterior_samples.csv.gz``, ``posterior_summary.csv``,
+    ``posterior.png``, ``metrics.json`` (posterior support mass, per-parameter
+    posterior mean/sd/quantiles/contraction, PPC metrics), ``ppc.csv`` (per summary
+    feature: observed value, predictive mean/sd/95% interval, tail probability,
+    z-score) and ``ppc.npz``. The PPC simulates the *measured* number of clones per
+    horizon, which may differ from the trained design.
 
     Args:
         run_dir: Directory of a finished amortised run.
@@ -368,43 +411,112 @@ def infer_measured(run_dir: str | Path, data: str | Path, out: str | Path, n: in
             per measured label (e.g. ``A``, ``B``).
         out: Output directory.
         n: Number of posterior samples.
+        ppc: Posterior predictive datasets (0 disables the check).
 
     Returns:
         The output directory.
     """
-    from .summaries import Cohort
-
     cfg, comp, fitted = load_run(run_dir)
     if not fitted.amortized:
         raise ValueError("Measured inference needs an amortised (rounds=1) posterior")
     sim, gen = comp.simulator, comp.generator
     labels = list(gen.observation.labels)
-    table = pd.read_csv(data)
-    missing = {"horizon", *labels} - set(table.columns)
-    if missing:
-        raise ValueError(f"CSV is missing columns {sorted(missing)}")
-    extra = set(table["horizon"]) - set(gen.design.horizons)
-    if extra:
-        raise ValueError(f"Horizons {sorted(extra)} were not part of the trained design")
-    cohorts = []
-    for horizon, size in gen.design.cohorts:
-        rows = table[np.isclose(table["horizon"], horizon)]
-        if len(rows) == 0:
-            raise ValueError(f"No clones at horizon {horizon:g}; trained design: {gen.design}")
-        if len(rows) != size:
-            LOG.warning("Horizon %g: %d clones measured, %d trained", horizon, len(rows), size)
-        cohorts.append(Cohort(horizon, rows[labels].to_numpy(dtype=np.int64)))
+    cohorts = measured_cohorts(pd.read_csv(data), gen.design, labels)
+    x_obs = gen.summarize(cohorts)
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
-    samples = sim.decode(fitted.sample(gen.summarize(cohorts), n, seed_for(cfg.seed, "measured")))
+
+    support_mass = fitted.support_mass(x_obs, seed=seed_for(cfg.seed, "measured-support"))
+    if support_mass is not None and support_mass < 0.5:
+        LOG.warning("Only %.1f%% of the posterior lies inside the prior support: the model "
+                    "may not explain these data", 100 * support_mass)  # fmt: skip
+    samples_theta = fitted.sample(x_obs, n, seed_for(cfg.seed, "measured"))
+    n_drawn = len(samples_theta)
+    samples = sim.decode(samples_theta) if n_drawn else np.empty((0, len(sim.parameter_names)))
     frame = pd.DataFrame(samples, columns=sim.parameter_names)
     frame.to_csv(out / "posterior_samples.csv.gz", index=False)
     frame.describe(percentiles=[0.05, 0.5, 0.95]).T.to_csv(out / "posterior_summary.csv")
-    free = [i for i, name in enumerate(sim.parameter_names) if name in set(sim.space.free_names)]
+    free_names = set(sim.space.free_names)
+    free = [i for i, name in enumerate(sim.parameter_names) if name in free_names]
     seed_torch(seed_for(cfg.seed, "prior-reference"))
     prior_samples = sim.decode(sim.prior().sample((4096,)).numpy())
-    plots.posterior_marginals(
-        samples[:, free], prior_samples[:, free], None,
-        [sim.parameter_names[i] for i in free], out / "posterior.png",
+    if n_drawn:
+        plots.posterior_marginals(
+            samples[:, free], prior_samples[:, free], None,
+            [sim.parameter_names[i] for i in free], out / "posterior.png",
+        )  # fmt: skip
+    else:
+        LOG.warning("No posterior samples inside the prior support: no summary or PPC")
+
+    levels = (0.025, 0.05, 0.25, 0.5, 0.75, 0.95, 0.975)
+    parameters = {}
+    for i, name in enumerate(sim.parameter_names):
+        prior_var = float(prior_samples[:, i].var())
+        row = {"inferred": name in free_names, "prior_mean": float(prior_samples[:, i].mean()),
+               "prior_sd": float(np.sqrt(prior_var))}  # fmt: skip
+        if n_drawn:
+            values = samples[:, i]
+            row.update(
+                mean=float(values.mean()),
+                sd=float(values.std()),
+                quantiles={
+                    f"{q:g}": float(v)
+                    for q, v in zip(levels, np.quantile(values, levels), strict=True)
+                },
+                contraction=float(1 - values.var() / prior_var) if prior_var > 0 else None,
+            )
+        parameters[name] = row
+
+    measured_design = Design(
+        [c.horizon for c in cohorts], [len(c.counts) for c in cohorts], name="measured"
+    )
+    metrics: dict = {
+        "kind": "measured",
+        "run_dir": str(Path(run_dir).resolve()),
+        "data": str(Path(data).resolve()),
+        "simulator": cfg.simulator.name,
+        "law": cfg.law.name,
+        "inference": cfg.inference.name,
+        "trained_design": {
+            "horizons": list(gen.design.horizons),
+            "clones": list(gen.design.clones),
+        },
+        "measured": [
+            {
+                "horizon": c.horizon,
+                "clones": len(c.counts),
+                **{f"mean_{k}": float(c.counts[:, j].mean()) for j, k in enumerate(labels)},
+                "mean_total": float(c.counts.sum(1).mean()),
+                "max_total": int(c.counts.sum(1).max()),
+                "empty_clones": int((c.counts.sum(1) == 0).sum()),
+            }
+            for c in cohorts
+        ],
+        "posterior_samples_requested": int(n),
+        "posterior_samples_drawn": int(n_drawn),
+        "posterior_support_mass": support_mass,
+        "parameters": parameters,
+    }
+
+    # Posterior predictive check at the measured clone counts.
+    n_ppc = min(int(ppc), n_drawn)
+    if n_ppc > 0:
+        ppc_gen = replace(gen, design=measured_design)
+        x_pred, _ = ppc_gen.simulate_theta(samples_theta[:n_ppc], "measured-ppc")
+        valid = int(np.all(np.isfinite(x_pred), axis=1).sum())
+        if valid == 0:
+            LOG.warning("All %d predictive datasets hit the simulation limits: no PPC", n_ppc)
+            metrics["ppc"] = {"samples": 0, "requested": n_ppc}
+        else:
+            names = gen.summary.feature_names(measured_design.horizons, labels)
+            table = predictive_table(x_pred, x_obs, fitted.feature_mask, names)
+            metrics["ppc"] = {**ppc_metrics(table, valid), "requested": n_ppc}
+            metrics["ppc_table"] = table
+            pd.DataFrame(table).to_csv(out / "ppc.csv", index=False)
+        np.savez_compressed(out / "ppc.npz", x_pred=x_pred, x_obs=x_obs)
+    _write_json(out / "metrics.json", metrics)
+    LOG.info(
+        "Measured fit: %d samples, support mass %s, PPC outside95=%s -> %s",
+        n_drawn, support_mass, metrics.get("ppc", {}).get("fraction_outside_95", "n/a"), out,
     )  # fmt: skip
     return out

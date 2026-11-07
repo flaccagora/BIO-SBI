@@ -292,3 +292,73 @@ def test_prior_truth_records_draws_and_expected_counts(tmp_path):
     assert metrics["truth_draws"] >= 1
     counts = metrics["reference_expected_counts"]
     assert set(counts) == {"4", "8", "12"} and set(counts["12"]) == {"A", "B"}
+
+
+# ---------------------------------------------------------------- measured data (R)
+def test_infer_measured_reports_support_and_ppc(tmp_path, caplog):
+    from bio_sbi.cli import infer_main
+
+    cfg = config("budget.sbc_cases=0", "budget.ppc_samples=0", "budget.simulations=64")
+    run = tmp_path / "run"
+    save_hydra_config(cfg, run)
+    run_experiment(cfg, run)
+    ref = np.load(run / "reference.npz")
+    sizes = {4: 5, 8: 6, 12: 4}  # the trained design has 6 clones per horizon
+    rows = [(h, *c) for h, k in sizes.items() for c in ref[f"counts_h{h}"][:k]]
+    csv = tmp_path / "measured.csv"
+    pd.DataFrame(rows, columns=["horizon", "A", "B"]).to_csv(csv, index=False)
+
+    with caplog.at_level("WARNING"):
+        out = infer_measured(run, csv, tmp_path / "measured", n=30, ppc=8)
+    assert "5 clones measured, 6 trained" in caplog.text
+    metrics = json.loads((out / "metrics.json").read_text())
+    assert 0.0 <= metrics["posterior_support_mass"] <= 1.0
+    assert metrics["posterior_samples_drawn"] == 30 and metrics["kind"] == "measured"
+    assert [m["clones"] for m in metrics["measured"]] == [5, 6, 4]
+    params = metrics["parameters"]
+    row = params["A.div_AA"]
+    assert row["inferred"] and set(row["quantiles"]) >= {"0.025", "0.5", "0.975"}
+    assert row["quantiles"]["0.025"] <= row["mean"] <= row["quantiles"]["0.975"]
+    assert not params["founder.A"]["inferred"]
+    ppc = metrics["ppc"]
+    assert ppc["requested"] == 8 and 0 < ppc["samples"] <= 8
+    assert 0.0 <= ppc["fraction_outside_95"] <= 1.0
+    table = pd.read_csv(out / "ppc.csv")
+    assert len(table) == ppc["features"] == len(metrics["ppc_table"])
+    assert table["feature"].str.startswith("h4.").any() and "z" in table.columns
+    assert np.load(out / "ppc.npz")["x_pred"].shape[0] == 8
+    for name in ("posterior_samples.csv.gz", "posterior_summary.csv", "posterior.png"):
+        assert (out / name).exists(), name
+
+    infer_main([str(run), str(csv), "--out", str(tmp_path / "cli"), "--samples", "20",
+                "--ppc", "0"])  # fmt: skip
+    cli = json.loads((tmp_path / "cli" / "metrics.json").read_text())
+    assert cli["posterior_samples_drawn"] == 20 and "ppc" not in cli
+
+    bad = tmp_path / "bad.csv"
+    pd.DataFrame([(5, 1, 1)], columns=["horizon", "A", "B"]).to_csv(bad, index=False)
+    with pytest.raises(ValueError, match="not part of the trained design"):
+        infer_measured(run, bad, tmp_path / "bad", n=5, ppc=0)
+
+
+def test_ppc_simulates_measured_clone_counts(tmp_path, monkeypatch):
+    from bio_sbi.simulate import DataGenerator
+
+    cfg = config("budget.sbc_cases=0", "budget.ppc_samples=0", "budget.simulations=64")
+    run = tmp_path / "run"
+    save_hydra_config(cfg, run)
+    run_experiment(cfg, run)
+    ref = np.load(run / "reference.npz")
+    rows = [(h, *c) for h, k in {4: 3, 8: 6, 12: 2}.items() for c in ref[f"counts_h{h}"][:k]]
+    csv = tmp_path / "measured.csv"
+    pd.DataFrame(rows, columns=["horizon", "A", "B"]).to_csv(csv, index=False)
+    seen = []
+    original = DataGenerator.simulate_theta
+
+    def spy(self, theta, stage, offset=0):
+        seen.append((stage, self.design.clones))
+        return original(self, theta, stage, offset)
+
+    monkeypatch.setattr(DataGenerator, "simulate_theta", spy)
+    infer_measured(run, csv, tmp_path / "measured", n=10, ppc=3)
+    assert seen == [("measured-ppc", (3, 6, 2))]

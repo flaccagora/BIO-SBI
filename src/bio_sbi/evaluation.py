@@ -184,19 +184,64 @@ def posterior_predictive_check(
         ``(metrics, x_pred)`` with ``x_pred`` the ``(S, x_dim)`` predictive summaries.
     """
     x_pred, _ = generator.simulate_theta(samples_theta, "ppc")
+    table = predictive_table(x_pred, x_obs, fitted.feature_mask)
+    return ppc_metrics(table, int(np.all(np.isfinite(x_pred), axis=1).sum())), x_pred
+
+
+def predictive_table(
+    x_pred: np.ndarray,
+    x_obs: np.ndarray,
+    mask: np.ndarray,
+    names: Sequence[str] | None = None,
+) -> list[dict]:
+    """Per-feature posterior predictive comparison (features used in training only).
+
+    Args:
+        x_pred: ``(S, x_dim)`` predictive summaries (NaN rows = invalid, skipped).
+        x_obs: Observed summary vector ``(x_dim,)``.
+        mask: Boolean feature mask of the posterior.
+        names: Optional ``x_dim`` feature names.
+
+    Returns:
+        One dict per used feature: observed value, predictive mean, sd and central 95%
+        interval, two-sided tail probability ``p = 2 min(F, 1 - F)`` (``F`` counts
+        ties as half), z-score ``(obs - mean) / sd`` (0 when sd = 0) and whether the
+        observation lies outside the 95% predictive interval (``p < 0.05``).
+    """
     valid = np.all(np.isfinite(x_pred), axis=1)
-    mask = fitted.feature_mask
+    mask = np.asarray(mask, dtype=bool)
     pred, obs = x_pred[valid][:, mask], np.asarray(x_obs)[mask]
     below = (pred < obs).mean(0) + 0.5 * (pred == obs).mean(0)
     tail = 2 * np.minimum(below, 1 - below)
-    std = pred.std(0)
-    z = np.where(std > 0, (obs - pred.mean(0)) / np.where(std > 0, std, 1), 0.0)
-    metrics = {
-        "samples": int(valid.sum()),
-        "features": int(mask.sum()),
+    mean, std = pred.mean(0), pred.std(0)
+    z = np.where(std > 0, (obs - mean) / np.where(std > 0, std, 1), 0.0)
+    lo, hi = np.quantile(pred, [0.025, 0.975], axis=0)
+    index = np.flatnonzero(mask)
+    return [
+        {
+            "feature": names[j] if names is not None else f"x{j}",
+            "observed": float(obs[i]),
+            "predictive_mean": float(mean[i]),
+            "predictive_sd": float(std[i]),
+            "q2.5": float(lo[i]),
+            "q97.5": float(hi[i]),
+            "tail_p": float(tail[i]),
+            "z": float(z[i]),
+            "outside_95": bool(tail[i] < 0.05),
+        }
+        for i, j in enumerate(index)
+    ]
+
+
+def ppc_metrics(table: list[dict], samples: int) -> dict:
+    """Aggregate a :func:`predictive_table` into the PPC metrics of ``metrics.json``."""
+    tail = np.array([r["tail_p"] for r in table])
+    z = np.array([r["z"] for r in table])
+    return {
+        "samples": int(samples),
+        "features": len(table),
         "fraction_outside_95": float(np.mean(tail < 0.05)),
         "fraction_outside_99": float(np.mean(tail < 0.01)),
         "mean_abs_z": float(np.mean(np.abs(z))),
         "max_abs_z": float(np.max(np.abs(z))),
     }
-    return metrics, x_pred

@@ -30,6 +30,8 @@ def collect(root: str | Path) -> tuple[pd.DataFrame, pd.DataFrame]:
     for path in sorted(Path(root).rglob("metrics.json")):
         run = path.parent
         m = json.loads(path.read_text())
+        if m.get("kind") == "measured":  # bio-sbi-infer output inside a run, not a run
+            continue
         row = {
             "run": str(run),
             **{f"override.{k}": v for k, v in _overrides(run).items()},
