@@ -11,4 +11,3 @@ model:
   fixed: {}
   max_cells: 100000            # per-clone cap; larger clones invalidate the dataset
   max_events: 5000000
-  hours_per_generation: null   # null: horizons are generations; a number: hours (see _hours)
