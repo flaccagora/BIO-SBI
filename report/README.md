@@ -25,11 +25,14 @@ Tectonic downloads the LaTeX packages on first use (no system LaTeX needed).
 
 ## Status and pending boxes
 
+As of 8 November 2026 every experiment of the original plan is complete: X1 (inference
+methods, `fig_x1` from `results/x1/x1_runs.csv`) and X4 (combined errors, `fig_x4` from
+`results/x4/x4_runs.csv`) are in the report; no pending boxes remain.
+
 As of 7 November 2026 the report also covers X3 (GW fitted to BH data, `fig_x3`), P0
 (BH timing), the E1b and E2 follow-ups (tables only) and the real CRC0322 data
 (Part "Real data": `fig_real_ladder`, `fig_real_ppc`, `fig_real_posterior`, from
-`results/real/real_fits.csv` and `results/real/<model>/fit_<variant>/`). X1 and X4 are
-still running and are shown as pending boxes.
+`results/real/real_fits.csv` and `results/real/<model>/fit_<variant>/`).
 
 Before that, as of 6 November 2026 every sweep of E0–E4 is complete and has its figure, as do the
 E2c rerun with prior-drawn truths (`fig_e2c_prior`, from `results/e2c_prior/*.csv`) and

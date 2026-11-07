@@ -10,13 +10,13 @@ pointing forward.
 | `report.tex` | the report: executive summary (in narrative order), roadmap (dependency graph + experiment index with section numbers here and in `report/report.pdf`), methods, Parts I–VI, appendices (device benchmark, P0 timing, reproducibility, glossary) |
 | `report.pdf` | compiled report |
 
-Order: methodological check (X2) → I identifiability and the prior (E0, X5a, X5c, E0 at
+Order: methodological checks (X2 seed spread, X1 inference methods) → I identifiability and the prior (E0, X5a, X5c, E0 at
 4096 clones) → II design and amount of data
 (design comparison, E4 GW, E4 BH) → III BH timing (BH ridge, X5d, X5b, E3a, E3b, E3c, X3 GW
 fitted to BH data) → IV misspecified biology and assay (E1a type, E1a number BH/GW, E1b,
 E1b follow-up, E1c BH/GW, E2a/b BH/GW, E2 asymmetric follow-up, E2c, E2c modelled, E2c rerun,
-detectability synthesis) → V real data (CRC0322: data, model ladder, final model) → VI running
-and planned (X1, X4 running; follow-ups, measurements). Appendix: device benchmark, P0 timing,
+detectability synthesis, X4 combined errors) → V real data (CRC0322: data, model ladder, final
+model) → VI planned follow-ups (real-data model, Q1–Q5, measurements). Appendix: device benchmark, P0 timing,
 reproducibility, glossary.
 
 ## Dependency on `../report/`

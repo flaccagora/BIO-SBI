@@ -84,8 +84,8 @@
 {\large Two-type branching models (LGR5$^+$ = A, KRT20$^+$ = B),\\ neural posterior estimation, identifiability and robustness\par}
 \vspace{1.5cm}
 \begin{tabular}{ll}
-Status of results & 7 November 2026 (X1, X4 still running) \\
-Repository & \code{BIO-SBI}, branch \code{main}, results up to commit \code{a63b3a8} \\
+Status of results & 8 November 2026 (all planned experiments complete) \\
+Repository & \code{BIO-SBI}, branch \code{main}, results up to commit \code{dcfb52a} \\
 Data & synthetic (all experiments) and measured CRC0322 organoid counts (Part~\ref{part:real}) \\
 Audience & group planning the wet-lab organoid experiments \\
 \end{tabular}
@@ -94,7 +94,7 @@ Audience & group planning the wet-lab organoid experiments \\
 \textbf{How to read this report.} The executive summary (p.~\pageref{sec:summary}) is self-contained.
 Section~\ref{sec:methods} defines the model and every diagnostic.
 Each experiment section has the same four parts: \emph{Question}, \emph{Setup}, \emph{Result}, \emph{Comment}.
-Orange boxes mark experiments that are still running or were planned but never run.
+Every experiment of the original plan is complete; Part~\ref{part:pending} lists follow-ups.
 Parameters: A$\to$AA etc.\ are outcome probabilities per cell event; \tA, \tB{} are mean cell lifetimes (Bellman--Harris only).
 \end{minipage}
 \end{titlepage}
@@ -103,7 +103,7 @@ Parameters: A$\to$AA etc.\ are outcome probabilities per cell event; \tA, \tB{} 
 \section*{Executive summary}\label{sec:summary}
 \addcontentsline{toc}{section}{Executive summary}
 
-\textbf{Scope.} All simulation sweeps of E0--E4 are finished (1126 runs, incl.\ the E4 extensions to 1024--4096 organoids per endpoint, 5k-vs-20k simulation checks at the real-like BH design, at 512 and at 4096 per endpoint, and the full transition model at 4096, \S\ref{sec:e0large}), all on synthetic data from one reference parameter vector $\theta^\star$ (Table~\ref{tab:truth}), 5 seeds per setting. Two later experiments test the role of the prior with truths swept or drawn from the prior: the E2c rerun (90 runs, \S\ref{sec:e2cprior}) and X5 (355 runs, \S\ref{sec:x5}); X2 (40 runs, \S\ref{sec:x2}) separates dataset from training noise. New in this version: X3 (GW fitted to BH data, 25 runs, \S\ref{sec:x3}), the follow-ups of E2 (asymmetric mis-typing, 80 runs, \S\ref{sec:e2asym}) and E1b (all seeded organoids recorded, 90 runs, \S\ref{sec:e1ball}), the BH timing P0 (\S\ref{sec:p0}) and the first fit of \emph{measured} data, CRC0322 organoids (12 models $\times$ 5 data variants, Part~\ref{part:real}). X1 (methods) and X4 (combined errors) are still running. Galton--Watson (GW, time in generations; mapping to days nominal) and Bellman--Harris (BH, time in hours; real-like design = days 6 and 10 = 144/240\,h with 165/101 organoids). Every error is compared with the well-specified control of the same sweep.
+\textbf{Scope.} All simulation sweeps of E0--E4 are finished (1126 runs, incl.\ the E4 extensions to 1024--4096 organoids per endpoint, 5k-vs-20k simulation checks at the real-like BH design, at 512 and at 4096 per endpoint, and the full transition model at 4096, \S\ref{sec:e0large}), all on synthetic data from one reference parameter vector $\theta^\star$ (Table~\ref{tab:truth}), 5 seeds per setting. Two later experiments test the role of the prior with truths swept or drawn from the prior: the E2c rerun (90 runs, \S\ref{sec:e2cprior}) and X5 (355 runs, \S\ref{sec:x5}); X2 (40 runs, \S\ref{sec:x2}) separates dataset from training noise. New in this version: X3 (GW fitted to BH data, 25 runs, \S\ref{sec:x3}), the follow-ups of E2 (asymmetric mis-typing, 80 runs, \S\ref{sec:e2asym}) and E1b (all seeded organoids recorded, 90 runs, \S\ref{sec:e1ball}), the BH timing P0 (\S\ref{sec:p0}) and the first fit of \emph{measured} data, CRC0322 organoids (12 models $\times$ 5 data variants, Part~\ref{part:real}). Also new: X1 (four inference methods on five decisive settings, 94 runs, \S\ref{sec:x1}) and X4 (combined realistic errors at 50k simulations, 20 runs, \S\ref{sec:x4}). With them every experiment of the original plan is complete. Galton--Watson (GW, time in generations; mapping to days nominal) and Bellman--Harris (BH, time in hours; real-like design = days 6 and 10 = 144/240\,h with 165/101 organoids). Every error is compared with the well-specified control of the same sweep.
 
 \begin{keybox}
 \textbf{Headline --- the real CRC0322 organoids (Part~\ref{part:real}).} The model class used in every synthetic experiment (shared outcome probabilities, one A founder, B cells not dividing, constant lifetimes) \textbf{cannot describe the measured organoids}: posterior support mass 0.01--0.04 and 44--54\% of the summary features outside the 95\% predictive interval; it predicts a strongly positive A--B correlation across organoids where the data show a negative one (z $=-21$ and $-60$ on days 6 and 10). Of twelve models fitted to five data variants (3D mean, the three 3D samples, 2D sections), only the combination of \textbf{organoid-level fate heterogeneity} (each organoid draws its own outcome probabilities around the shared ones) and \textbf{density-dependent growth} (lifetimes lengthen as the organoid grows) fits both the 2D and the 3D data: support 0.73--0.94 over variants and two training seeds, PPC 0--10\% (3D) and 10--15\% (2D). \emph{Identifiable}: A self-renewal A$\to$AA $\approx$ 0.6 (0.62 $\pm$ 0.06 in 3D, 0.64 $\pm$ 0.08 in 2D); A division time early in growth $\approx$ 16\,h in the 3D counts (16.9 $\pm$ 1.7\,h; 28\,h in 2D, a scale difference); carrying capacity $K \approx$ 50 cells (54 $\pm$ 13 in 3D; 18 in 2D); strong organoid-to-organoid heterogeneity, $\kappa \approx$ 3--4. \emph{Not identifiable}: whether KRT20$^+$ cells divide or switch back to LGR5$^+$, and the founder mix --- as E0 and E1a predicted from synthetic data.
@@ -132,6 +132,8 @@ Parameters: A$\to$AA etc.\ are outcome probabilities per cell event; \tA, \tB{} 
 \item \textbf{Mis-typing direction matters (E2 follow-up, \S\ref{sec:e2asym})}: stem cells read as differentiated (A$\to$B label, $e_A$) are the harmful direction. In GW, ignoring $e_A = 0.10$--$0.15$ doubles the error (MAE 0.040 $\to$ 0.066--0.086, coverage 0.64--0.76) and lowers B$\to$A to 0.63--0.66, partly flagged (support 0.42--0.50); B read as A at 0.10 is almost harmless (MAE 0.040, coverage 0.84). Modelling the known confusion removes the bias. In BH the effect is small next to the ridge error (MAE $\approx$ 0.12 in every setting).
 \item \textbf{Recording extinct organoids (E1b follow-up, \S\ref{sec:e1ball})}: with every seeded organoid recorded, death rates are sharper in BH (A death sd 0.015--0.033 vs 0.045--0.057 detected-only) but overall accuracy does not improve, and in GW it worsens (MAE 0.063 vs 0.032 at A death 0.03). Survivor-only summaries plus the extinct fraction recover part of the loss (GW 0.057, 0.068 at A death 0.03, 0.10) but do not beat detected-only data at equal design size.
 \item \textbf{BH cost (P0, \S\ref{sec:p0})}: on an idle machine a BH run at the real-like design costs the same as a GW run ($\approx$\,45\,s at \code{budget=dev}; training $\approx$\,85\%, simulation $<10\%$). Earlier minute-long run times were contention.
+\item \textbf{The inference method is not the problem (X1, \S\ref{sec:x1})}: amortised NPE, sequential NPE, NLE and NRE agree on the identifiability findings --- B$\to$A 0.19--0.22 with B divisions free, 0.71--0.72 (5/5) with them fixed; BH ridge A$\to$AA 0.30--0.34 (truth 0.55) --- and on the flagged/silent pattern: too-short fixed lifetimes are silent for every method (PPC $\le 3\%$), a lifetime prior 50\% too long is flagged by every method that finishes (PPC NPE 35\%, NLE 76\%, NRE 14\%). NPE is the best calibrated (SBC error 0.025--0.039 vs 0.045--0.110) and the fastest (1.4--3.2\,min per run; NRE 1.4--2$\times$, SNPE 4--9$\times$, NLE 9--31$\times$ longer). \textbf{SNPE hangs when the posterior leaves the prior} (loud setting 0/5 runs finish, silent 4/5): it has no warning of its own. NLE and NRE are less calibrated at 5k simulations.
+\item \textbf{Error budget of the baseline model (X4, \S\ref{sec:x4})}: with 10\% B founders, 5\% symmetric mis-typing and lifetime CV 0.5 acting together at the real-like design (50k simulations), the baseline BH model has MAE 0.106 vs 0.083 for the well-specified control: $\approx$\,0.08 from the ridge (A$\to$AA 0.32, \tA{} 15.4\,h, 0/5) plus $\approx$\,0.02 from the assay errors, \textbf{none of it flagged} (PPC 0, support 0.90). Modelling the errors makes it worse (MAE 0.147): the founder row is not learnable (founder A 0.54 vs 0.9, at its prior). A hidden type C on top is only weakly flagged (PPC 2.1\%, support 0.80) and is absorbed into B's row (\tB{} 52\,h vs 30\,h, B$\to$A 0.06). Calibration is good in every arm (SBC 0.011--0.016). This is the budget of the baseline class, which the real data reject (Part~\ref{part:real}).
 \end{enumerate}
 
 \subsection*{Recommendations for the wet-lab design}
@@ -153,6 +155,7 @@ Parameters: A$\to$AA etc.\ are outcome probabilities per cell event; \tA, \tB{} 
 \item \textbf{Literature division times} can enter as an informative lifetime prior ($\pm 25\%$ gets most of the benefit of fixing them, X5b); check PPC and support mass for conflict (a prior that is too long is flagged; too-short lifetimes bias silently, E3a).
 \item \textbf{Real-data fits must model organoid heterogeneity and density dependence} (Part~\ref{part:real}): the homogeneous constant-lifetime model of the synthetic experiments is rejected by the CRC0322 data. Report only the identifiable quantities (A self-renewal, A's early division time, $K$, $\kappa$) and treat B's row and the founder mix as unresolved until measured (B divisions, founder type at seeding).
 \item \textbf{Hidden third type}: endpoint counts of two labels cannot identify a three-type model (E2c rerun). If C may exist, find out how it is labelled: read as B, ignoring it is usually flagged; read as A, it biases the A/B rows silently. Modelling it needs a C-specific marker, trajectory data that justify constraints, or much richer designs --- a free C model returns the prior.
+\item \textbf{Inference for real-data fits} (X1, X4): keep amortised NPE as the default (fast, best calibrated, built-in support-mass check); confirm key real-data conclusions with NRE (a different approximation at about twice the cost); use SNPE only after the model has passed NPE's support and PPC checks --- it hangs when the posterior leaves the prior. Quote the unflagged error of the model class (X4: $\approx$\,0.1 MAE for the baseline) next to the posterior sd, and do not free parameters the data cannot determine (founder mix) to ``model'' an error.
 \end{itemize}
 
 \subsection*{Methodological lessons}
@@ -164,9 +167,10 @@ Parameters: A$\to$AA etc.\ are outcome probabilities per cell event; \tA, \tB{} 
 \item \textbf{Compare with paired controls}, not with the truth (BH baseline is biased); 5 seeds resolve shifts of $\approx$\,0.02--0.03 (probabilities) and 0.5--1.5\,h.
 \item \textbf{Diagnostics}: SBC checks the inference model only; PPC and support mass are relative checks and vary between well-specified GW runs (support 0.07--0.89, PPC up to 0.10); support mass $\approx 0$ = the model cannot explain the data (numbers from such runs are not estimates). A clean PPC does not imply identifiability: with B divisions free at 4096 organoids per endpoint the PPC is $\le 0.6\%$ while B$\to$A is 0.17--0.34 (\S\ref{sec:e0large}).
 \item \textbf{On measured data the checks select models; a synthetic check selects the estimates} (Part~\ref{part:real}): support mass and PPC separated twelve candidate models clearly (support 0.00--0.06 vs 0.73--0.94). But the final model's B row is as confident-looking as its A row; only a synthetic recovery check of the same trained network shows which parameters are identifiable. Run both for every real-data fit.
+\item \textbf{Method-independence (X1)}: non-identifiability (B's row), the BH ridge and silent misspecifications are properties of the data, found by every method; a different method does not rescue a confounded model. SNPE is not a diagnostic: when the posterior leaves the prior it does not warn, it hangs.
 \end{itemize}
 
-\textbf{Done since the previous version:} the real CRC0322 data (Part~\ref{part:real}); X3 GW fitted to BH data (\S\ref{sec:x3}); P0 BH timing (\S\ref{sec:p0}); asymmetric mis-typing (\S\ref{sec:e2asym}); all seeded organoids as data, with survivor summaries (\S\ref{sec:e1ball}). \textbf{Running} (Part~\ref{part:pending}): X1 methods comparison, X4 combined errors. \textbf{New follow-ups}: mis-typing in the real-data model; alternative forms of heterogeneity and density dependence; the synthetic conclusions re-checked under the final model class. The results point to \emph{measurements} rather than more simulations: A's division time, whether B cells divide, the LGR5$\to$KRT20 mis-typing rate and the number of seeded organoids.
+\textbf{Done since the previous version:} the real CRC0322 data (Part~\ref{part:real}); X1 methods comparison (\S\ref{sec:x1}); X4 combined errors (\S\ref{sec:x4}); X3 GW fitted to BH data (\S\ref{sec:x3}); P0 BH timing (\S\ref{sec:p0}); asymmetric mis-typing (\S\ref{sec:e2asym}); all seeded organoids as data, with survivor summaries (\S\ref{sec:e1ball}). \textbf{Every experiment of the original plan is now done.} \textbf{Follow-ups} (Part~\ref{part:pending}): mis-typing in the real-data model; alternative forms of heterogeneity and density dependence; survivor summaries (extinct fraction) in real fits once seeded organoids are counted; the synthetic conclusions (design, error budget) re-checked under the final model class; the open biology questions Q1--Q5. The results point to \emph{measurements} rather than more simulations: A's division time, whether B cells divide, the LGR5$\to$KRT20 mis-typing rate and the number of seeded organoids.
 
 \figorpending{detectability}{0.6}{Detectability of BH misspecifications. Each point is one misspecified setting (mean of 5 seeds): largest shift of a posterior mean from its paired well-specified control, in units of the control's posterior sd, against the PPC. Grey band = PPC range of well-specified runs. Crosses: global lifetime $T>\tau_A$ (support mass $\approx 0$).}{Detectability scatter.}
 \figorpending{detectability_gw}{0.8}{Detectability of GW misspecifications (E1a type and number, E1c, E2b): largest shift from the paired control in control posterior sd, against the PPC (left) and the posterior support mass (right). Grey bands = well-specified ranges. GW flags more errors than BH (no free time scale), but several shifts of 1--3 sd remain inside the well-specified bands.}{GW detectability.}
@@ -243,9 +247,9 @@ GW and BH share the outcome law but not the time unit; a GW generation is \emph{
 
 \subsection{Inference}
 \begin{itemize}
-\item \textbf{NPE} (\code{sbi} 0.27, neural spline flow, 5 transforms, width 64), amortised, 1 round; sequential NPE (SNPE) only in E0.
+\item \textbf{NPE} (\code{sbi} 0.27, neural spline flow, 5 transforms, width 64), amortised, 1 round; sequential NPE (SNPE) only in E0 and X1; NLE and NRE (MCMC) only in the methods comparison X1 (\S\ref{sec:x1}).
 \item \textbf{Summaries} (\code{moments}): per endpoint, mean, sd, quantiles of $\log(1+n)$ for A, B, total; fraction of clones containing each type; fraction empty; correlation of log counts.
-\item \textbf{Budgets}: \code{dev} = 5\,000 simulations (all BH and most GW error experiments); 20\,000 for E0/design comparison and the E4 budget checks; E0 also 50\,000. E0 showed 5k$\to$50k does not change recovery. Per run: 2\,000 posterior samples, SBC on 200 prior draws, PPC with 200 datasets.
+\item \textbf{Budgets}: \code{dev} = 5\,000 simulations (all BH and most GW error experiments); 20\,000 for E0/design comparison and the E4 budget checks; E0 also 50\,000; X4 and the real-data fits use \code{full} (50\,000, SBC on 1000 prior draws, PPC 500). E0 showed 5k$\to$50k does not change recovery. Per run: 2\,000 posterior samples, SBC on 200 prior draws, PPC with 200 datasets.
 \item \textbf{Parameterisation}: stick-breaking of each simplex (exact Dirichlet reparameterisation).
 \end{itemize}
 
@@ -1258,6 +1262,60 @@ Posterior correlations (free arm): corr(A persist, \tA) $\approx -0.6$; corr(A$\
 
 % ---------------------------------------------------------------------- X2
 \Needspace*{18\baselineskip}
+% ---------------------------------------------------------------------- X1
+\Needspace*{18\baselineskip}
+\section{X1 --- Inference methods: NPE, sequential NPE, NLE, NRE (GW and BH)}\label{sec:x1}
+\Q Every other experiment used amortised NPE (SNPE only in E0). Are the identifiability findings --- B's row with B divisions free (\S\ref{sec:e0}), the BH lifetime/self-renewal ridge (\S\ref{sec:ridge}) --- and the flagged/silent pattern of misspecification --- too-short fixed lifetimes silent (E3a, \S\ref{sec:e3a}), a too-long lifetime prior flagged (X5b, \S\ref{sec:x5b}) --- properties of the data or of NPE? Which method should a real-data fit use?
+\Setup
+\begin{setup}
+Settings & five decisive settings, synthetic data from $\theta^\star$: \emph{E0 free} (GW \code{two_type}, all transitions free) and \emph{E0 fixed} (GW \code{reversible_ab}, B divisions fixed), both at generations 4/8/12 $\times$ 32 clones; \emph{BH ridge} (BH \code{reversible_ab}, real-like design 144/240\,h $\times$ 165/101, vague lifetime prior, preset \code{x5b_lifetime_prior}); \emph{silent} (BH, lifetimes fixed to 18.75\,h, 25\% below the pooled mean; truth A 20\,h, B 30\,h; preset \code{e3a_lifetime_fixed}); \emph{loud} (BH, lifetime prior 50\% too long, truth outside it) \\
+Methods & NPE (amortised, as in every other experiment); SNPE (NPE-C, 4 rounds, no SBC); NLE and NRE-C (MCMC with slice sampling; SBC on 50 cases) \\
+Budget & \code{budget=dev}: 5k simulations for every method \\
+Key parameter & B$\to$A (truth 0.80) in the E0 settings; A$\to$AA (truth 0.55) in the BH settings \\
+Seeds / runs & 5 per setting and method: 100 planned, \textbf{94 finished}; 6 SNPE runs never finish (loud: 5/5; silent: seed 3), stopped after 45\,min \\
+Run time & minutes per run with the four method lanes running in parallel: a relative comparison, not idle-machine timings (cf.\ P0, \S\ref{sec:p0}) \\
+Folder & \res{results/x1/<setting>/<method>/} (commit \code{fa3e96a}; four NPE/NRE E0-free seeds rerun at \code{a64d17e}); \res{x1_groups.csv}, \res{x1_runs.csv} (\code{scripts/analyse_x1.py}); \res{snpe_failures.md}; table \res{report/tables/x1.csv} \\
+\end{setup}
+\Result
+\figorpending{x1}{1.0}{X1: four inference methods on five settings. (a--e) Posterior mean of the key parameter per seed (filled = truth inside the 90\% interval, open = not; bar = mean over seeds); dashed = truth. SNPE never finishes in the loud setting and on one silent seed. (f) PPC fraction of summary features outside the 95\% predictive interval (misspecification signal; dotted = 0.05); $\times$ = SNPE never finishes. (g) SBC coverage error (SNPE has no SBC).}{X1 figure.}
+\begin{center}\footnotesize\setlength{\tabcolsep}{3.2pt}
+\begin{tabular}{@{}llrrrrrlr@{}}\toprule
+Setting & Method & MAE & 90\% cov. & contr. & PPC & SBC & key parameter [covered] & min/run \\\midrule
+E0 free & NPE & 0.144 & 0.76 & 0.50 & 0.003 & 0.035 & B$\to$A 0.19 [0/5] & 1.4 \\
+ & SNPE & 0.139 & 0.73 & 0.47 & 0.011 & --- & 0.21 [0/5] & 12.7 \\
+ & NLE & 0.145 & 0.80 & 0.53 & 0.003 & 0.102 & 0.22 [0/5] & 43.8 \\
+ & NRE & 0.136 & 0.80 & 0.41 & 0.019 & 0.059 & 0.21 [0/5] & 3.0 \\\midrule
+E0 fixed & NPE & 0.048 & 0.93 & 0.85 & 0.014 & 0.039 & B$\to$A 0.72 [5/5] & 1.6 \\
+ & SNPE & 0.052 & 0.93 & 0.83 & 0.006 & --- & 0.72 [5/5] & 7.7 \\
+ & NLE & 0.059 & 0.89 & 0.80 & 0.061 & 0.110 & 0.71 [5/5] & 35.8 \\
+ & NRE & 0.060 & 0.89 & 0.75 & 0.050 & 0.061 & 0.72 [5/5] & 3.3 \\\midrule
+BH ridge & NPE & 0.116 & 0.75 & 0.63 & 0.000 & 0.026 & A$\to$AA 0.32 [0/5] & 3.2 \\
+ & SNPE & 0.075 & 0.85 & 0.71 & 0.000 & --- & 0.34 [1/5] & 11.8 \\
+ & NLE & 0.085 & 0.87 & 0.67 & 0.021 & 0.090 & 0.33 [0/5] & 30.2 \\
+ & NRE & 0.112 & 0.80 & 0.54 & 0.000 & 0.045 & 0.30 [1/5] & 4.3 \\\midrule
+silent (lifetimes & NPE & 0.075 & 0.76 & 0.84 & 0.000 & 0.032 & A$\to$AA 0.46 [0/5] & 2.0 \\
+\quad fixed 25\% short) & SNPE (4/5) & 0.079 & 0.81 & 0.80 & 0.000 & --- & 0.44 [0/4] & 9.1 \\
+ & NLE & 0.078 & 0.78 & 0.83 & 0.033 & 0.110 & 0.48 [2/5] & 18.9 \\
+ & NRE & 0.068 & 0.91 & 0.73 & 0.000 & 0.051 & 0.42 [2/5] & 2.9 \\\midrule
+loud (lifetime & NPE & 0.077 & 0.38 & 0.81 & \textbf{0.350} & 0.025 & A$\to$AA 0.59 [2/5] & 2.3 \\
+\quad prior +50\%) & SNPE & \multicolumn{7}{l}{\textbf{never finishes} (0/5 runs; proposal rejection accepts nothing)} \\
+ & NLE & 0.129 & 0.55 & 0.78 & \textbf{0.758} & 0.090 & 0.53 [3/5] & 19.8 \\
+ & NRE & 0.072 & 0.71 & 0.72 & \textbf{0.142} & 0.048 & 0.67 [4/5] & 4.2 \\\bottomrule
+\end{tabular}
+\end{center}
+Means over seeds. NPE support mass in the loud setting 0.017 (0.64--0.82 in the other settings). SNPE ``support'' (0.03--0.09 even when well specified) is not a misspecification signal: later rounds train on a truncated proposal. Numbers: \res{results/x1/info.md}, \res{x1_groups.csv}.
+\Comment
+\begin{itemize}
+\item \textbf{The identifiability findings are method-independent.} With B divisions free every method leaves B$\to$A at 0.19--0.22 (prior-dominated, 0/5 covered); with them fixed every method gets 0.71--0.72 (5/5). The BH ridge (A$\to$AA 0.30--0.34 vs 0.55) appears for all four methods. These are properties of the data, not of NPE.
+\item \textbf{So is the flagged/silent pattern.} Too-short fixed lifetimes stay silent for every method (PPC $\le 3\%$) while biasing A$\to$AA (0.42--0.48). The wrong lifetime prior is flagged by every method that finishes --- most strongly by NLE (76\% of PPC features outside), weakest by NRE (14\%), which also stays best calibrated there (coverage 0.71 vs 0.38 for NPE).
+\item \textbf{SNPE has no misspecification signal of its own: it hangs.} Between rounds the next proposal is drawn from the current posterior by rejection inside the prior support; when the posterior lies outside the prior (the loud setting, and one silent seed) acceptance is 0\% and the run never returns (log: \res{snpe_failures.md} in \res{results/x1/}). Where it finishes it helps a little on the ridge (MAE 0.075 vs 0.116) at 4--9$\times$ the cost of NPE.
+\item \textbf{NPE is the best calibrated and the fastest}: SBC error 0.025--0.039 vs NRE 0.045--0.061 and NLE 0.090--0.110; 1.4--3.2\,min per run vs NRE 2.9--4.3 (1.4--2$\times$) and NLE 19--44 (9--31$\times$). NLE and NRE are less well calibrated at 5k simulations. At these single truths NPE's run coverage is not higher than NRE's (0.75--0.76 vs 0.80 in E0 free, BH ridge, silent): the truths sit in prior tails (X5d, \S\ref{sec:x5d}).
+\item \textbf{Recommendation}: keep amortised NPE as the default (fast, best calibrated, with a built-in support-mass check); confirm key real-data conclusions with NRE, a different approximation at about twice the cost; use SNPE only on models that have passed NPE's support and PPC checks.
+\item Caveats: \code{budget=dev} (5k simulations) for every method; NLE/NRE SBC on 50 cases only; run times are relative (four lanes in parallel).
+\end{itemize}
+
+% ---------------------------------------------------------------------- X2
+\Needspace*{18\baselineskip}
 \section{X2 --- Seed spread: dataset vs training (GW and BH)}\label{sec:x2}
 \Q Every experiment varies one \code{seed} per run, which changes both the reference dataset (\code{data_seed} = \code{seed}) and the network training and sampling. How much of the run-to-run spread of posterior means comes from the dataset and how much from training? Is training noise small compared with the posterior width?
 \Setup
@@ -1335,6 +1393,46 @@ Means over 5 seeds; [covered/5].\\ Numbers: \res{results/x3/x3_groups.csv}, \res
 \item Caveats: one truth (A 20\,h, B 30\,h), 5 seeds, NPE 5k.
 \end{itemize}
 
+% ---------------------------------------------------------------------- X4
+\Needspace*{18\baselineskip}
+\section{X4 --- Combined realistic errors at the real design (BH)}\label{sec:x4}
+\Q With the plausible errors of the real assay acting together, how biased is the baseline model (Bellman--Harris, \code{reversible_ab}, one A founder, perfect typing, lifetime shape 8), is it flagged, and does modelling the known errors help? This is the error budget to quote with real-data fits of the baseline model class.
+\Setup
+\begin{setup}
+Data model & BH, real-like design (144/240\,h $\times$ 165/101 organoids), $\theta^\star$ (\tA{} 20\,h, \tB{} 30\,h) \\
+Arms & \emph{control}: no errors (well specified);\newline \emph{combined}: 10\% B founders (E1a), 5\% symmetric A$\leftrightarrow$B mis-typing (E2), lifetime shape 4 = CV 0.5 instead of 8 (E3b); baseline model, errors ignored;\newline \emph{modelled}: same data; founder row inferred, mis-typing 5\% known, shape 4;\newline \emph{combined + C}: same errors plus a hidden type C (three-type reference law, C read as A or B with probability 0.5 each, as E2c); baseline model \\
+Inference / budget & NPE amortised, \code{budget=full}: 50k simulations, SBC 1000, PPC 500 \\
+Seeds / runs & 5 per arm / 20 \\
+Folder & \res{results/x4/control/}, \res{combined/}, \res{modelled/}, \res{combined_c/} (preset \code{x4_combined}, arm commands in its header; commit \code{fa3e96a}, combined + C launched after \code{bae0b90}); \res{x4_groups.csv}, \res{x4_runs.csv} (\code{scripts/analyse_x4.py}); table \res{report/tables/x4.csv} \\
+\end{setup}
+\Result
+\figorpending{x4}{1.0}{X4: combined realistic errors at the real-like design (BH, 50k simulations). (a) Probability MAE, (b) 90\% coverage (bars = mean, dots = seeds), (c) support mass and PPC fraction outside 95\% (mean of 5 seeds), (d) A$\to$AA and (e) \tA{} per seed (filled = covered, open = not; bar = mean); dashed = truth. $^*$Combined + C: the two-type ``truth'' is the three-type value of the same outcome (A$\to$AA 0.50, dotted), so its MAE and coverage are not comparable with the other arms.}{X4 figure.}
+\begin{center}\footnotesize\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}lrrrr@{}}\toprule
+ & control & combined (ignored) & modelled & combined + C \\\midrule
+MAE (probabilities) & 0.083 & 0.106 & 0.147 & (0.067)$^*$ \\
+90\% coverage & 0.89 & 0.87 & 0.89 & (0.96)$^*$ \\
+lifetime rel.\ error & 0.33 & 0.32 & 0.37 & 0.46 \\
+support mass & 0.88 & 0.90 & 0.91 & 0.80 \\
+PPC outside 95\% & 0.000 & 0.000 & 0.000 & 0.021 \\
+SBC error & 0.016 & 0.016 & 0.011 & 0.016 \\
+A$\to$AA (0.55) [covered] & 0.32 [0/5] & 0.34 [0/5] & 0.31 [0/5] & 0.50$^*$ \\
+\tA{} (20\,h) [covered] & 15.4 [0/5] & 14.4 [0/5] & 14.6 [0/5] & 16.5 [1/5] \\
+\tB{} (30\,h) & 17.0 & 18.9 & 15.8 & 52.5 \\
+founder A (0.9) & --- & --- & 0.54 ($\approx$ prior) & --- \\\bottomrule
+\end{tabular}
+\end{center}
+Means over 5 seeds. $^*$Truth from the three-type reference law (A$\to$AA 0.50, A$\to$AC 0.30, B persist 0.90, \dots): not comparable. Numbers: \res{results/x4/info.md}, \res{x4_groups.csv}.
+\Comment
+\begin{itemize}
+\item \textbf{At 50k simulations the lifetime/self-renewal ridge still dominates} (control: A$\to$AA 0.32, \tA{} 15.4\,h, 0/5 covered, MAE 0.083): the error budget of the baseline is set by the ridge (\S\ref{sec:ridge}), not by the assay.
+\item \textbf{The realistic errors add a small, silent bias}: MAE $+0.023$, with PPC 0 and support 0.90 --- not flagged. Each error alone was silent or weak (E1a type, E2 at $e = 0.05$, E3b); together they stay silent.
+\item \textbf{``Modelling'' the errors makes things worse} (MAE 0.147): inferring the founder row adds a parameter the data cannot determine (founder A 0.54 vs truth 0.9, at its prior; as in E1a, \S\ref{sec:e1a}), which widens and shifts the other rows. Known mis-typing and shape do not compensate.
+\item \textbf{A hidden C is only weakly flagged} (PPC 2.1\%, support 0.80) and is absorbed into B's row: B lifetime 52\,h (truth 30\,h) and B$\to$A 0.06 --- C's slower cycle and the A$\to$C$\to$B flow are read as B.
+\item Calibration is good in every arm (SBC 0.011--0.016): the network is not the problem.
+\item \textbf{Error budget to quote}: for the baseline model at the real design, $\approx$\,0.08 MAE from the ridge plus $\approx$\,0.02 from the assay errors, none of it flagged; lifetimes $\approx$\,25--35\% short. It applies to the baseline model class, which the CRC0322 data reject (Part~\ref{part:real}); the final real-data model has its own synthetic recovery check (\S\ref{sec:realfinal}).
+\item Caveats: one truth, 5 seeds per arm; one combination of error sizes; the C arm's two-type parameters have no exact truth.
+\end{itemize}
 
 \needspace{12\baselineskip}
 \section{X5 --- Role of the prior (GW and BH)}\label{sec:x5}
@@ -1679,31 +1777,25 @@ Posterior mean $\pm$ sd, seed 0. Synthetic check of the trained network: SBC cov
 
 % ====================================================================== PART: pending
 \clearpage
-\part{Running and planned experiments}\label{part:pending}
-All sweeps of E0--E4, the E2c rerun, X2, X3, X5, P0, the follow-ups of E1b and E2 and the real-data fits are finished (Parts~\ref{part:finished}--\ref{part:real}). X1 and X4 are running; their sections will be filled in when the sweeps finish. The other items below have not been started.
+\part{Planned follow-ups}\label{part:pending}
+Every experiment of the original plan is finished: E0--E4, the E2c rerun, X1--X5, P0, the follow-ups of E1b and E2 and the real-data fits (Parts~\ref{part:finished}--\ref{part:real}). The items below are follow-ups that the results suggest; none has been started.
 
-% ---------------------------------------------------------------------- X1/X4/follow-ups
+% ---------------------------------------------------------------------- follow-ups
 \needspace{12\baselineskip}
-\section{Running and planned work (X1, X4, follow-ups)}\label{sec:p-other}
+\section{Follow-ups and measurements}\label{sec:p-other}
 \Q
 \begin{itemize}
-\item \textbf{X1 methods} (running): NPE vs NLE vs NRE (and SNPE) at the baseline and the worst realistic error.
-\item \textbf{X4 combined errors} (running): realistic combination (organoid death + mis-typing + C + lifetime CV), real-like design: the error budget to quote with a real-data fit. Note that it uses the homogeneous synthetic model, which the real data reject (Part~\ref{part:real}).
-\item \textbf{Real-data follow-ups} (planned): mis-typing in the real-data model (asymmetric confusion, \S\ref{sec:e2asym}); alternative forms of heterogeneity (e.g.\ per-organoid lifetimes, a mixture of organoid classes) and of density dependence; synthetic checks of the final model class at more truths and designs (which conclusions of Part~\ref{part:finished} carry over); the extinct fraction with survivor summaries once seeded organoids are counted (\S\ref{sec:e1ball}).
-\item \textbf{Measurements, then a refit} (implied by \S\ref{sec:e0large}, \S\ref{sec:e4budget} and Part~\ref{part:real}): A's division time, whether B cells divide, the LGR5$\to$KRT20 mis-typing rate and the number of seeded organoids. Once measured, refit with them as informative priors carrying their measurement uncertainty (as in X5b), with $\ge$\,20k simulations.
+\item \textbf{Mis-typing in the real-data model}: the final model (\S\ref{sec:realfinal}) assumes perfect typing; add an asymmetric confusion matrix (A read as B is the harmful direction, \S\ref{sec:e2asym}), ideally with the rate measured (Q3) rather than inferred (X4: freeing what the data cannot determine makes estimates worse, \S\ref{sec:x4}).
+\item \textbf{Alternative forms of heterogeneity and density dependence}: per-organoid lifetimes, a mixture of organoid classes, other capacity laws; do they fit the CRC0322 data equally well, and do the identifiable estimates (A$\to$AA, \tA, $K$, $\kappa$) change?
+\item \textbf{Synthetic checks under the final model class}: more truths and designs (which conclusions of Part~\ref{part:finished} carry over), and an X4-type error budget for the final model.
+\item \textbf{Survivor summaries in real fits}: the extinct fraction with survivor summaries (\S\ref{sec:e1ball}) once the number of seeded organoids is recorded (Q5).
+\item \textbf{Biology questions Q1--Q5}: the trajectory and proportion of a possible third type C (Q1, Q2), 2D vs 3D mislabelling (Q3), the meaning of inactivation (Q4), whether the number of seeded organoids is known (Q5). Each decides whether a model extension is needed and how it can be constrained.
+\item \textbf{Measurements, then a refit} (implied by \S\ref{sec:e0large}, \S\ref{sec:e4budget}, \S\ref{sec:x4} and Part~\ref{part:real}): A's division time, whether B cells divide, the LGR5$\to$KRT20 mis-typing rate and the number of seeded organoids. Once measured, refit with them as informative priors carrying their measurement uncertainty (as in X5b), with $\ge$\,20k simulations, amortised NPE checked against NRE (\S\ref{sec:x1}).
 \end{itemize}
 \Setup
 \begin{setup}
-X1 & \code{+experiment=compare_methods}; NLE/NRE with 50 SBC cases; 3 seeds; folder \res{results/x1/} \\
-X4 & real-like design, 5 seeds; folder \res{results/x4/} \\
 Blocking & Q1 (C trajectory), Q2 (C proportions), Q3 (2D vs 3D mislabelling), Q4 (meaning of inactivation), Q5 (seeded organoids known?) \\
 \end{setup}
-\begin{pending}[X1 running]
-X1: error, contraction and SBC per method (NPE, NLE, NRE, SNPE); to be added when the sweep finishes.
-\end{pending}
-\begin{pending}[X4 running]
-X4: total bias vs posterior sd per parameter under combined errors; to be added when the sweep finishes.
-\end{pending}
 
 % ====================================================================== appendix
 \clearpage
@@ -1748,6 +1840,8 @@ X5b & \code{d403cac} & vague: \code{+experiment=x5b_lifetime_prior}\newline righ
 X5c & \code{d403cac} & \code{+experiment=x5c_data_vs_prior} \\
 X5d & \code{d403cac} & \code{+experiment=x5d_prior_average}\newline \code{simulator=galton_watson|bellman_harris} \\
 X3 & \code{d59df24}; BH control \code{a64d17e} & \code{+experiment=x3_gw_fit_bh} (folder \code{results/x3/gw}; $\tau$ = \code{hours_per_generation=16,20,24,30})\newline control: \code{simulator=bellman_harris law=reversible_ab design=real_like budget=dev seed=0,1,2,3,4} (\code{results/x3/bh_control}); analysis \code{scripts/analyse_x3.py} \\
+X1 & \code{fa3e96a}; NPE/NRE E0-free reruns \code{a64d17e} & \code{scripts/run_x1.sh <npe|snpe|nle|nre>} (one lane per method; settings in sequence; \code{SETTINGS=...} with \code{scripts/run_x1_settings.sh}); per setting: \code{simulator=galton_watson law=two_type|reversible_ab design=default budget=dev} (E0 free / fixed), \code{+experiment=x5b_lifetime_prior} (BH ridge; loud: wrong bounds as X5b), \code{+experiment=e3a_lifetime_fixed lifetime_setting={B:30,T:18.75}} (silent); methods: \code{inference=npe} [\code{inference.method.rounds=4 budget.sbc_cases=0}] | \code{inference=nle|nre budget.sbc_cases=50}; \code{seed=0,...,4} (\code{results/x1/<setting>/<method>}); analysis \code{scripts/analyse_x1.py} \\
+X4 & \code{fa3e96a}; combined + C after \code{bae0b90} & \code{+experiment=x4_combined} (control); combined: add \code{'++data.law.fixed.founder={A:0.9,B:0.1}' observation@data.observation=noisy data.observation.capture=1.0 data.observation.confusion=0.05 data.simulator.model.lifetime_shape=4}; modelled: add \code{'~law.fixed.founder' observation=noisy observation.capture=1.0 observation.confusion=0.05 simulator.model.lifetime_shape=4}; combined + C: \code{law@data.law=three_type} with C read 50/50 (exact commands in the preset header); \code{results/x4/<arm>}; analysis \code{scripts/analyse_x4.py} \\
 E2 asymmetric & ignored: BH \code{fa3e96a}, GW \code{a64d17e}; known \code{a64d17e} & ignored: \code{+experiment=e2_asymmetric} (\code{results/e2_asym/ignored})\newline known: add \code{observation=noisy observation.capture=1.0 'observation.confusion=${data.observation.confusion}'} (\code{results/e2_asym/known}) \\
 E1b follow-up & \code{a64d17e}; survivor \code{a63b3a8} & \code{+experiment=e1b_all_clones} (\code{results/e1b_all/all_clones}); add \code{observation=perfect} (\code{detected}); add \code{summary=survivor_moments} (\code{all_clones_survivor}) \\
 P0 timing & \code{f0924e6} & single runs (no \code{-m}): \code{simulator=bellman_harris law=reversible_ab design=real_like budget=smoke|dev}; GW reference \code{simulator=galton_watson ... budget=dev}; \code{hydra.run.dir=results/p0_bh_timing/{smoke,dev,gw_dev}} \\

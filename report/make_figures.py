@@ -2060,6 +2060,161 @@ def fig_real_posterior():
     table(pd.DataFrame(rows), "real_posterior")
 
 
+# ======================================================================= X1 / X4
+X1_SETTINGS = [("e0_free", "B.to_A", 0.80, "a  E0: B div.\nfree (GW)"),
+               ("e0_fixed", "B.to_A", 0.80, "b  E0: B div.\nfixed (GW)"),
+               ("bh_ridge", "A.div_AA", 0.55, "c  BH ridge\n(vague prior)"),
+               ("silent_short_lifetime", "A.div_AA", 0.55, "d  silent: fixed\nlifetimes short"),
+               ("loud_wrong_lifetime_prior", "A.div_AA", 0.55, "e  loud: lifetime\nprior +50%")]
+X1_METHODS = [("npe", "NPE", BLUE), ("snpe", "SNPE", ORANGE), ("nle", "NLE", AQUA),
+              ("nre", "NRE", YELLOW)]
+
+
+def fig_x1():
+    """X1: amortised NPE vs sequential NPE vs NLE vs NRE on five decisive settings.
+    Reads results/x1/x1_runs.csv (scripts/analyse_x1.py). Top: posterior mean of the key
+    parameter per seed (filled = covered by the 90% interval). Bottom: PPC fraction
+    outside 95% and SBC error per setting and method. SNPE runs that never finish are
+    absent from the CSV and marked."""
+    path = RES / "x1" / "x1_runs.csv"
+    if not path.exists():
+        raise FileNotFoundError(path)
+    d = pd.read_csv(path)
+    if len(d) != 94:
+        raise FileNotFoundError(f"x1_runs.csv has {len(d)} runs, expected 94")
+    fig = plt.figure(figsize=(W_FULL, 4.3))
+    gs = fig.add_gridspec(2, 5, height_ratios=[1, 0.9], hspace=0.6, wspace=0.42)
+    for j, (st, key, truth, title) in enumerate(X1_SETTINGS):
+        ax = fig.add_subplot(gs[0, j])
+        for k, (m, lab, col) in enumerate(X1_METHODS):
+            s = d[(d.setting == st) & (d.method == m)].sort_values("seed")
+            if s.empty:
+                ax.text(k, 0.25, "never finishes (0/5)", ha="center", va="center",
+                        fontsize=5.4, color=ORANGE, rotation=90)
+                continue
+            x = k + np.linspace(-0.22, 0.22, len(s))
+            cov = s.key_covered.astype(bool).values
+            ax.scatter(x[cov], s.key_mean.values[cov], s=11, color=col, lw=0.4, ec="white",
+                       zorder=3)
+            ax.scatter(x[~cov], s.key_mean.values[~cov], s=11, color="white", ec=col, lw=0.9,
+                       zorder=3)
+            ax.plot([k - 0.3, k + 0.3], [s.key_mean.mean()] * 2, color=col, lw=1.6)
+            if m == "snpe" and len(s) < 5:
+                ax.text(k, 0.06, f"{5 - len(s)} seed\nhung", ha="center", fontsize=5.4,
+                        color=ORANGE)
+        truth_line(ax, truth)
+        ax.set_ylim(0, 1)
+        ax.set_xticks(range(4), [lab for _, lab, _ in X1_METHODS], fontsize=5.8, rotation=90)
+        ax.set_title(title, fontsize=6.6)
+        ax.grid(axis="x", visible=False)
+        if j == 0:
+            ax.set_ylabel("posterior mean per seed\nB→A (a, b) | A→AA (c–e)")
+    g = d.groupby(["setting", "method"])[["ppc_out95", "sbc"]].mean()
+    xs = np.arange(len(X1_SETTINGS))
+    short = ["E0 free", "E0 fixed", "BH ridge", "silent", "loud"]
+    ax = fig.add_subplot(gs[1, :3])
+    w = 0.2
+    for k, (m, lab, col) in enumerate(X1_METHODS):
+        vals = [g.ppc_out95.get((st, m), np.nan) for st, *_ in X1_SETTINGS]
+        ax.bar(xs + (k - 1.5) * w, np.nan_to_num(vals), width=w * 0.92, color=col, label=lab)
+        for i, v in enumerate(vals):
+            if np.isnan(v):
+                ax.text(xs[i] + (k - 1.5) * w, 0.02, "×", ha="center", va="bottom",
+                        fontsize=8, color=ORANGE)
+    ax.axhline(0.05, color=INK2, lw=0.6, ls=":")
+    ax.set_xticks(xs, short)
+    ax.set_ylim(0, 0.8)
+    ax.set_ylabel("PPC fraction outside 95%")
+    ax.set_title("f  PPC (mean of seeds; × = SNPE never finishes)", fontsize=6.8)
+    ax.legend(ncol=4, fontsize=6, loc="upper left")
+    ax.grid(axis="x", visible=False)
+    ax = fig.add_subplot(gs[1, 3:])
+    ax.set_position(ax.get_position().translated(0.03, 0))
+    sb = [(m, lab, col) for m, lab, col in X1_METHODS if m != "snpe"]
+    w = 0.26
+    for k, (m, lab, col) in enumerate(sb):
+        vals = [g.sbc.get((st, m), np.nan) for st, *_ in X1_SETTINGS]
+        ax.bar(xs + (k - 1) * w, vals, width=w * 0.92, color=col, label=lab)
+    ax.set_xticks(xs, short, fontsize=5.8, rotation=30)
+    ax.set_ylabel("SBC coverage error")
+    ax.set_title("g  calibration (SNPE: no SBC)", fontsize=6.8)
+    ax.grid(axis="x", visible=False)
+    save(fig, "x1")
+    table(d.groupby(["setting", "method"]).agg(
+        n=("seed", "size"), mae=("mae", "mean"), coverage=("coverage", "mean"),
+        ppc=("ppc_out95", "mean"), sbc=("sbc", "mean"), key=("key_param", "first"),
+        key_mean=("key_mean", "mean"), key_cov=("key_covered", "sum"),
+        minutes=("minutes", "mean")).reset_index(), "x1")
+
+
+X4_ARMS = [("control", "control", INK2), ("combined", "combined\n(ignored)", BLUE),
+           ("modelled", "modelled", ORANGE), ("combined_c", "combined\n+ C*", AQUA)]
+
+
+def fig_x4():
+    """X4: combined realistic errors at the real design (BH, budget=full). Reads
+    results/x4/x4_runs.csv (scripts/analyse_x4.py). (a) MAE, (b) coverage, (c) support
+    mass and PPC per arm; (d, e) A->AA and A lifetime per seed vs truth."""
+    path = RES / "x4" / "x4_runs.csv"
+    if not path.exists():
+        raise FileNotFoundError(path)
+    d = pd.read_csv(path)
+    if len(d) != 20:
+        raise FileNotFoundError(f"x4_runs.csv has {len(d)} runs, expected 20")
+    arms = [a for a, _, _ in X4_ARMS]
+    labs = [lab for _, lab, _ in X4_ARMS]
+    cols = [c for _, _, c in X4_ARMS]
+    g = d.groupby("arm")[["mae", "coverage", "support", "ppc_out95"]].mean().reindex(arms)
+    fig, axes = plt.subplots(1, 5, figsize=(W_FULL, 2.4),
+                             gridspec_kw=dict(wspace=0.55, width_ratios=[1, 1, 1.25, 1, 1]))
+    x = np.arange(4)
+    for ax, col_, title, ylim in ((axes[0], "mae", "a  MAE", 0.2),
+                                  (axes[1], "coverage", "b  coverage", 1.0)):
+        for k, a in enumerate(arms):
+            s = d[d.arm == a]
+            ax.bar(k, g.loc[a, col_], width=0.62, color=cols[k], alpha=0.35 if k == 3 else 1)
+            ax.scatter(k + np.linspace(-0.18, 0.18, len(s)), s[col_], s=6, color=INK, zorder=3,
+                       lw=0)
+        ax.set_ylim(0, ylim)
+        ax.set_title(title)
+        ax.set_xticks(x, labs, fontsize=5.6, rotation=90)
+        ax.grid(axis="x", visible=False)
+    axes[1].axhline(0.9, color=INK2, lw=0.6, ls=":")
+    ax = axes[2]
+    ax.bar(x - 0.19, g.support, width=0.36, color=BLUE, label="support mass")
+    ax.bar(x + 0.19, g.ppc_out95, width=0.36, color=ORANGE, label="PPC outside 95%")
+    for k in x:
+        ax.text(k + 0.19, g.ppc_out95.iloc[k] + 0.015, f"{g.ppc_out95.iloc[k]:.3f}",
+                ha="center", fontsize=5, color=INK2, rotation=90, va="bottom")
+    ax.set_ylim(0, 1.4)
+    ax.set_yticks([0, 0.25, 0.5, 0.75, 1])
+    ax.set_xticks(x, labs, fontsize=5.6, rotation=90)
+    ax.legend(fontsize=5.6, loc="upper center", ncol=1)
+    ax.set_title("c  checks")
+    ax.grid(axis="x", visible=False)
+    for ax, par, truth, title, ylim in ((axes[3], "A.div_AA", 0.55, "d  A→AA", (0, 1)),
+                                        (axes[4], "A.mean_lifetime", 20, "e  τ_A (h)", (10, 22))):
+        for k, a in enumerate(arms):
+            s = d[d.arm == a].sort_values("seed")
+            xx = k + np.linspace(-0.2, 0.2, len(s))
+            cov = s[f"{par}_cov"].astype(bool).values
+            ax.scatter(xx[cov], s[par].values[cov], s=11, color=cols[k], lw=0.4, ec="white",
+                       zorder=3)
+            ax.scatter(xx[~cov], s[par].values[~cov], s=11, color="white", ec=cols[k], lw=0.9,
+                       zorder=3)
+            ax.plot([k - 0.28, k + 0.28], [s[par].mean()] * 2, color=cols[k], lw=1.6)
+        truth_line(ax, truth)
+        if par == "A.div_AA":
+            ax.plot([2.7, 3.3], [0.50, 0.50], color=INK2, lw=0.8, ls=":")
+            ax.text(3, 0.62, "C-arm\ntruth 0.50", ha="center", fontsize=5, color=INK2)
+        ax.set_ylim(*ylim)
+        ax.set_title(title)
+        ax.set_xticks(x, labs, fontsize=5.6, rotation=90)
+        ax.grid(axis="x", visible=False)
+    save(fig, "x4")
+    table(d.groupby("arm").mean(numeric_only=True).reindex(arms).reset_index(), "x4")
+
+
 # ======================================================================= main
 FIGURES = [
     fig_e0_bto_a, fig_e0_c2st, fig_design, fig_gpu, fig_e4, fig_ridge, fig_e1b,
@@ -2071,6 +2226,7 @@ FIGURES = [
     fig_e2c_prior, fig_x5a_priors, fig_x5a, fig_x5b, fig_x5c, fig_x5d,
     fig_x2, fig_e0_large,
     fig_x3, fig_real_ladder, fig_real_ppc, fig_real_posterior,
+    fig_x1, fig_x4,
 ]
 
 
