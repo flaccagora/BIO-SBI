@@ -1,0 +1,48 @@
+# @package _global_
+# X4: the realistic combination of errors at the real design, budget=full. Data (BH):
+# 10% B founders (organoid death / seeding), 5% symmetric A<->B mis-typing, lifetime
+# shape 4 (CV 0.5) instead of 8; optionally a hidden third type C read 50/50. Inference:
+# BH reversible_ab, perfect typing, single A founder, shape 8 (the baseline model).
+# Arms (run separately; 5 seeds each):
+#   control (well-specified):
+#     bio-sbi -m +experiment=x4_combined hydra.sweep.dir=results/x4/control
+#   combined errors, ignored:
+#     bio-sbi -m +experiment=x4_combined '++data.law.fixed.founder={A:0.9,B:0.1}' \
+#       observation@data.observation=noisy data.observation.capture=1.0 \
+#       data.observation.confusion=0.05 data.simulator.model.lifetime_shape=4 \
+#       hydra.sweep.dir=results/x4/combined
+#   combined errors, modelled (founders inferred, known mis-typing, shape 4):
+#     bio-sbi -m +experiment=x4_combined '++data.law.fixed.founder={A:0.9,B:0.1}' \
+#       observation@data.observation=noisy data.observation.capture=1.0 \
+#       data.observation.confusion=0.05 data.simulator.model.lifetime_shape=4 \
+#       '~law.fixed.founder' observation=noisy observation.capture=1.0 \
+#       observation.confusion=0.05 simulator.model.lifetime_shape=4 \
+#       hydra.sweep.dir=results/x4/modelled
+#   combined errors + hidden C (three_type data, q = 0.5), ignored:
+#     bio-sbi -m +experiment=x4_combined law@data.law=three_type \
+#       '++data.law.fixed.founder={A:0.9,B:0.1,C:0.0}' \
+#       observation@data.observation=noisy data.observation.capture=1.0 \
+#       '++data.observation.labels=[A,B]' \
+#       '++data.observation.confusion={A:{A:0.95,B:0.05},B:{A:0.05,B:0.95},C:{A:0.5,B:0.5}}' \
+#       data.simulator.model.lifetime_shape=4 hydra.sweep.dir=results/x4/combined_c
+# (the C arm's truth is the three_type reference; its A/B rows are not comparable to
+# the two-type truth: read detection, PPC and support mass.)
+defaults:
+  - override /simulator: bellman_harris
+  - override /law: reversible_ab
+  - override /design: real_like
+  - override /budget: full
+info:
+  title: "X4: combined realistic errors at the real design (BH, budget=full)"
+  question: |
+    With the plausible errors of the real assay acting together (B founders, A<->B
+    mis-typing, desynchronised lifetimes, possibly a hidden type C), how biased are the
+    estimates of the baseline model, is it flagged, and does modelling the known errors
+    remove the bias? This is the error budget to quote with the real-data fit.
+  notes: |
+    BH, real-like design, budget=full (50k simulations, SBC 1000), 5 seeds per arm.
+    Error sizes are assumptions (Q3/Q5 open): founder B 10%, mis-typing 5%, shape 4.
+hydra:
+  sweeper:
+    params:
+      seed: 0,1,2,3,4

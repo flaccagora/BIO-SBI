@@ -1,0 +1,33 @@
+# @package _global_
+# E1b follow-up: the observed-organoid fraction as data. With observation=all_clones
+# every seeded organoid is recorded, extinct ones as (0, 0) rows, so the summaries see
+# the fraction of organoids that died out. Compare with the usual detected-only data.
+#   bio-sbi -m +experiment=e1b_all_clones hydra.sweep.dir=results/e1b_all/all_clones
+#   bio-sbi -m +experiment=e1b_all_clones observation=perfect \
+#     hydra.sweep.dir=results/e1b_all/detected
+# Truths: A.death in {0.03, 0.1, 0.3} (other A outcomes rescaled as in E1b), B
+# reference. 3 x 2 simulators x 5 seeds = 30 runs per arm.
+defaults:
+  - override /law: reversible_ab
+  - override /design: real_like
+  - override /budget: dev
+  - override /observation: all_clones
+truth:
+  values:
+    A: {persist: 0.03, to_B: 0.05, div_AB: 0.05, div_AA: 0.55, div_BB: 0.29, death: 0.03}
+info:
+  title: "E1b follow-up: observed-organoid fraction as a summary"
+  question: |
+    If every seeded organoid is recorded (extinct ones as zero counts), are death
+    rates and the other outcomes recovered better than from detected organoids only?
+  notes: |
+    Inference and data use the same observation model in each arm (all_clones vs
+    perfect). Design clone counts become seeded organoids in the all_clones arm.
+hydra:
+  sweeper:
+    params:
+      simulator: galton_watson,bellman_harris
+      truth.values.A: "{persist:0.03,to_B:0.05,div_AB:0.05,div_AA:0.55,div_BB:0.29,death:0.03},\
+        {persist:0.027835,to_B:0.046392,div_AB:0.046392,div_AA:0.510309,div_BB:0.269072,death:0.1},\
+        {persist:0.021649,to_B:0.036082,div_AB:0.036082,div_AA:0.396907,div_BB:0.20928,death:0.3}"
+      seed: 0,1,2,3,4
