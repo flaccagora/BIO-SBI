@@ -291,8 +291,10 @@ class ExactGW(InferenceMethod):
         threads: Threads for chains / initial optimisations (the Numba kernel releases
             the GIL). Each thread uses one core.
         init_starts: Prior draws optimised (L-BFGS on the log posterior) to initialise
-            the chains; the ``chains`` best optima are used.
+            the chains (Laplace draws around the best optima, see ``init_tolerance``).
         init_maxiter: L-BFGS iterations per start.
+        init_tolerance: Optima more than this many nats below the best are not used as
+            chain starts (negligible posterior mass); all optima are reported.
         grid: FFT grid options (``factor``, ``margin``, ``min_size``, ``damping``,
             ``max_points``); see :func:`~bio_sbi.inference.gw_exact.grid_spec`.
         floor: Probability floor of the likelihood.
@@ -316,6 +318,7 @@ class ExactGW(InferenceMethod):
         threads: int = 4,
         init_starts: int = 8,
         init_maxiter: int = 200,
+        init_tolerance: float = 20.0,
         grid: dict | None = None,
         floor: float = 1e-15,
         sbc: dict | None = None,
@@ -335,6 +338,7 @@ class ExactGW(InferenceMethod):
         self.threads = max(int(threads), 1)
         self.init_starts = max(int(init_starts), int(chains))
         self.init_maxiter = int(init_maxiter)
+        self.init_tolerance = float(init_tolerance)
         self.grid = dict(grid or {})
         self.floor = float(floor)
         self.sbc = dict(sbc or {})
@@ -358,12 +362,11 @@ class ExactGW(InferenceMethod):
         return ExactLikelihood(simulator, observation, cohorts, grid, self.floor)
 
     def _initial_points(self, lik: ExactLikelihood, n_starts: int, n_keep: int, key):
+        # prior draws of the sticks (the same Betas as ParameterSpace.prior), drawn with
+        # NumPy so concurrent SBC cases do not share torch's global RNG
         rng = rng_for(self.seed, "exact-init", *key)
-        prior = lik.space.prior()
-        import torch
-
-        torch.manual_seed(int(rng.integers(2**31)))
-        theta = prior.sample((n_starts,)).numpy().astype(float)
+        theta = rng.beta(lik.prior_a, lik.prior_b, size=(n_starts, lik.dim))
+        theta = np.clip(theta, 1e-6, 1 - 1e-6)
         u0 = np.clip(np.log(theta) - np.log1p(-theta), -8, 8)
 
         def neg(u):
@@ -381,7 +384,11 @@ class ExactGW(InferenceMethod):
         with ThreadPoolExecutor(min(self.threads, n_starts)) as pool:
             results = list(pool.map(optimise, u0))
         order = np.argsort([-lp for _, lp in results])
-        kept = [results[i] for i in order[:n_keep]]
+        best = results[order[0]][1]
+        # Optima far below the best carry negligible posterior mass (a mode 20 nats down
+        # has relative weight ~e^-20): chains start around the good ones only, cycling.
+        good = [results[i] for i in order if results[i][1] >= best - self.init_tolerance]
+        kept = [good[c % len(good)] for c in range(n_keep)]
         return [u for u, _ in kept], [lp for _, lp in results]
 
     @staticmethod

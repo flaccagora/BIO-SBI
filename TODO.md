@@ -311,6 +311,24 @@ for each parameter?
       average; the B-row failure is structural (constraints fix it, priors and more
       organoids do not); the BH ridge is a tail-truth effect, helped by a correct
       lifetime prior; a too-long lifetime prior is detected.
+- [ ] **XG – Exact GW likelihood** (`inference=exact_gw`, branch `exact-gw`): NUTS on the
+      exact likelihood of the raw counts (pgf iterate + 2-D FFT, exact gradients; see
+      README "Exact likelihood for Galton-Watson"), same theta coordinates and prior as
+      NPE. Question: is the B-row failure a property of the data (exact posterior also
+      flat) or of NPE + moment summaries? Presets (reference datasets identical to the
+      NPE runs named in their headers, `data_seed = seed`):
+      - `exact_gw_e0_4096` — E0 at 4096 clones, gens 4/6/10, two_type, seeds 0–4
+        (compare `results/e4/gw_xxl_two_type_20k`, `_5k`);
+      - `exact_gw_e0` — original E0 (4/8/12 × 32), two_type + reversible_ab, seeds 0–4
+        (compare `results/b_row/*`, `results/x1/e0_free`, `results/x1/e0_fixed`);
+      - `exact_gw_real_like` — gens 6/10 × 165/101, uniform prior, two_type +
+        reversible_ab, seeds 0–4 (compare `results/x2/gw_data` for reversible_ab; for
+        X5a's truths `results/x5/a_*`, command in the header);
+      - `exact_gw_early` — {3} × 266 and {2, 3} × 133, two_type, seeds 0–4 (new design;
+        NPE command in the header).
+      Commands: `bio-sbi -m +experiment=<preset> hydra.sweep.dir=results/exact_gw/<name>`.
+      SBC re-runs MCMC per case: `inference.sbc_cases` (default 20, 10 in the 4096
+      preset; 0 skips). Cost per run: TIMINGS.
 
 ---
 

@@ -20,6 +20,7 @@ method:
   threads: 4                   # chains / optimisations in parallel threads (1 core each)
   init_starts: 8               # prior draws optimised by L-BFGS to initialise the chains
   init_maxiter: 200
+  init_tolerance: 20           # chains start only at optima within 20 nats of the best
   log_every: 50                # chain progress in the log every N iterations (0 = silent)
   floor: 1.0e-15               # probability floor of the likelihood
   grid:                        # FFT grid per horizon, from the dataset's largest counts
