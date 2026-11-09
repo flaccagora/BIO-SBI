@@ -192,7 +192,7 @@ class GridSpec:
 def grid_spec(
     max_a: int,
     max_b: int,
-    factor: float = 1.5,
+    factor: float = 1.25,
     margin: int = 16,
     min_size: int = 32,
     damping: float = 1e4,
@@ -203,7 +203,7 @@ def grid_spec(
     sizes for a fast FFT). The radii are chosen so the round-off amplification
     ``r_x^-max_a r_y^-max_b`` at the largest needed cell is at most ``damping``
     (``1`` disables damping); a count ``a + Lx`` beyond the grid then aliases onto
-    ``a`` damped by ``r_x^Lx = damping^-(Lx / (2 max_a))`` (about ``1e-3`` with the
+    ``a`` damped by ``r_x^Lx = damping^-(Lx / (2 max_a))`` (about ``3e-3`` with the
     defaults).
     """
 

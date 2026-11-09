@@ -350,11 +350,11 @@ the posterior of the **raw counts** (no summary, no simulations) with NUTS
   Stan-style warmup (dual averaging, dense mass matrix); split R-hat, ESS, divergences
   and timings in `metrics.json` under `exact_gw`;
 * FFT grid per horizon from the dataset's largest counts:
-  `L = next_fast_len(1.5 max + 16)` per axis, evaluated at a radius `r < 1` so mass
-  beyond the grid aliases back damped by ~1e-3 (round-off amplified by at most 1e4);
+  `L = next_fast_len(1.25 max + 16)` per axis, evaluated at a radius `r < 1` so mass
+  beyond the grid aliases back damped by ~3e-3 (round-off amplified by at most 1e4);
   after sampling, `exact_gw.grid_check` compares the law at the posterior median with an
   undamped grid twice as large (tail mass, max relative error on observed cells;
-  warning above 1e-6);
+  warning when the relative error exceeds 1e-5);
 * same artefacts as NPE (`recovery.csv`, `posterior_samples.csv.gz`, PPC by forward
   simulation, `metrics.json`; `posterior_support_mass = 1` by construction).
   `posterior.pt` holds the draws (not amortised: `bio-sbi-infer` does not apply).

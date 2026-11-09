@@ -25,10 +25,10 @@ method:
   floor: 1.0e-15               # probability floor of the likelihood
   min_detection: 1.0e-6        # floor of P(detected) in the conditioning (see gw_exact.log_likelihood)
   grid:                        # FFT grid per horizon, from the dataset's largest counts
-    factor: 1.5                # L = next_fast_len(max(min_size, factor * max_count + margin))
+    factor: 1.25               # L = next_fast_len(max(min_size, factor * max_count + margin))
     margin: 16
     min_size: 32
-    damping: 1.0e+4            # evaluation radius: round-off amplification <= damping; aliasing ~1e-3
+    damping: 1.0e+4            # evaluation radius: round-off amplification <= damping; aliasing <~3e-3
     max_points: 4.0e+6         # Lx * Ly cap per horizon (memory) for the reference data
   sbc:                         # MCMC settings of each SBC case (cheaper than the reference fit;
     chains: 2                  #   threads // chains cases run at a time)

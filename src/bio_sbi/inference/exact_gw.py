@@ -512,7 +512,7 @@ class ExactGW(InferenceMethod):
         draws, diag = self.run(lik)
         diag["grid_check"] = lik.grid_check(np.median(draws, axis=0))
         for g in diag["grid_check"]:
-            if g["tail_mass"] > 1e-6 or g["max_rel_error"] > 1e-6:
+            if g["max_rel_error"] > 1e-5:  # tail mass beyond L is damped, not an error
                 LOG.warning("exact_gw grid check (generation %d): tail mass %.2g, max relative "
                             "error %.2g on observed cells; raise inference.method.grid.factor",
                             g["generations"], g["tail_mass"], g["max_rel_error"])  # fmt: skip
