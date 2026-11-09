@@ -128,17 +128,39 @@ def calibration(
             show_progress_bar=False,
         )
         ranks = ranks.cpu().numpy()
+    metrics = calibration_metrics(
+        ranks, names, posterior_samples, invalid=int((~valid).sum()), excluded=excluded
+    )
+    return metrics, ranks
+
+
+def calibration_metrics(
+    ranks: np.ndarray,
+    names: Sequence[str],
+    posterior_samples: int,
+    invalid: int = 0,
+    excluded: int = 0,
+) -> dict:
+    """SBC metrics from ranks ``(N, d)`` of the truth among ``posterior_samples`` draws.
+
+    Args:
+        ranks: Number of posterior draws below the true value, per case and coordinate.
+        names: Coordinate names.
+        posterior_samples: Draws per case (ranks lie in ``0..posterior_samples``).
+        invalid: Cases without a valid dataset.
+        excluded: Cases excluded for another reason (e.g. NPE leakage).
+    """
     if len(ranks) == 0:  # every case excluded: calibration cannot be assessed
         nan = float("nan")
         return {
             "cases": 0,
-            "invalid_cases": int((~valid).sum()),
+            "invalid_cases": int(invalid),
             "excluded_leakage": int(excluded),
             "posterior_samples": int(posterior_samples),
             "ks_pvalue": dict.fromkeys(names, nan),
             "coverage": {f"{lvl:.2f}": dict.fromkeys(names, nan) for lvl in CREDIBLE_LEVELS},
             "mean_abs_coverage_error": nan,
-        }, ranks
+        }
     # Coverage of central intervals follows from ranks: u = rank / L is uniform if calibrated.
     u = (ranks + 0.5) / posterior_samples
     coverage = {
@@ -150,9 +172,9 @@ def calibration(
     from scipy.stats import kstest
 
     ks = {n: float(kstest(u[:, i], "uniform").pvalue) for i, n in enumerate(names)}
-    metrics = {
+    return {
         "cases": int(len(ranks)),
-        "invalid_cases": int((~valid).sum()),
+        "invalid_cases": int(invalid),
         "excluded_leakage": int(excluded),
         "posterior_samples": int(posterior_samples),
         "ks_pvalue": ks,
@@ -161,7 +183,6 @@ def calibration(
             np.mean([abs(v - float(lvl)) for lvl, d in coverage.items() for v in d.values()])
         ),
     }
-    return metrics, ranks
 
 
 def posterior_predictive_check(

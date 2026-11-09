@@ -1,0 +1,28 @@
+# @package _global_
+# Exact-likelihood posterior (inference=exact_gw, NUTS) on the original E0 design:
+# Galton-Watson, generations 4/8/12 x 32 clones (design=default), reference truth,
+# all transitions free (two_type) and B divisions fixed to 0 (reversible_ab), seeds 0-4.
+# Same reference datasets (data_seed = seed) as the NPE runs in results/b_row/two_type,
+# results/b_row/reversible_ab (5k/20k/50k), results/design_comparison (three_32 rows)
+# and results/x1/e0_free, results/x1/e0_fixed (NPE, SNPE, NLE, NRE):
+#   bio-sbi -m +experiment=exact_gw_e0 hydra.sweep.dir=results/exact_gw/e0
+defaults:
+  - override /simulator: galton_watson
+  - override /observation: perfect
+  - override /inference: exact_gw
+  - override /design: default
+  - override /budget: dev
+workers: 4
+info:
+  title: "Exact GW likelihood: E0 design (4/8/12 x 32 clones)"
+  question: |
+    Is B's outcome row identifiable from the original E0 data (96 clones) under the exact
+    likelihood, with all transitions free (two_type) and with B divisions fixed
+    (reversible_ab)? Same datasets as results/b_row and results/x1/e0_*.
+  notes: |
+    NUTS (4 chains) on the exact likelihood; SBC on inference.sbc_cases prior draws.
+hydra:
+  sweeper:
+    params:
+      law: two_type,reversible_ab
+      seed: 0,1,2,3,4

@@ -1,0 +1,38 @@
+# @package _global_
+# Exact-likelihood posterior (inference=exact_gw, NUTS) on the real-like design:
+# Galton-Watson generations 6/10 x 165/101 clones, uniform Dirichlet prior
+# (law.concentration {}), all transitions free (two_type) and B divisions fixed
+# (reversible_ab), reference truth (B.to_A = 0.8), seeds 0-4:
+#   bio-sbi -m +experiment=exact_gw_real_like hydra.sweep.dir=results/exact_gw/real_like
+# NPE comparisons with identical reference datasets (data_seed = seed):
+#   reversible_ab at the reference truth: results/x2/gw_data (data_seed 0-4, NPE 5k).
+#   two_type: no NPE run at the reference truth; X5a swept B.to_A in 0.1..0.9 with the
+#   same design. To reproduce X5a's datasets exactly (uniform-prior arm):
+#   bio-sbi -m +experiment=exact_gw_real_like law=two_type,reversible_ab \
+#     truth.values.B="{death:0.45,persist:0.45,to_A:0.1},{death:0.35,persist:0.35,to_A:0.3},\
+#   {death:0.25,persist:0.25,to_A:0.5},{death:0.15,persist:0.15,to_A:0.7},\
+#   {death:0.05,persist:0.05,to_A:0.9}" hydra.sweep.dir=results/exact_gw/real_like_x5a
+#   (compare results/x5/a_two_type, results/x5/a_reversible_ab, '++law.concentration={}').
+defaults:
+  - override /simulator: galton_watson
+  - override /observation: perfect
+  - override /inference: exact_gw
+  - override /design: real_like
+  - override /budget: dev
+law:
+  concentration: {}
+truth:
+  values:            # default (= law.reference) so truth.values.B can be swept
+    B: {death: 0.1, persist: 0.1, to_A: 0.8}
+workers: 4
+info:
+  title: "Exact GW likelihood: real-like design"
+  question: |
+    With the exact likelihood, how well is B's outcome row recovered from the real-like
+    design (generations 6/10, 165/101 clones), with all transitions free and with B
+    divisions fixed? Compare NPE in results/x2/gw_data (reversible_ab) and results/x5/a_*.
+hydra:
+  sweeper:
+    params:
+      law: two_type,reversible_ab
+      seed: 0,1,2,3,4

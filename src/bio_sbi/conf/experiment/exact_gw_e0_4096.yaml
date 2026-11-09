@@ -1,0 +1,32 @@
+# @package _global_
+# Exact-likelihood posterior (inference=exact_gw, NUTS) on the E0 design at 4096 clones:
+# Galton-Watson, all transitions free (two_type), generations 4/6/10 x 4096 clones,
+# reference truth, seeds 0-4. Same reference datasets (data_seed = seed, same design,
+# law, observation) as the NPE runs in results/e4/gw_xxl_two_type_20k (and _5k):
+#   bio-sbi -m +experiment=exact_gw_e0_4096 hydra.sweep.dir=results/exact_gw/e0_4096
+# Cost: ~45 ms per likelihood+gradient evaluation; see inference/exact_gw.yaml.
+defaults:
+  - override /simulator: galton_watson
+  - override /law: two_type
+  - override /observation: perfect
+  - override /inference: exact_gw
+  - override /budget: dev
+design:
+  horizons: [4, 6, 10]
+  clones: 4096
+inference:
+  sbc_cases: 10
+workers: 4
+info:
+  title: "Exact GW likelihood: E0 design at 4096 clones"
+  question: |
+    With the exact likelihood (no simulation-based approximation), is B's outcome row
+    (B.to_A vs B divisions) recovered from 4096 clones at generations 4/6/10, where
+    NPE (20k simulations) was not? Same datasets as results/e4/gw_xxl_two_type_20k.
+  notes: |
+    NUTS (4 chains), exact gradients through the pgf recursion, FFT grid sized from the
+    data. SBC on 10 prior draws (one MCMC run each).
+hydra:
+  sweeper:
+    params:
+      seed: 0,1,2,3,4

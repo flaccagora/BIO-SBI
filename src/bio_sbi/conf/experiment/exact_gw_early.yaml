@@ -1,0 +1,34 @@
+# @package _global_
+# Exact-likelihood posterior (inference=exact_gw, NUTS) for EARLY endpoints with the
+# real organoid budget (266 clones): generation 3 only (266 clones) or generations 2 and
+# 3 (133 each). Galton-Watson, all transitions free (two_type), reference truth, seeds 0-4:
+#   bio-sbi -m +experiment=exact_gw_early hydra.sweep.dir=results/exact_gw/early
+# New design (no NPE run yet). The matching NPE sweep (same datasets, data_seed = seed):
+#   bio-sbi -m +experiment=exact_gw_early inference=npe hydra.sweep.dir=results/exact_gw/early_npe
+# Early endpoints have small clones, so the likelihood is cheap (tiny FFT grids).
+defaults:
+  - override /simulator: galton_watson
+  - override /law: two_type
+  - override /observation: perfect
+  - override /inference: exact_gw
+  - override /budget: dev
+early:               # one design arm (swept below); horizons in generations
+  horizons: [2, 3]
+  clones: 133
+design:
+  name: early
+  horizons: ${early.horizons}
+  clones: ${early.clones}
+workers: 4
+info:
+  title: "Exact GW likelihood: early endpoints (266 organoids)"
+  question: |
+    Do early endpoints (generation 3, or 2 and 3) with 266 organoids identify B's
+    outcome row (B.to_A vs B divisions) when all transitions are free, under the exact
+    likelihood? Early clones are small, so outcomes of the first divisions are
+    nearly visible.
+hydra:
+  sweeper:
+    params:
+      early: "{horizons:[3],clones:266},{horizons:[2,3],clones:133}"
+      seed: 0,1,2,3,4

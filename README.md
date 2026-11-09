@@ -17,7 +17,7 @@ Every part of the pipeline is a swappable [Hydra](https://hydra.cc) config group
 | `law` | `two_type` (all transitions), `reversible_ab`, `hierarchy_ab`, `minimal_ab`, `three_type`, `three_type_traj`, `multi_founder` | Cell types, transitions, founders, fixed values, prior |
 | `observation` | `perfect`, `noisy`, `all_clones`, `three_as_two`, `three_split` | Capture, type→label confusion, clone selection |
 | `summary` | `moments`, `survivor_moments`, `means` | Summary statistics fed to the network (`survivor_moments`: moments of non-empty clones + extinct fraction, for `observation=all_clones`) |
-| `inference` | `npe`, `nle`, `nre` | sbi method family |
+| `inference` | `npe`, `nle`, `nre`, `exact_gw` | sbi method family, or exact-likelihood MCMC (GW only) |
 | `budget` | `smoke`, `dev`, `full` | Simulations, epochs, posterior/SBC sample sizes |
 | `design` | `default`, `real_like`, `single_128`, `three_128`, `single_384` | Endpoints and clones per endpoint |
 | `experiment` | `e1a_*` … `e4_design`, `x2_seeds` (see [TODO.md](TODO.md)), `b_row_*`, `design_comparison`, `compare_methods`, `design_sweep`, `noise_sensitivity` | Ready-made multirun sweeps (each documents itself in `info.md`) |
@@ -322,6 +322,7 @@ the parameters are not comparable.
 | `npe` | `q(theta \| x)` (normalising flow) | direct, instant | default; cheap calibration checks; amortised over datasets |
 | `nle` | `q(x \| theta)` (flow over summaries) | MCMC (slice) | likelihood reusable under other priors; robust sequential rounds |
 | `nre` | `r(x, theta)` (classifier, NRE-C) | MCMC (slice) | simple and sample-efficient training |
+| `exact_gw` | nothing: **exact likelihood** of the raw counts (pgf + 2-D FFT) | NUTS (exact gradients) | Galton-Watson ground truth: is a parameter identifiable at all, or did the SBI method / summary lose it? |
 
 `inference.method.rounds=R>1` switches to **sequential** inference at the reference
 data (NPE-C/APT for NPE). This is more simulation-efficient for one dataset, but it
@@ -330,6 +331,49 @@ is not amortised, so SBC is skipped. The keys under `inference.method.network`,
 
 > NLE and NRE sample with MCMC, so each SBC case costs one MCMC run. Keep
 > `budget.sbc_cases` modest, or set it to 0, for these methods.
+
+#### Exact likelihood for Galton-Watson (`inference=exact_gw`)
+
+For the Galton-Watson model the law of a clone's counts `(A, B)` at generation `n` is
+known exactly: its pgf is the `n`-fold iterate `F_n = f(F_{n-1})` of the offspring pgfs,
+and its coefficients come from evaluating `F_n` on an `Lx x Ly` grid of roots of unity
+and a 2-D FFT (`src/bio_sbi/inference/gw_exact.py`, Numba kernel). `exact_gw` samples
+the posterior of the **raw counts** (no summary, no simulations) with NUTS
+(`inference/nuts.py`):
+
+* likelihood = product over clones and horizons of `p(A, B | theta)`, conditioned on
+  `Z != (0, 0)` for `selection=detected` (detection probability in complement form);
+  counts are histogrammed per horizon; probabilities floored at `1e-15`;
+* exact gradients by forward mode through the pgf recursion;
+* same `theta` coordinates and prior as NPE (stick-breaking Betas of the Dirichlet rows),
+  sampled on `logit(theta)`; chains start at the best of `init_starts` L-BFGS optima;
+  Stan-style warmup (dual averaging, dense mass matrix); split R-hat, ESS, divergences
+  and timings in `metrics.json` under `exact_gw`;
+* FFT grid per horizon from the dataset's largest counts:
+  `L = next_fast_len(1.5 max + 16)` per axis, evaluated at a radius `r < 1` so mass
+  beyond the grid aliases back damped by ~1e-3 (round-off amplified by at most 1e4);
+  after sampling, `exact_gw.grid_check` compares the law at the posterior median with an
+  undamped grid twice as large (tail mass, max relative error on observed cells;
+  warning above 1e-6);
+* same artefacts as NPE (`recovery.csv`, `posterior_samples.csv.gz`, PPC by forward
+  simulation, `metrics.json`; `posterior_support_mass = 1` by construction).
+  `posterior.pt` holds the draws (not amortised: `bio-sbi-infer` does not apply).
+* **SBC re-runs MCMC on every calibration dataset** (cheaper settings under
+  `inference.method.sbc`), so it is expensive: the number of cases is
+  `inference.sbc_cases` (default 20; it overrides `budget.sbc_cases`; `null` = use
+  `budget.sbc_cases`, `0` = skip). Datasets needing a grid above `grid.max_points` are
+  skipped (selection on the data keeps SBC ranks uniform).
+
+Supported: `simulator=galton_watson` / `galton_watson_hours`, two types (`two_type`,
+`reversible_ab`, any fixed entries), fixed founder rows (e.g. a single A founder),
+homogeneous law, two labels with any capture and 2x2 confusion (pgf substitution
+`x -> 1 - c + c (C x + ...)`), `selection` detected or all. Bellman-Harris, free founder
+parameters, clone heterogeneity and three types raise `ValueError`.
+
+Cost (2-4 threads; one likelihood + gradient evaluation): E0 at 4096 clones
+(generations 4/6/10) ~45 ms; see `TODO.md` (section XG) for per-preset run times.
+Presets: `exact_gw_e0_4096`, `exact_gw_e0`, `exact_gw_real_like`, `exact_gw_early`
+(reference datasets identical to the NPE runs they compare with).
 
 ### Budgets
 
@@ -502,6 +546,7 @@ src/bio_sbi/
   simulators/     law.py (outcomes, founders, ParameterSpace: fixed/free, priors)
                   base.py · galton_watson.py · bellman_harris.py
   inference/      base.py (training loop, FittedPosterior) · methods.py (NPE, NLE, NRE)
+                  gw_exact.py (exact GW law, FFT) · nuts.py · exact_gw.py (ExactGW)
   observation.py  capture / type->label confusion / selection
   design.py       horizons x clones
   summaries.py    CohortMoments, CohortMeans

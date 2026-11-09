@@ -1,0 +1,36 @@
+# Exact-likelihood Bayesian inference for the two-type Galton-Watson model: NUTS on the
+# exact law of the raw endpoint counts (2-D FFT of the iterated pgf), same theta
+# coordinates and prior as NPE. No training: budget.simulations / max_epochs are unused.
+# Supports simulator=galton_watson(_hours), two types (two_type, reversible_ab, any fixed
+# entries), fixed founder rows, homogeneous law, two labels (any capture / 2x2 confusion),
+# selection detected or all; anything else raises ValueError.
+#   bio-sbi inference=exact_gw law=reversible_ab design=real_like
+name: exact_gw
+# SBC cases for this method (one full MCMC run each, ~1-5 min): overrides
+# budget.sbc_cases. null = use budget.sbc_cases; 0 = skip SBC.
+sbc_cases: 20
+method:
+  _target_: bio_sbi.inference.ExactGW
+  chains: 4                    # independent NUTS chains (initialised at the best of init_starts optima)
+  warmup: 300                  # adaptation iterations per chain (step size + dense mass matrix)
+  draws: 500                   # kept iterations per chain (posterior_samples are drawn from these)
+  max_tree_depth: 8
+  target_accept: 0.8
+  dense_mass: true
+  threads: 4                   # chains / optimisations in parallel threads (1 core each)
+  init_starts: 8               # prior draws optimised by L-BFGS to initialise the chains
+  init_maxiter: 200
+  log_every: 50                # chain progress in the log every N iterations (0 = silent)
+  floor: 1.0e-15               # probability floor of the likelihood
+  grid:                        # FFT grid per horizon, from the dataset's largest counts
+    factor: 1.5                # L = next_fast_len(max(min_size, factor * max_count + margin))
+    margin: 16
+    min_size: 32
+    damping: 1.0e+4            # evaluation radius: round-off amplification <= damping; aliasing ~1e-3
+    max_points: 4.0e+6         # Lx * Ly cap per horizon (memory) for the reference data
+  sbc:                         # MCMC settings of each SBC case (cheaper than the reference fit;
+    chains: 2                  #   threads // chains cases run at a time)
+    warmup: 100
+    draws: 100
+    init_starts: 2
+    max_points: 2.5e+5         # skip SBC datasets needing a larger grid (cost; ranks stay uniform)
