@@ -1,0 +1,48 @@
+# @package _global_
+# BH lifetime / self-renewal ridge under the exact likelihood (inference=exact_bh).
+# NPE (well specified, reversible_ab, uniform prior) puts A.div_AA at ~0.32 (truth 0.55)
+# and A.mean_lifetime at ~15.9 h (truth 20 h) at every design (results/x3/bh_control,
+# results/e4/bh*). The local Cramer-Rao bound at the truth (scripts/b_row_theory/
+# bhexact_validation.md) is sd 0.23 for A.div_AA and 0.19 (log, ~3.8 h) for the A
+# lifetime at the real-like design: the ridge is practical, not structural. Does the
+# exact posterior sit at the truth (and NPE is biased), or does it also slide along the
+# ridge (prior volume + weak data)? Two designs, run separately, seeds 0-4:
+#   (i)  real-like 144/240 h x 165/101 (datasets = results/x3/bh_control, x5/b_vague):
+#        bio-sbi -m +experiment=exact_bh_ridge hydra.sweep.dir=results/exact_bh/ridge_real_like
+#   (ii) 96/144/240 h x 512 (datasets = results/e4/bh_512_20k, NPE 20k sims; and the
+#        512-clone [96,144,240] runs of results/e4/bh, NPE 5k):
+#        bio-sbi -m +experiment=exact_bh_ridge 'design.horizons=[96,144,240]' \
+#          design.clones=512 hydra.sweep.dir=results/exact_bh/ridge_512
+# Arm (i) is the reversible_ab half of exact_bh_real_like: skip it if that sweep ran.
+# Cost: (i) as exact_bh_real_like (~3.5-4.7 s per evaluation on 2 threads, ~2-2.5 h per
+# run; preset 4 threads ~1-1.25 h); (ii) counts up to (361, 217) at 240 h (seed 0) -> grid
+# ~500 x 320, ~5-6 s per evaluation on 2 threads, ~2.5-3 h per run (4 threads ~1.5 h).
+# 5 runs per arm. Check exact_bh.pareto_k (> 0.7: raise particles / max_iterations).
+defaults:
+  - override /simulator: bellman_harris
+  - override /law: reversible_ab
+  - override /observation: perfect
+  - override /inference: exact_bh
+  - override /design: real_like
+  - override /budget: dev
+law:
+  concentration: {}
+inference:
+  sbc_cases: 0
+  method:
+    threads: 4
+workers: 4
+info:
+  title: "Exact BH likelihood: lifetime / self-renewal ridge"
+  question: |
+    Under the exact likelihood, where are A.div_AA (truth 0.55) and A.mean_lifetime
+    (truth 20 h) at the real-like design and at 96/144/240 h x 512 clones? NPE gives
+    ~0.32 / ~15.9 h at both; the local CR bound predicts sd 0.23 / 3.8 h (real-like).
+  notes: |
+    Reference datasets identical to the NPE runs named in the preset header
+    (data_seed = seed). Compare posterior mean/sd of A.div_AA and A.mean_lifetime and
+    the joint draws (posterior_samples.csv.gz) along the ridge.
+hydra:
+  sweeper:
+    params:
+      seed: 0,1,2,3,4
