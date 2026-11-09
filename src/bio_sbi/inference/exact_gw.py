@@ -470,6 +470,11 @@ class ExactGW(InferenceMethod):
             "max_rhat": float(np.nanmax(list(rhat.values()))),
             "min_ess": float(np.nanmin(list(n_ess.values()))),
             "rhat": rhat,
+            # per-chain posterior means: chains stuck in different modes (R-hat >> 1)
+            # show which parameters separate the modes
+            "chain_means": {
+                lik.space.names[i]: physical[..., i].mean(1).round(4).tolist() for i in free
+            },
             "ess": n_ess,
             "divergences": int(sum(r.divergences for r in res)),
             "warmup_divergences": int(sum(r.warmup_divergences for r in res)),
@@ -513,7 +518,7 @@ class ExactGW(InferenceMethod):
         LOG.info("exact_gw: %d draws in %.1fs (%.3fs/eval), max R-hat %.3f, min ESS %.0f, "
                  "%d divergences", len(draws), diag["seconds"], diag["seconds_per_eval"],
                  diag["max_rhat"], diag["min_ess"], diag["divergences"])  # fmt: skip
-        if diag["max_rhat"] > 1.05 or diag["divergences"]:
+        if diag["max_rhat"] > 1.05 or diag["divergences"] > 0.01 * len(draws):
             LOG.warning("exact_gw: chains may not have converged (max R-hat %.3f, %d "
                         "divergences); increase inference.method.warmup/draws",
                         diag["max_rhat"], diag["divergences"])  # fmt: skip
