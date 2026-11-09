@@ -2216,6 +2216,206 @@ def fig_x4():
 
 
 # ======================================================================= main
+def _exact_gw_rows() -> pd.DataFrame:
+    """Per-run B->A and B-division mass for exact_gw and the NPE runs on the same
+    datasets, using the run lists of scripts/analyse_exact_gw.py."""
+    spec = importlib.util.spec_from_file_location(
+        "analyse_exact_gw", ROOT / "scripts" / "analyse_exact_gw.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    mod.R = RES
+    rows = []
+    for label, method, pattern in mod.ROWS:
+        for i, r in enumerate(mod.rows_for(pattern)):
+            rows.append(dict(setting=label, method=method, run=i, **r))
+    if not rows:
+        raise FileNotFoundError("no exact_gw runs")
+    return pd.DataFrame(rows)
+
+
+def fig_exact_gw():
+    """Exact GW likelihood (NUTS) vs NPE on identical datasets: B->A posterior mean +- sd
+    per run and posterior mass on B divisions, per design / law."""
+    require("exact_gw/e0_4096", 5)
+    d = _exact_gw_rows()
+    settings = [
+        ("E0 @4096 {4,6,10}, two_type", "E0, 4096×3\nfree"),
+        ("E0 {4,8,12}x32, two_type", "E0, 32×3\nfree"),
+        ("E0 {4,8,12}x32, reversible_ab", "E0, 32×3\nfixed"),
+        ("real-like {6,10}x{165,101}, two_type", "real-like\nfree"),
+        ("real-like {6,10}x{165,101}, reversible_ab", "real-like\nfixed"),
+        ("early {3}x266, two_type", "{3}×266\nfree"),
+        ("early {2,3}x133, two_type", "{2,3}×133\nfree"),
+    ]
+    methods = ["exact", "NPE 5k", "NPE 20k", "NPE 50k"]
+    color = {"exact": BLUE, "NPE 5k": ORANGE, "NPE 20k": RED, "NPE 50k": YELLOW}
+    fig, axes = plt.subplots(2, 1, figsize=(W_FULL, 4.6),
+                             gridspec_kw=dict(hspace=0.75, height_ratios=[3, 2]))
+    ax = axes[0]
+    for i, (key, _) in enumerate(settings):
+        t = d[d.setting == key]
+        present = [m for m in methods if (t.method == m).any()]
+        offs = np.linspace(-0.3, 0.3, len(present)) if len(present) > 1 else [0.0]
+        for off, m in zip(offs, present, strict=True):
+            u = t[t.method == m]
+            xs = i + off + np.linspace(-0.05, 0.05, len(u)) * (2 if len(present) == 1 else 1)
+            ax.errorbar(xs, u.to_A, yerr=u.to_A_sd, fmt="none", ecolor=MUTED, elinewidth=0.6,
+                        zorder=2)
+            for x, (_, rr) in zip(xs, u.iterrows(), strict=True):
+                ax.scatter(x, rr.to_A, s=11, color=color[m] if rr.covered else "white",
+                           ec=color[m], lw=0.7, zorder=3)
+            w = 0.09 if len(present) > 1 else 0.16
+            ax.plot([i + off - w, i + off + w], [u.to_A.mean()] * 2, color=INK, lw=1.2,
+                    zorder=4)
+    truth_line(ax, 0.8)
+    ax.set_xticks(range(len(settings)), [lab for _, lab in settings], fontsize=6.3)
+    ax.set_xlim(-0.6, len(settings) - 0.4)
+    ax.set_ylim(-0.05, 1.05)
+    ax.grid(axis="x", visible=False)
+    for x in np.arange(0.5, len(settings) - 1, 1.0):
+        ax.axvline(x, color=GRID, lw=0.6)
+    ax.set_ylabel("B→A posterior mean ± sd")
+    ax.set_title("(a) B→A (truth 0.80, dashed); free / fixed = B divisions; filled = truth "
+                 "in the 90% interval; bar = mean", fontsize=7.2)
+    handles = [plt.Line2D([], [], marker="o", ls="none", color=color[m], ms=4) for m in methods]
+    ax.legend(handles, ["exact likelihood (NUTS)", "NPE 5k", "NPE 20k", "NPE 50k"], ncol=4,
+              loc="lower center", bbox_to_anchor=(0.5, 1.09), fontsize=6.5)
+    ax = axes[1]
+    free = [(k, lab) for k, lab in settings if k.endswith("two_type")]
+    for i, (key, _) in enumerate(free):
+        t = d[d.setting == key]
+        present = [m for m in methods if (t.method == m).any()]
+        offs = np.linspace(-0.3, 0.3, len(present)) if len(present) > 1 else [0.0]
+        for off, m in zip(offs, present, strict=True):
+            u = t[t.method == m]
+            xs = i + off + np.linspace(-0.05, 0.05, len(u)) * (2 if len(present) == 1 else 1)
+            ax.scatter(xs, u.b_div, s=11, color=color[m], ec="white", lw=0.3, zorder=3)
+            w = 0.09 if len(present) > 1 else 0.16
+            ax.plot([i + off - w, i + off + w], [u.b_div.mean()] * 2, color=INK, lw=1.2,
+                    zorder=4)
+    ax.axhline(0.5, color=MUTED, lw=0.8, ls=":")
+    ax.text(len(free) - 0.45, 0.52, "prior mean 0.5", fontsize=6, color=MUTED, ha="right",
+            va="bottom")
+    truth_line(ax, 0.0)
+    ax.set_xticks(range(len(free)), [lab.replace("\nfree", "") for _, lab in free],
+                  fontsize=6.3)
+    ax.set_xlim(-0.6, len(free) - 0.4)
+    ax.set_ylim(-0.03, 0.75)
+    ax.grid(axis="x", visible=False)
+    for x in np.arange(0.5, len(free) - 1, 1.0):
+        ax.axvline(x, color=GRID, lw=0.6)
+    ax.set_ylabel("B→AA + B→AB + B→BB")
+    ax.set_title("(b) posterior mass on B divisions, B divisions free (truth 0)", fontsize=7.2)
+    save(fig, "exact_gw")
+    table(d.drop(columns=["run"]), "exact_gw")
+
+
+def fig_exact_speed():
+    """Speed benchmark (results/exact_benchmark): seconds per evaluation of the exact
+    kernels vs threads, and seconds per posterior / per 100 datasets by method."""
+    path = RES / "exact_benchmark" / "timings.csv"
+    if not path.exists():
+        raise FileNotFoundError(path)
+    t = pd.read_csv(path)
+    med = t.groupby(["kind", "simulator", "design", "op", "L", "dt", "shape", "threads"],
+                    dropna=False).seconds.median().reset_index()
+
+    def pick(kind, L=None, dt=None, shape=None, design=None):
+        u = med[med.kind == kind]
+        if L is not None:
+            u = u[u.L.astype(str) == L]
+        if dt is not None:
+            u = u[u.dt == dt]
+        if shape is not None:
+            u = u[u["shape"] == shape]
+        if design is not None:
+            u = u[u.design == design]
+        return u.sort_values("threads")
+
+    fig, axes = plt.subplots(1, 2, figsize=(W_FULL, 2.6),
+                             gridspec_kw=dict(wspace=0.55, width_ratios=[1, 1.35]))
+    ax = axes[0]
+    lines = [
+        ("BH law + Jacobian, shape 8", pick("bhjac", "768x512", 2.0, 8.0), RED, "s"),
+        ("BH law + Jacobian, shape 4", pick("bhjac", "768x512", 2.0, 4.0), MAGENTA, "s"),
+        ("BH law, shape 8", pick("bhlaw", "768x512", 2.0, 8.0), ORANGE, "o"),
+        ("BH law, shape 4", pick("bhlaw", "768x512", 2.0, 4.0), YELLOW, "o"),
+        ("GW law, numpy ref. (n=10, L=384)", pick("gwlaw", "384"), VIOLET, "D"),
+        ("GW log-lik + grad, production", pick("gwprod", design="real_like").query(
+            "op != 'loglik'"), AQUA, "^"),
+        ("GW log-lik, production", pick("gwprod", design="real_like").query(
+            "op == 'loglik'"), BLUE, "^"),
+    ]
+    rows = []
+    for lab, u, c, mk in lines:
+        ax.plot(u.threads, u.seconds, color=c, marker=mk, ms=3.5, lw=1.1, label=lab)
+        for _, r in u.iterrows():
+            rows.append(dict(panel="per_eval", series=lab, threads=int(r.threads),
+                             seconds=r.seconds))
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    ax.set_xticks([1, 4, 20], ["1", "4", "20"])
+    ax.minorticks_off()
+    ax.set_xlim(0.8, 26)
+    ax.set_xlabel("threads")
+    ax.set_ylabel("seconds per evaluation")
+    ax.set_title("(a) exact kernels, real-like design\n(BH: 768×512 grid, dt 2 h)",
+                 fontsize=7.2)
+    ax.legend(fontsize=5.4, loc="upper left", bbox_to_anchor=(0.0, -0.22), ncol=2,
+              handlelength=1.6, columnspacing=0.8)
+    # (b) per posterior and per 100 datasets: (label, lo1, hi1, lo100, hi100)
+    gwm = []
+    for p in (RES / "exact_gw" / "real_like").rglob("metrics.json"):
+        e = json.loads(p.read_text()).get("exact_gw") or {}
+        if e:
+            gwm.append(e["init_seconds"] + e["seconds"])
+    if not gwm:
+        raise FileNotFoundError("no exact_gw real_like runs")
+    s_gw = pick("gwprod", design="real_like").query("op == 'loglik'").seconds.iloc[0]
+    s_bh = pick("bhlik", "768x512", 2.0, 8.0).seconds.iloc[0]
+    j_bh = pick("bhjac", "768x512", 2.0, 8.0).seconds.iloc[0]
+    npe = t[t.kind == "npe"].pivot_table(index="job", columns="op", values="seconds")
+    npe["budget"] = ["full" if "full" in j else "dev" for j in npe.index]
+    samp = npe.reference_sampling
+    meth = []
+    mh1 = 8000 * s_gw / 4
+    meth.append(("exact GW, MH cost model\n(8000 evals, 4 chains)", mh1, mh1, 100 * mh1,
+                 100 * mh1))
+    meth.append(("exact GW, NUTS as run\n(exact_gw, real-like)", min(gwm), max(gwm),
+                 100 * min(gwm), 100 * max(gwm)))
+    lo, hi = 1000 * s_bh + 20 * j_bh, 1300 * s_bh + 80 * j_bh
+    meth.append(("exact BH, AMIS estimate\n(1000–1300 evals, 20 thr.)", lo, hi, 100 * lo,
+                 100 * hi))
+    for b, lab in (("dev", "NPE dev (5k sims)"), ("full", "NPE full (50k sims)")):
+        u = npe[npe.budget == b]
+        lo1, hi1 = (u.pipeline_total + samp[u.index]).min(), (u.pipeline_total + samp[u.index]).max()
+        lo100 = (u.pipeline_total + 100 * samp[u.index]).min()
+        hi100 = (u.pipeline_total + 100 * samp[u.index]).max()
+        meth.append((lab, lo1, hi1, lo100, hi100))
+    ax = axes[1]
+    y = np.arange(len(meth))[::-1]
+    for k, (lab, lo1, hi1, lo100, hi100) in enumerate(meth):
+        for dy, lo_, hi_, c in ((0.17, lo1, hi1, BLUE), (-0.17, lo100, hi100, ORANGE)):
+            mid = np.sqrt(lo_ * hi_)
+            ax.barh(y[k] + dy, mid - 1, height=0.32, color=c, left=1, zorder=2)
+            if hi_ > lo_ * 1.05:
+                ax.plot([lo_, hi_], [y[k] + dy] * 2, color=INK, lw=0.9, zorder=3)
+        rows.append(dict(panel="per_posterior", series=lab.replace("\n", " "), lo_1=lo1,
+                         hi_1=hi1, lo_100=lo100, hi_100=hi100))
+    ax.set_xscale("log")
+    ax.set_yticks(y, [m[0] for m in meth], fontsize=5.9)
+    ax.set_xlim(3, 3e6)
+    for sec, lab in ((60, "1 min"), (3600, "1 h"), (86400, "1 day")):
+        ax.axvline(sec, color=AXIS, lw=0.6, ls=":", zorder=1)
+        ax.text(sec * 1.15, len(meth) - 0.42, lab, fontsize=5.8, color=INK2, ha="left")
+    ax.set_ylim(-0.6, len(meth) - 0.1)
+    ax.set_xlabel("wall seconds (bar: geometric mid, line: range)")
+    ax.grid(axis="y", visible=False)
+    ax.set_title("(b) one posterior (blue) vs 100 datasets (orange)", fontsize=7.2)
+    save(fig, "exact_speed")
+    table(pd.DataFrame(rows), "exact_speed")
+
+
 FIGURES = [
     fig_e0_bto_a, fig_e0_c2st, fig_design, fig_gpu, fig_e4, fig_ridge, fig_e1b,
     fig_e1a_type, fig_e1a_number, fig_e1c, fig_e2, fig_e2c_ignore, fig_e3a, fig_e3b,
@@ -2226,7 +2426,7 @@ FIGURES = [
     fig_e2c_prior, fig_x5a_priors, fig_x5a, fig_x5b, fig_x5c, fig_x5d,
     fig_x2, fig_e0_large,
     fig_x3, fig_real_ladder, fig_real_ppc, fig_real_posterior,
-    fig_x1, fig_x4,
+    fig_x1, fig_x4, fig_exact_gw, fig_exact_speed,
 ]
 
 

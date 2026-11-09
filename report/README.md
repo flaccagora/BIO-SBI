@@ -25,6 +25,13 @@ Tectonic downloads the LaTeX packages on first use (no system LaTeX needed).
 
 ## Status and pending boxes
 
+As of 10 November 2026 both reports also cover the exact likelihood (section "XG / XB",
+`fig_exact_gw` from `results/exact_gw/` via `scripts/analyse_exact_gw.py`; BH Fisher table
+from `scripts/b_row_theory/bhexact_validation.md`) and the speed benchmark (section
+"Speed: exact likelihood vs NPE", `fig_exact_speed` from `results/exact_benchmark/timings.csv`
+and the `exact_gw` run metrics). They correct the B-row conclusion from structural to
+practical non-identifiability. One pending box: the exact BH posteriors (`results/exact_bh/`).
+
 As of 8 November 2026 every experiment of the original plan is complete: X1 (inference
 methods, `fig_x1` from `results/x1/x1_runs.csv`) and X4 (combined errors, `fig_x4` from
 `results/x4/x4_runs.csv`) are in the report; no pending boxes remain.

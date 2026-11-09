@@ -1,0 +1,19 @@
+panel,series,threads,seconds,lo_1,hi_1,lo_100,hi_100
+per_eval,"BH law + Jacobian, shape 8",20,37.31,,,,
+per_eval,"BH law + Jacobian, shape 4",20,26.41,,,,
+per_eval,"BH law, shape 8",1,18.55,,,,
+per_eval,"BH law, shape 8",4,9.896,,,,
+per_eval,"BH law, shape 8",20,2.295,,,,
+per_eval,"BH law, shape 4",1,21.23,,,,
+per_eval,"BH law, shape 4",4,5.225,,,,
+per_eval,"BH law, shape 4",20,1.315,,,,
+per_eval,"GW law, numpy ref. (n=10, L=384)",1,0.08187,,,,
+per_eval,"GW law, numpy ref. (n=10, L=384)",4,0.07487,,,,
+per_eval,"GW law, numpy ref. (n=10, L=384)",20,0.0732,,,,
+per_eval,"GW log-lik + grad, production",1,0.01334,,,,
+per_eval,"GW log-lik, production",1,0.006162,,,,
+per_posterior,"exact GW, MH cost model (8000 evals, 4 chains)",,,12.32,12.32,1232,1232
+per_posterior,"exact GW, NUTS as run (exact_gw, real-like)",,,614.7,3929,6.147e+04,3.929e+05
+per_posterior,"exact BH, AMIS estimate (1000–1300 evals, 20 thr.)",,,3399,6433,3.399e+05,6.433e+05
+per_posterior,NPE dev (5k sims),,,34.26,82.56,36.46,85.73
+per_posterior,NPE full (50k sims),,,678.7,1017,706.4,1023
