@@ -221,3 +221,20 @@ def test_pipeline_run_writes_standard_artifacts(tmp_path):
     with pytest.raises(ValueError, match="galton_watson"):
         run_experiment(bad, tmp_path / "bad")
     assert build_components(cfg).method.exact
+
+
+def test_almost_undetectable_parameters_are_not_spuriously_likely(rng):
+    """Where detection is ~impossible, floored cells / tiny P(detected) must not blow up."""
+    law = load_law()
+    sim = GaltonWatson(law)
+    truth = sim.physical_from_mapping(law["reference"])
+    obs = ObservationModel(sim.types)
+    cohorts = [Cohort(h, sim.simulate_detected(truth, h, 256, np.ones(2), rng)) for h in (4, 10)]
+    lik = ExactLikelihood(sim, obs, cohorts)
+    # P(detected at gen 10) ~ 1e-25: without the detection floor this scored ~ +5000
+    dying = {"A": {"death": 0.999, "div_AA": 0.0005, "div_AB": 0.0005},
+             "B": {"death": 0.999, "to_A": 0.001}}  # fmt: skip
+    far = sim.encode(sim.physical_from_mapping(dying)).astype(float)
+    near = sim.encode(0.9 * truth + 0.1 * sim.decode(np.full(sim.theta_dim, 0.5)))
+    ll_far = lik.log_likelihood(far, False)[0]
+    assert ll_far < lik.log_likelihood(near.astype(float), False)[0] and ll_far < 0

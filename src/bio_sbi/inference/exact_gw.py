@@ -96,15 +96,17 @@ class ExactLikelihood:
         grid: ``factor``, ``margin``, ``min_size``, ``damping``, ``max_points`` for
             :func:`~bio_sbi.inference.gw_exact.grid_spec` (grid size per horizon from the
             largest observed counts of *this* dataset).
-        floor: Probability floor (see :func:`~bio_sbi.inference.gw_exact.log_likelihood`).
+        floor, min_detection: Probability and detection-probability floors (see
+            :func:`~bio_sbi.inference.gw_exact.log_likelihood`).
     """
 
     def __init__(self, simulator, observation, cohorts, grid: dict | None = None,
-                 floor: float = 1e-15) -> None:  # fmt: skip
+                 floor: float = 1e-15, min_detection: float = 1e-6) -> None:  # fmt: skip
         check_supported(simulator, observation)
         self.sim = simulator
         self.space = simulator.space
         self.floor = float(floor)
+        self.min_detection = float(min_detection)
         law = simulator.law
         theta0 = np.full(self.space.theta_dim, 0.5)  # founder rows are fixed: any theta
         P, founder, size_probs = law.unpack(self.space, self.space.decode(theta0))
@@ -186,7 +188,7 @@ class ExactLikelihood:
         P, dP, rows = self.jacobian(theta)
         if not grad:
             dP, rows = dP[:0], rows[:0]
-        ll, g = _log_likelihood(self.model, P, dP, rows, self.data, self.floor)
+        ll, g = _log_likelihood(self.model, P, dP, rows, self.data, self.floor, self.min_detection)
         with self._lock:
             self.evals += 1
             self.eval_seconds += time.perf_counter() - t0
@@ -298,6 +300,7 @@ class ExactGW(InferenceMethod):
         grid: FFT grid options (``factor``, ``margin``, ``min_size``, ``damping``,
             ``max_points``); see :func:`~bio_sbi.inference.gw_exact.grid_spec`.
         floor: Probability floor of the likelihood.
+        min_detection: Floor of the detection probability in the conditioning.
         sbc: Overrides of ``chains``/``warmup``/``draws``/``init_starts`` for each SBC case.
         log_every: Log chain progress every this many iterations (0 = silent).
         device, seed, rounds, **_: Accepted for interface compatibility (``rounds`` must
@@ -321,6 +324,7 @@ class ExactGW(InferenceMethod):
         init_tolerance: float = 20.0,
         grid: dict | None = None,
         floor: float = 1e-15,
+        min_detection: float = 1e-6,
         sbc: dict | None = None,
         log_every: int = 50,
         device: str = "cpu",
@@ -341,6 +345,7 @@ class ExactGW(InferenceMethod):
         self.init_tolerance = float(init_tolerance)
         self.grid = dict(grid or {})
         self.floor = float(floor)
+        self.min_detection = float(min_detection)
         self.sbc = dict(sbc or {})
         self.log_every = int(log_every)
 
@@ -359,7 +364,9 @@ class ExactGW(InferenceMethod):
         grid = dict(self.grid)
         if max_points is not None:
             grid["max_points"] = max_points
-        return ExactLikelihood(simulator, observation, cohorts, grid, self.floor)
+        return ExactLikelihood(
+            simulator, observation, cohorts, grid, self.floor, self.min_detection
+        )
 
     def _initial_points(self, lik: ExactLikelihood, n_starts: int, n_keep: int, key):
         # prior draws of the sticks (the same Betas as ParameterSpace.prior), drawn with

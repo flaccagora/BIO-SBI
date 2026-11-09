@@ -338,12 +338,20 @@ def log_likelihood(
     rows: np.ndarray,
     data: list[HorizonData],
     floor: float = 1e-15,
+    min_detection: float = 1e-6,
 ) -> tuple[float, np.ndarray]:
     """Log-likelihood of all cohorts and its gradient along the ``D`` directions.
 
-    ``sum_h sum_cells w log p_h(a, b) - [detected] N_h log P_h(Z != 0)``; probabilities
-    are floored at ``floor`` (their gradient is then zero) so impossible-looking cells
-    cost a finite, large penalty instead of ``-inf``.
+    ``sum_h sum_cells w log p_h(a, b) - [detected] N_h log max(P_h(Z != 0), min_detection)``.
+    Probabilities are floored at ``floor`` (their gradient is then zero) so
+    impossible-looking cells cost a finite, large penalty instead of ``-inf``.
+
+    The detection probability is floored at ``min_detection``: the FFT gives ``p`` to an
+    absolute accuracy of ~1e-15, so when detection is (almost) impossible the ratio
+    ``p / P(Z != 0)`` would be numerical noise, and floored cells divided by a tiny
+    detection probability create spurious, arbitrarily high likelihoods. Below the floor
+    the conditional likelihood is underestimated (by ``P(Z != 0) / min_detection``) -
+    only in far-away parameter regions where clones are essentially never detected.
     """
     total, grad = 0.0, np.zeros(dP.shape[0])
     for h in data:
@@ -356,8 +364,9 @@ def log_likelihood(
             grad += dp[:, h.a, h.b] @ np.where(ok, h.weight / pz, 0.0)
         if model.detected:
             q, dq = detection_and_grad(model, P, dP, rows, h.generations)
-            if not q > 0:
-                return -np.inf, grad * np.nan
-            total -= h.clones * math.log(q)
-            grad -= h.clones * dq / q
+            if q > min_detection:
+                total -= h.clones * math.log(q)
+                grad -= h.clones * dq / q
+            else:
+                total -= h.clones * math.log(min_detection)
     return total, grad

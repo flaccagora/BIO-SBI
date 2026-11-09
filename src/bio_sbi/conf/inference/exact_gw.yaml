@@ -23,6 +23,7 @@ method:
   init_tolerance: 20           # chains start only at optima within 20 nats of the best
   log_every: 50                # chain progress in the log every N iterations (0 = silent)
   floor: 1.0e-15               # probability floor of the likelihood
+  min_detection: 1.0e-6        # floor of P(detected) in the conditioning (see gw_exact.log_likelihood)
   grid:                        # FFT grid per horizon, from the dataset's largest counts
     factor: 1.5                # L = next_fast_len(max(min_size, factor * max_count + margin))
     margin: 16
