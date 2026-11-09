@@ -24,6 +24,8 @@ law:
 truth:
   values:            # default (= law.reference) so truth.values.B can be swept
     B: {death: 0.1, persist: 0.1, to_A: 0.8}
+inference:
+  sbc_cases: 10     # one MCMC run per case; 0 skips SBC
 workers: 4
 info:
   title: "Exact GW likelihood: real-like design"

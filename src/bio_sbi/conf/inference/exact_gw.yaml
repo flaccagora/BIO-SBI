@@ -35,4 +35,5 @@ method:
     warmup: 100
     draws: 100
     init_starts: 2
+    max_tree_depth: 6          # bounds the cost of hard posteriors (some prior draws need depth 8)
     max_points: 2.5e+5         # skip SBC datasets needing a larger grid (cost; ranks stay uniform)

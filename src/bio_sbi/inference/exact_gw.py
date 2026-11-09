@@ -420,8 +420,9 @@ class ExactGW(InferenceMethod):
         return (V / w) @ V.T
 
     def run(self, lik: ExactLikelihood, key=("reference",), chains=None, warmup=None,
-            draws=None, init_starts=None) -> tuple[np.ndarray, dict]:  # fmt: skip
+            draws=None, init_starts=None, max_tree_depth=None) -> tuple[np.ndarray, dict]:  # fmt: skip
         """Sample the posterior of ``lik``; returns ``(theta draws, diagnostics)``."""
+        depth = int(max_tree_depth or self.max_tree_depth)
         chains = int(chains or self.chains)
         warmup = int(self.warmup if warmup is None else warmup)
         draws = int(draws or self.draws)
@@ -446,7 +447,7 @@ class ExactGW(InferenceMethod):
             if not np.isfinite(lik.log_posterior_u(q0)[0]):
                 q0 = inits[c]
             return run_chain(
-                lik.log_posterior_u, q0, warmup, draws, rng, max_depth=self.max_tree_depth,
+                lik.log_posterior_u, q0, warmup, draws, rng, max_depth=depth,
                 target_accept=self.target_accept, dense=self.dense_mass,
                 inv_mass=cov if self.dense_mass else np.diag(cov),
                 name=f"{'/'.join(map(str, key))} chain {c}", log_every=self.log_every,
@@ -542,7 +543,8 @@ class ExactGW(InferenceMethod):
         Returns ``(ranks, info)``; ranks count draws below the truth among
         ``min(posterior_samples, chains * draws)`` draws per case.
         """
-        opts = {"chains": 2, "warmup": 100, "draws": 100, "init_starts": 2, **self.sbc}
+        opts = {"chains": 2, "warmup": 100, "draws": 100, "init_starts": 2, "max_tree_depth": 6,
+                **self.sbc}  # fmt: skip
         max_points = float(opts.pop("max_points", 2.5e5))
         info = {"invalid_cases": 0, "excluded_grid": 0, "seconds": [], "max_rhat": [],
                 "settings": {**opts, "max_points": max_points}}  # fmt: skip
