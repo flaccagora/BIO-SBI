@@ -1,0 +1,48 @@
+# @package _global_
+# Exact-likelihood posterior for Bellman-Harris (inference=exact_bh: method of stages +
+# FFT, Laplace-initialised AMIS) on the real-like design: 144/240 h x 165/101 clones,
+# lifetime shape 8, uniform Dirichlet prior, log-uniform lifetimes on [10, 80] h, all
+# transitions free (two_type) and B divisions fixed (reversible_ab), reference truth
+# (A.div_AA 0.55, A 20 h, B 30 h), seeds 0-4 (data_seed = seed):
+#   bio-sbi -m +experiment=exact_bh_real_like hydra.sweep.dir=results/exact_bh/real_like
+# NPE comparisons with identical reference datasets (checked: same counts for seed 0):
+#   reversible_ab: results/x3/bh_control (NPE 5k, seeds 0-4; A.div_AA ~0.32, A lifetime
+#     ~15.8 h) = results/x5/b_vague (same config); results/x2/bh_data (data_seed 0-9).
+#   two_type: no NPE run at the reference truth and this design. Same datasets with NPE:
+#     bio-sbi -m simulator=bellman_harris law=two_type design=real_like budget=dev \
+#       seed=0,1,2,3,4 hydra.sweep.dir=results/exact_bh/npe_two_type
+# Cost (measured 2026-11-09, 2 threads): one likelihood evaluation ~3.5 s (grid ~400 x 300,
+# one ODE trajectory for both horizons; 4.7 s under load), one gradient 40-45 s. A run =
+# 33 candidate evals + 2 x 10-40 gradients + up to 1200 AMIS evals ~ 2-2.5 h on 2 threads;
+# the preset uses 4 threads (~1-1.25 h per run, 10 runs ~10-12 h); threads=10 ~20-30 min.
+# Multirun jobs run one after another: set inference.method.threads to the free cores.
+defaults:
+  - override /simulator: bellman_harris
+  - override /observation: perfect
+  - override /inference: exact_bh
+  - override /design: real_like
+  - override /budget: dev
+law:
+  concentration: {}
+inference:
+  sbc_cases: 0       # one full sampler run per case (~1 h each on 2 threads): off
+  method:
+    threads: 4
+workers: 4
+info:
+  title: "Exact BH likelihood: real-like design"
+  question: |
+    With the exact Bellman-Harris likelihood (no summaries, no simulations), where are
+    A.div_AA, the lifetimes and B's row at the real-like design (144/240 h, 165/101
+    clones)? Is NPE's well-specified BH bias (A.div_AA ~0.32 vs 0.55, A lifetime ~16 vs
+    20 h; results/x3/bh_control) a property of the data or of NPE + moment summaries?
+  notes: |
+    Same reference datasets as results/x3/bh_control and results/x5/b_vague
+    (reversible_ab, seeds 0-4). Check exact_bh.ess / pareto_k in metrics.json
+    (k > 0.7 or ESS < ~100: raise inference.method.particles / max_iterations or set
+    inference.method.mh_steps).
+hydra:
+  sweeper:
+    params:
+      law: two_type,reversible_ab
+      seed: 0,1,2,3,4

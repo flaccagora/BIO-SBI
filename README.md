@@ -17,7 +17,7 @@ Every part of the pipeline is a swappable [Hydra](https://hydra.cc) config group
 | `law` | `two_type` (all transitions), `reversible_ab`, `hierarchy_ab`, `minimal_ab`, `three_type`, `three_type_traj`, `multi_founder` | Cell types, transitions, founders, fixed values, prior |
 | `observation` | `perfect`, `noisy`, `all_clones`, `three_as_two`, `three_split` | Capture, type→label confusion, clone selection |
 | `summary` | `moments`, `survivor_moments`, `means` | Summary statistics fed to the network (`survivor_moments`: moments of non-empty clones + extinct fraction, for `observation=all_clones`) |
-| `inference` | `npe`, `nle`, `nre`, `exact_gw` | sbi method family, or exact-likelihood MCMC (GW only) |
+| `inference` | `npe`, `nle`, `nre`, `exact_gw`, `exact_bh` | sbi method family, or exact-likelihood posterior (GW: NUTS; BH: importance sampling) |
 | `budget` | `smoke`, `dev`, `full` | Simulations, epochs, posterior/SBC sample sizes |
 | `design` | `default`, `real_like`, `single_128`, `three_128`, `single_384` | Endpoints and clones per endpoint |
 | `experiment` | `e1a_*` … `e4_design`, `x2_seeds` (see [TODO.md](TODO.md)), `b_row_*`, `design_comparison`, `compare_methods`, `design_sweep`, `noise_sensitivity` | Ready-made multirun sweeps (each documents itself in `info.md`) |
@@ -323,6 +323,7 @@ the parameters are not comparable.
 | `nle` | `q(x \| theta)` (flow over summaries) | MCMC (slice) | likelihood reusable under other priors; robust sequential rounds |
 | `nre` | `r(x, theta)` (classifier, NRE-C) | MCMC (slice) | simple and sample-efficient training |
 | `exact_gw` | nothing: **exact likelihood** of the raw counts (pgf + 2-D FFT) | NUTS (exact gradients) | Galton-Watson ground truth: is a parameter identifiable at all, or did the SBI method / summary lose it? |
+| `exact_bh` | nothing: **exact likelihood** of the raw counts (method of stages ODE + 2-D FFT) | Laplace-initialised adaptive importance sampling (AMIS) | Bellman-Harris ground truth (integer lifetime shape), e.g. the lifetime / self-renewal ridge |
 
 `inference.method.rounds=R>1` switches to **sequential** inference at the reference
 data (NPE-C/APT for NPE). This is more simulation-efficient for one dataset, but it
@@ -377,6 +378,66 @@ trees); see `TODO.md` (section XG). Multimodal posteriors show up as R-hat >> 1
 (`exact_gw.chain_means` per chain).
 Presets: `exact_gw_e0_4096`, `exact_gw_e0`, `exact_gw_real_like`, `exact_gw_early`
 (reference datasets identical to the NPE runs they compare with).
+
+#### Exact likelihood for Bellman-Harris (`inference=exact_bh`)
+
+For integer Gamma lifetime shapes `m` the Bellman-Harris clone law is also exact: a
+`Gamma(m, mean / m)` lifetime is `m` exponential phases (method of stages), so the pgf of
+the living cells solves `2m` linear-plus-one-polynomial backward ODEs per grid point
+`(x, y)` (`src/bio_sbi/inference/bh_exact.py`; equations in the module docstring; outcome
+table from the law object, so the B row order `death, to_A, persist` never matters).
+The ODEs are integrated with **fixed-step DOP853** (`dt = 1 h`; halving it changes the
+law by < 1e-15, `dt = 2 h` by ~2e-13) in a blocked (SIMD) Numba kernel, and the law
+comes from a 2-D FFT as for `exact_gw`. One trajectory serves every horizon.
+`exact_bh` samples the posterior of the **raw counts**:
+
+* likelihood as `exact_gw` (detection conditioning in complement form, floor `1e-15`,
+  `min_detection`); capture / mis-typing by pgf substitution in the initial condition;
+* parameters and prior = NPE's (stick-breaking Betas + log mean lifetimes, uniform on
+  `log lifetime_mean_bounds`), sampled on `u = logit` of the unit-scaled coordinates;
+* one grid for all horizons, `L = next_fast_len(1.25 max + 32)` per axis (A and B
+  separately), damped radius as `exact_gw`; `exact_bh.grid_check` at the posterior
+  median against an undamped grid twice as large;
+* **sampler: Laplace-initialised adaptive multiple importance sampling (AMIS)**, because
+  an evaluation costs seconds (real-like: ~3.5 s on 2 threads, gradient ~40 s): best of
+  `init_candidates` prior draws -> `opt_starts` Levenberg-Marquardt ascents with exact
+  gradients and BHHH curvature -> mixture-of-t proposal at the distinct modes ->
+  `max_iterations` x `particles` draws, deterministic-mixture weights, Pareto smoothing
+  (PSIS) and a weighted EM refit of the mixture per iteration (stops early at
+  `target_ess` with Pareto `k <= 0.7`). Optional resample-move MH rejuvenation
+  (`mh_steps`). Defaults: 33 candidate + up to 200 x 6 = 1200 AMIS evaluations and
+  2 x 10-40 gradients (the BHHH metric uses centred per-clone scores);
+* `metrics.json` under `exact_bh`: `ess` (PSIS) and `ess_raw`, `pareto_k` (> 0.7:
+  unreliable, raise `particles` / `max_iterations`), per-iteration traces, optima,
+  weighted means / sds, evaluation counts and timings, grid and grid check. Draws in
+  `posterior_samples.csv.gz` are weighted resamples (duplicates possible);
+* same artefacts as NPE (`recovery.csv`, PPC by forward simulation, `posterior.pt` with
+  the weighted particles; not amortised). **SBC** reruns the whole sampler per case
+  (`inference.sbc_cases`, default 0; cheaper settings under `inference.method.sbc`,
+  grids above `sbc.max_points` skipped): ~1 h per real-like case on 2 threads.
+
+Supported: `simulator=bellman_harris` with integer `lifetime_shape` (one per type
+allowed), two types (`two_type`, `reversible_ab`, any fixed entries), fixed founder rows,
+homogeneous law, two labels with any capture / 2x2 confusion, `selection` detected or
+all. Density dependence, clone heterogeneity, free founder parameters, three types and
+Galton-Watson raise `ValueError`; non-integer shapes raise `NotImplementedError` (they
+need the general Bellman-Harris integral equation).
+
+Cost: threads split each evaluation (and evaluate particles in parallel) via
+`inference.method.threads` (default 2). Measured on 2 threads (shared machine, load
+~10/20): tiny design (96/144 h x 64) 0.2 s per evaluation, 3.3 min per run; real-like
+(144/240 h x 165/101, grid 400 x 308) 3.5-4.7 s per evaluation, 40-45 s per gradient,
+**~2-2.5 h per run** with the defaults (~20-30 min with 10 threads).
+Validation: on the tiny design the default run (ESS 112, Pareto k 0.57) agrees with a
+6000-evaluation AMIS reference (A.div_AA 0.445 +- 0.077 vs 0.445 +- 0.075, A lifetime
+18.4 +- 1.6 vs 18.2 +- 1.5 h, B.to_A 0.70 +- 0.12 vs 0.70 +- 0.14). Importance sampling
+in 9-12 dimensions is fragile: always check `exact_bh.pareto_k` and `ess` (a
+reduced-budget real-like run, 300 particles and a non-converged optimisation, had k 2.3);
+raise `particles` / `max_iterations`, or add `mh_steps`, when k > 0.7. The GPU does not help: an equivalent CUDA kernel took 3.3 s per real-like
+evaluation on the RTX A1000 (FP64-bound), the same as 2 CPU threads.
+Presets: `exact_bh_real_like` (two_type + reversible_ab, seeds 0-4; same datasets as
+`results/x3/bh_control`, `results/x5/b_vague`), `exact_bh_ridge` (A.div_AA / lifetime
+ridge at real-like and 96/144/240 h x 512, same datasets as `results/e4/bh_512_20k`).
 
 ### Budgets
 
@@ -550,6 +611,7 @@ src/bio_sbi/
                   base.py · galton_watson.py · bellman_harris.py
   inference/      base.py (training loop, FittedPosterior) · methods.py (NPE, NLE, NRE)
                   gw_exact.py (exact GW law, FFT) · nuts.py · exact_gw.py (ExactGW)
+                  bh_exact.py (exact BH law, method of stages) · exact_bh.py (ExactBH, AMIS)
   observation.py  capture / type->label confusion / selection
   design.py       horizons x clones
   summaries.py    CohortMoments, CohortMeans

@@ -225,8 +225,8 @@ def run_experiment(cfg: DictConfig, out: str | Path) -> dict:
             kept.append((theta, x))
         return x
 
-    # Exact-likelihood methods (inference=exact_gw) condition on the raw reference counts
-    # by MCMC instead of training on simulations.
+    # Exact-likelihood methods (inference=exact_gw / exact_bh) condition on the raw
+    # reference counts (MCMC / importance sampling) instead of training on simulations.
     exact = bool(getattr(comp.method, "exact", False))
     if exact:
         fitted = comp.method.fit_data(sim, gen.observation, reference, gen.x_dim)
@@ -335,7 +335,7 @@ def run_experiment(cfg: DictConfig, out: str | Path) -> dict:
         },
     }
     if exact:
-        metrics["exact_gw"] = fitted.diagnostics
+        metrics[comp.method.name] = fitted.diagnostics
 
     # 4. Posterior predictive check: does the fitted inference model reproduce x_obs?
     n_ppc = int(cfg.budget.get("ppc_samples", 0))
@@ -347,7 +347,7 @@ def run_experiment(cfg: DictConfig, out: str | Path) -> dict:
     # 5. Calibration of the inference model (amortised posteriors only).
     cases = int(cfg.budget.sbc_cases)
     if exact and cfg.inference.get("sbc_cases") is not None:
-        cases = int(cfg.inference.sbc_cases)  # exact_gw: one MCMC run per case
+        cases = int(cfg.inference.sbc_cases)  # exact methods: one posterior run per case
     if cases > 0 and exact:
         seed_torch(seed_for(cfg.seed, "sbc-theta"))
         theta_sbc = prior.sample((cases,)).numpy()
@@ -359,7 +359,7 @@ def run_experiment(cfg: DictConfig, out: str | Path) -> dict:
             ranks, sim.theta_names, info["draws_per_case"], invalid=info["invalid_cases"],
             excluded=info["excluded_grid"],
         )  # fmt: skip
-        metrics["calibration"] = {**cal, "exact_gw": info}
+        metrics["calibration"] = {**cal, comp.method.name: info}
         np.savez_compressed(out / "sbc.npz", ranks=ranks, theta=theta_sbc, x=x_sbc)
         if len(ranks):
             plots.sbc_ranks(

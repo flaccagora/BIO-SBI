@@ -1,0 +1,54 @@
+# Exact-likelihood Bayesian inference for the two-type Bellman-Harris model: method of
+# stages (integer lifetime shape) + 2-D FFT for the law of the raw endpoint counts, same
+# theta coordinates and prior as NPE (incl. log mean lifetimes). Posterior by
+# Laplace-initialised adaptive multiple importance sampling (AMIS), O(10^2-10^3)
+# likelihood evaluations (each costs seconds). No training: budget.simulations /
+# max_epochs are unused. Supports simulator=bellman_harris (no density dependence),
+# integer lifetime_shape, two types (two_type, reversible_ab, any fixed entries), fixed
+# founder rows, homogeneous law, two labels (any capture / 2x2 confusion), selection
+# detected or all; anything else raises ValueError (non-integer shape: NotImplementedError).
+#   bio-sbi inference=exact_bh simulator=bellman_harris law=reversible_ab design=real_like
+name: exact_bh
+# SBC cases (one full optimisation + AMIS run each: ~0.5-2 h per case at the real-like
+# design on 2 threads). null = use budget.sbc_cases; 0 = skip SBC.
+sbc_cases: 0
+method:
+  _target_: bio_sbi.inference.ExactBH
+  threads: 2                   # grid split within one evaluation; particles in parallel
+  dt: 1.0                      # fixed Runge-Kutta step (hours); 2.0 halves the cost (~2e-13 error)
+  integrator: dop853           # dop853 (8th order) | rk4 (needs dt ~0.06 h for the same accuracy)
+  init_candidates: 32          # prior draws evaluated (in parallel) to pick the optimisation starts
+  opt_starts: 2                # optimisations from the best candidates (multimodality check)
+  opt_maxiter: 40              # Levenberg-Marquardt steps (1 gradient each, ~11 evals; stops when converged)
+  opt_tol: 1.0e-3              # stop when the Newton decrement (predicted gain) < tol
+  mode_tolerance: 20           # optima > 20 nats below the best are dropped; distinct others
+                               #   become components of the first proposal
+  laplace_max_var: 4.0         # variance cap of the Laplace covariance in u = logit coordinates
+  inflate: 1.0                 # first proposal = t(df) with scale inflate^2 * Laplace covariance
+                               #   (t5 sd is already 1.29x; inflation costs ~inflate^d in ESS)
+  df: 5                        # t proposal degrees of freedom
+  defensive_weight: 0.0        # first proposal: wider copy of every Laplace component (weight;
+                               #   0 = off: on the tiny validation design it cost ESS)
+  defensive_scale: 2.0         #   and its scale factor (bounds the weights in skewed tails)
+  particles: 200               # likelihood evaluations per AMIS iteration
+  max_iterations: 6            # AMIS iterations (evaluation budget = particles x max_iterations)
+  target_ess: 300              # stop early once the (PSIS) ESS reaches this with Pareto k <= 0.7
+  psis: true                   # Pareto-smoothed importance weights (PSIS)
+  mh_steps: 0                  # resample-move: random-walk MH steps on `particles` resampled draws
+                               #   (particles evaluations per step; output = moved draws)
+  floor: 1.0e-15               # probability floor of the likelihood
+  min_detection: 1.0e-6        # floor of P(detected) in the conditioning (as exact_gw)
+  grid:                        # one FFT grid for all horizons, from the largest A and B counts
+    factor: 1.25               # L = next_fast_len(max(min_size, factor * max_count + margin))
+    margin: 32
+    min_size: 32
+    damping: 1.0e+4            # evaluation radius: round-off amplification <= damping; aliasing <~3e-3
+    max_points: 2.0e+6         # Lx * Ly cap (cost) for the reference data
+  sbc:                         # sampler settings of each SBC case (cheaper than the reference fit)
+    init_candidates: 8
+    opt_starts: 1
+    opt_maxiter: 15
+    particles: 100
+    max_iterations: 3
+    target_ess: 100
+    max_points: 1.0e+5         # skip SBC datasets needing a larger grid (cost; ranks stay uniform)
