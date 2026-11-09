@@ -1,0 +1,430 @@
+\documentclass[11pt]{article}
+\usepackage[a4paper,margin=2.3cm]{geometry}
+\usepackage{amsmath,mathtools,amssymb,amsthm,booktabs,microtype,xcolor}
+\usepackage{float}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage[colorlinks,linkcolor=blue!50!black,citecolor=blue!50!black]{hyperref}
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{corollary}[theorem]{Corollary}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{example}[theorem]{Example}
+\theoremstyle{remark}
+\newtheorem{remark}[theorem]{Remark}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\Prob}{\mathbb{P}}
+\newcommand{\code}[1]{\texttt{\detokenize{#1}}}
+\newcommand{\refs}[1]{\par\smallskip\noindent{\small\textbf{References.} #1}\par\medskip}
+\title{Exact likelihoods for branching-process clone counts:\\ from generating functions to the FFT to working code\\ (Galton--Watson and Bellman--Harris)}
+\author{BIO-SBI --- companion to \code{note.pdf} (B-row identifiability)}
+\date{2026-11-09}
+
+\begin{document}
+\sloppy\emergencystretch=3em
+\maketitle
+
+\begin{abstract}
+This note collects, in one place and in the order you need them, the theory and the algorithms behind the exact likelihoods used in this project: \code{gwexact.py} and \code{profile.py} (analysis scripts, branch \code{worktree-b-row-theory}), the \code{exact_gw} inference method (branch \code{exact-gw}) and \code{bhexact.py} (branch \code{bh-exact}). The chain is: probability generating functions (pgfs) encode the law of the counts (\S\ref{sec:pgf}); branching turns into composition of pgfs for Galton--Watson (\S\ref{sec:gw}) and into an integral equation, or for integer Gamma lifetimes a system of ODEs, for Bellman--Harris (\S\ref{sec:bh}); the values of a pgf at roots of unity give its coefficients through a discrete Fourier transform computed by the FFT, with aliasing, damping and round-off as the controlling issues (\S\ref{sec:dft}); derivatives go through the same pipeline in forward mode (\S\ref{sec:deriv}); the likelihood is a sum of table look-ups (\S\ref{sec:lik}); MLE, Fisher information, profiles and NUTS sit on top (\S\ref{sec:inf}). \S\ref{sec:impl} gives pseudo-code, costs, the validation checklist and the pitfalls we actually hit. Each section ends with references (list in \S\ref{sec:refs}).
+\end{abstract}
+
+\tableofcontents
+
+%======================================================================
+\section{Notation and the two models}\label{sec:models}
+Two types, A and B, marked by the variables $x$ and $y$. A cell of type $k\in\{A,B\}$ ends its life with one \emph{outcome} $o$ from its row $\pi_k=(\pi_{k,o})_o$ and is replaced by $\xi_{k,o}=(a_{ko},b_{ko})$ daughters (numbers of A and B). With the six outcomes of \code{two_type} (death, persist, switch, div\_AA, div\_AB, div\_BB),
+\begin{align*}
+\text{A:}\quad(a,b)&\in\{(0,0),(1,0),(0,1),(2,0),(1,1),(0,2)\},\\
+\text{B:}\quad(a,b)&\in\{(0,0),(0,1),(1,0),(2,0),(1,1),(0,2)\}
+\end{align*}
+(B's ``persist'' leaves a B, its ``switch'' an A).
+
+\begin{itemize}
+\item \textbf{Galton--Watson (GW).} Synchronous generations: every living cell has exactly one event per generation. Data at generation $n$: $Z_n=(Z_{n,A},Z_{n,B})$.
+\item \textbf{Bellman--Harris (BH).} Continuous time: each cell lives an independent lifetime $\tau\sim\mathrm{Gamma}(m,\ \mu_k/m)$ (mean $\mu_k$, coefficient of variation $1/\sqrt m$), then draws its outcome; daughters are born with age 0. The founder is born at $t=0$ with age 0. Data at time $t$ (hours): $Z(t)$ = numbers of A and B cells \emph{alive} at $t$. In the repository $m=8$ by default.
+\end{itemize}
+In both cases a clone starts from one A cell (other founder laws in \S\ref{sec:gwobs}), clones are independent, each organoid is measured once, and only \emph{detected} clones ($Z\neq(0,0)$, with perfect capture) are recorded.
+
+\paragraph{Ordering trap.} The repository's B row is ordered (death, to\_A, persist, \dots); the analysis scripts use (death, persist, to\_A, \dots). \code{bhexact.from_repo} reorders. Getting this wrong silently swaps persist and switching.
+
+%======================================================================
+\section{Probability generating functions}\label{sec:pgf}
+\begin{definition}
+For a random vector $K=(K_A,K_B)$ with values in $\mathbb N^2$, the pgf is
+\[
+G_K(x,y)=\E\big[x^{K_A}y^{K_B}\big]=\sum_{a,b\ge0}\Prob(K=(a,b))\,x^ay^b,\qquad |x|,|y|\le1 .
+\]
+\end{definition}
+The series converges absolutely on the closed bidisk $|x|,|y|\le1$ (coefficients are non-negative and sum to 1), so $G_K$ may be evaluated at \emph{complex} points of modulus $\le1$; this is what the FFT step uses.
+
+\begin{proposition}[Basic properties]\label{prop:pgfbasic}
+\begin{enumerate}
+\item $G_K(1,1)=1$, $|G_K(x,y)|\le1$ on the bidisk, and $G_K(0,0)=\Prob(K=0)$.
+\item The coefficients are the law: $\Prob(K=(a,b))=\frac{1}{a!\,b!}\partial_x^a\partial_y^bG_K(0,0)$; two vectors with the same pgf on any open set of the bidisk have the same law.
+\item Moments at $(1,1)$: $\E K_A=\partial_xG_K(1,1)$, $\E[K_A(K_A-1)]=\partial_x^2G_K(1,1)$, $\E[K_AK_B]=\partial_x\partial_yG_K(1,1)$ (when finite).
+\item Marginals: $G_{K_A}(x)=G_K(x,1)$, $G_{K_B}(y)=G_K(1,y)$.
+\item Real coefficients give conjugate symmetry: $G_K(\bar x,\bar y)=\overline{G_K(x,y)}$.
+\end{enumerate}
+\end{proposition}
+\begin{proof}
+All follow from term-by-term manipulation of an absolutely convergent power series; uniqueness in (2) is the identity theorem for power series.
+\end{proof}
+
+\begin{lemma}[Sums and random sums]\label{lem:sums}
+(a) If $K$ and $K'$ are independent, $G_{K+K'}=G_KG_{K'}$.
+(b) Let $N=(N_A,N_B)$ be a random number of cells of each type, and let each type-$k$ cell, independently, produce a vector distributed like $Y^{(k)}$ with pgf $H_k$. Then the total $S$ has pgf
+\[
+G_S(x,y)=G_N\big(H_A(x,y),\,H_B(x,y)\big).
+\]
+\end{lemma}
+\begin{proof}
+(a) $\E[x^{K_A+K'_A}y^{K_B+K'_B}]=\E[x^{K_A}y^{K_B}]\,\E[x^{K'_A}y^{K'_B}]$ by independence. (b) Conditional on $N=(i,j)$, $S$ is a sum of $i$ independent copies of $Y^{(A)}$ and $j$ of $Y^{(B)}$, so by (a) $\E[x^{S_A}y^{S_B}\mid N=(i,j)]=H_A^iH_B^j$. Take expectations over $N$.
+\end{proof}
+
+\begin{example}[Offspring pgfs]
+Each outcome contributes its probability times $x^ay^b$:
+\begin{align*}
+f_A(x,y)&=\pi_{A,\mathrm{death}}+\pi_{A,\mathrm{persist}}x+\pi_{A,\mathrm{to\_B}}y+\pi_{A,AA}x^2+\pi_{A,AB}xy+\pi_{A,BB}y^2,\\
+f_B(x,y)&=\pi_{B,\mathrm{death}}+\pi_{B,\mathrm{persist}}y+\pi_{B,\mathrm{to\_A}}x+\pi_{B,AA}x^2+\pi_{B,AB}xy+\pi_{B,BB}y^2.
+\end{align*}
+Mean matrix $M_{kj}=\partial_jf_k(1,1)$; second factorial moments $\partial_x^2f_k=2\pi_{k,AA}$, $\partial_x\partial_yf_k=\pi_{k,AB}$, $\partial_y^2f_k=2\pi_{k,BB}$.
+\end{example}
+
+\refs{Feller Vol.~I, Ch.~XI [1] (one variable, very gentle); Harris Ch.~I--II [2]; Athreya \& Ney Ch.~I and V [3]; Kimmel \& Axelrod [4].}
+
+%======================================================================
+\section{Galton--Watson: pgf by composition}\label{sec:gw}
+\subsection{The recursion}
+Write $F_n=(F_{n,A},F_{n,B})$ with $F_{n,k}$ the pgf of $Z_n$ started from one type-$k$ cell, and $f=(f_A,f_B)$.
+\begin{theorem}[Composition]\label{thm:gwcomp}
+$F_0(x,y)=(x,y)$ and, for $n\ge1$,
+\[
+F_n=f\circ F_{n-1}=F_{n-1}\circ f\qquad(\text{so }F_n=f^{\circ n}).
+\]
+\end{theorem}
+\begin{proof}
+\emph{First-step decomposition:} the founder's daughters $Z_1$ have pgf $f_k$; each daughter of type $j$ independently starts a clone whose generation-$(n-1)$ content has pgf $F_{n-1,j}$. Lemma~\ref{lem:sums}(b) with $N=Z_1$, $H=F_{n-1}$ gives $F_{n,k}=f_k\circ F_{n-1}$. \emph{Last-step decomposition:} each cell of $Z_{n-1}$ independently produces offspring with pgf $f$; Lemma~\ref{lem:sums}(b) with $N=Z_{n-1}$, $H=f$ gives $F_{n,k}=F_{n-1,k}\circ f$.
+\end{proof}
+
+\begin{corollary}[Degree bound]\label{cor:degree}
+With at most two daughters per event, $F_{n,k}$ is a polynomial of total degree $\le2^n$; in particular $Z_{n,A},Z_{n,B}\le2^n$.
+\end{corollary}
+
+\paragraph{Evaluation at a point is cheap.} To evaluate $F_{n,A}$ at a number $(x,y)$, iterate
+\[
+(u,v)\leftarrow(x,y);\qquad\text{repeat }n\text{ times: }(u,v)\leftarrow(f_A(u,v),\,f_B(u,v));\qquad F_{n,A}(x,y)=u.
+\]
+This is the \emph{last-step} form ($F_n=F_{n-1}\circ f$ applied right to left) and costs $O(n)$ multiplications per point, never expanding the degree-$2^n$ polynomial.
+
+\subsection{Observation, founders and selection by substitution}\label{sec:gwobs}
+\begin{lemma}[Thinning and mislabelling]\label{lem:obs}
+If each endpoint cell of type $k$ is independently captured with probability $c_k$ and, when captured, labelled $j$ with probability $C_{kj}$, then the pgf of the \emph{measured} counts is $F_{n,A}\circ F_0^{\mathrm{obs}}$ with
+\[
+F^{\mathrm{obs}}_{0,k}(x,y)=1-c_k+c_k\,(C_{kA}x+C_{kB}y).
+\]
+\end{lemma}
+\begin{proof}
+Lemma~\ref{lem:sums}(b) with $N=Z_n$ and $H=F^{\mathrm{obs}}_0$, the pgf of what one endpoint cell contributes to the measurement.
+\end{proof}
+\noindent In the recursion this just changes the starting point: $(u,v)\leftarrow F^{\mathrm{obs}}_0(x,y)$ instead of $(x,y)$. \emph{Founders:} if a clone starts from $S$ cells ($\Prob(S=s)=\varpi_s$) each of type $k$ with probability $\varphi_k$, the clone pgf is $\sum_s\varpi_s\big(\varphi_AF_{n,A}+\varphi_BF_{n,B}\big)^s$ (Lemma~\ref{lem:sums}). \emph{Selection:} detected clones have law $\Prob(Z=z\mid Z\neq0)=p_z/(1-p_{00})$ for $z\neq0$, $p_{00}=G(0,0)$.
+
+\paragraph{Detection probability without cancellation.} When $p_{00}$ is close to 1 (prior draws with high death), $1-p_{00}$ computed by subtraction loses digits. Work with survival probabilities $s_{n,k}=1-F_{n,k}(0,0)$ directly:
+\[
+s_{n,k}=1-f_k(1-s_{n-1,A},\,1-s_{n-1,B})=\sum_o\pi_{k,o}\Big(1-(1-s_{n-1,A})^{a_{ko}}(1-s_{n-1,B})^{b_{ko}}\Big),
+\]
+expanding $1-(1-s)^2=2s-s^2$ etc., so no near-1 numbers are subtracted. (\code{detection_success} in the GW simulator and \code{detection_and_grad} in \code{exact_gw} do this; with capture $c$ start from $s_{0,k}=c_k$.)
+
+\refs{Composition: Harris Ch.~I--II [2], Athreya \& Ney Ch.~I.2, V [3], Feller Vol.~I Ch.~XII (branching processes) [1]. Thinning: any text on pgfs, e.g.\ [1, Ch.~XI].}
+
+%======================================================================
+\section{Bellman--Harris: integral equation and the method of stages}\label{sec:bh}
+\subsection{General lifetimes: the Bellman--Harris equation}
+Let $F_k(x,y,t)$ be the pgf of $Z(t)$ for a clone started at time 0 by a newborn type-$k$ cell, and $G_k$ the lifetime distribution function.
+\begin{theorem}[Bellman--Harris integral equation]\label{thm:bhint}
+\[
+F_k(x,y,t)=s_k\,\big(1-G_k(t)\big)+\int_0^t f_k\big(F_A(x,y,t-u),\,F_B(x,y,t-u)\big)\,dG_k(u),\qquad s_A=x,\ s_B=y .
+\]
+\end{theorem}
+\begin{proof}
+Condition on the founder's lifetime $\tau$. If $\tau>t$ (probability $1-G_k(t)$) the clone at $t$ is the founder alone, pgf $s_k$. If $\tau=u\le t$, the founder is replaced at $u$ by newborn daughters, each starting an independent clone with $t-u$ to run; by Lemma~\ref{lem:sums}(b) their total has pgf $f_k(F(t-u))$. Integrate over $u$.
+\end{proof}
+For each grid point this is a nonlinear Volterra equation in $t$. A product-integration (convolution quadrature) scheme on a time grid of $M$ steps costs $O(M^2)$ per point; since $G_k$ has no atom at 0 the scheme is explicit. This is the route for non-integer Gamma shapes (not implemented).
+
+\subsection{Exponential lifetimes: an ODE}
+If $\tau\sim\mathrm{Exp}(\lambda_k)$ (Markov branching), the backward Kolmogorov equation is
+\[
+\partial_tF_k=\lambda_k\big(f_k(F_A,F_B)-F_k\big),\qquad F_k(x,y,0)=s_k .
+\]
+(Differentiate Theorem~\ref{thm:bhint} with $dG_k(u)=\lambda_ke^{-\lambda_ku}du$, or argue on the first event in $[0,h]$.)
+
+\subsection{Integer Gamma shape: phases}
+\begin{lemma}[Erlang = sum of exponentials]\label{lem:erlang}
+If $E_1,\dots,E_m$ are i.i.d.\ $\mathrm{Exp}(\lambda)$, then $E_1+\dots+E_m\sim\mathrm{Gamma}(m,1/\lambda)$, with mean $m/\lambda$. So a $\mathrm{Gamma}(m,\mu_k/m)$ lifetime is $m$ consecutive exponential \emph{phases} of rate $\lambda_k=m/\mu_k$.
+\end{lemma}
+Introduce $G_{k,j}(x,y,t)$, the pgf at time $t$ for a clone started by one type-$k$ cell at the \emph{start of phase $j$} ($j=1,\dots,m$). Phase is not observed: a cell in any phase counts as one living cell.
+\begin{theorem}[Phase ODEs]\label{thm:phase}
+\begin{align*}
+\partial_tG_{k,j}&=\lambda_k\big(G_{k,j+1}-G_{k,j}\big),&& j=1,\dots,m-1,\\
+\partial_tG_{k,m}&=\lambda_k\big(f_k(G_{A,1},G_{B,1})-G_{k,m}\big),\\
+G_{k,j}(x,y,0)&=s_k,&& F_k(x,y,t)=G_{k,1}(x,y,t).
+\end{align*}
+\end{theorem}
+\begin{proof}
+Backward argument on $[0,h]$. A cell in phase $j<m$ leaves its phase with probability $\lambda_kh+o(h)$ and then is a type-$k$ cell at the start of phase $j+1$; otherwise it is unchanged: $G_{k,j}(t+h)=(1-\lambda_kh)G_{k,j}(t)+\lambda_khG_{k,j+1}(t)+o(h)$. In phase $m$ leaving the phase ends the life, and the cell is replaced by newborn daughters (phase 1), whose clones combine by Lemma~\ref{lem:sums}(b) into $f_k(G_{A,1}(t),G_{B,1}(t))$. At $t=0$ the clone is the cell itself. Let $h\to0$.
+\end{proof}
+Per grid point this is a $2m$-dimensional complex ODE (16 components for $m=8$). Observation (Lemma~\ref{lem:obs}) enters as the initial value $G_{k,j}(0)=F^{\mathrm{obs}}_{0,k}$; selection and founders as in GW.
+
+\begin{remark}[Unbounded counts]
+Unlike GW (Corollary~\ref{cor:degree}) the BH count has no finite bound: $F(\cdot,t)$ is a power series, not a polynomial. Every BH table is a truncation, controlled through marginal tails (\S\ref{sec:alias}).
+\end{remark}
+
+\subsection{Numerical integration}
+The system is non-stiff on the unit circle ($|G|\le1$, rates $\lambda_k=m/\mu_k\approx0.27$--$0.4\,$h$^{-1}$). Use a \emph{fixed-step} explicit Runge--Kutta method: an adaptive step would make the computed likelihood a non-smooth function of $\theta$ (step choices change with $\theta$), which breaks gradients and HMC. \code{bhexact.py} uses the 8th-order Dormand--Prince tableau (DOP853) with $h=1$\,h: halving $h$ changes probabilities by $\le10^{-15}$, while classical RK4 needs $h\approx0.06$\,h for $10^{-10}$. All horizons come from one trajectory (integrate to the first horizon, record, continue).
+
+\refs{BH equation: Harris Ch.~VI [2]; Athreya \& Ney Ch.~IV [3]; Kimmel \& Axelrod [4]. Backward equations for Markov branching: Karlin \& Taylor [15]. Method of stages, phase-type distributions: Neuts [16], Asmussen [17]; the same device in biology is the ``linear chain trick'' (MacDonald [18]). Runge--Kutta and DOP853: Hairer, N\o rsett \& Wanner [14].}
+
+%======================================================================
+\section{From pgf values to probabilities: DFT, FFT, aliasing}\label{sec:dft}
+\subsection{Inversion on roots of unity}
+Let $\omega_L=e^{2\pi i/L}$.
+\begin{lemma}[Orthogonality]\label{lem:orth}
+$\sum_{j=0}^{L-1}\omega_L^{jm}=L$ if $m\equiv0\pmod L$ and $0$ otherwise.
+\end{lemma}
+\begin{proof}
+For $m\not\equiv0$ it is a geometric sum $(1-\omega_L^{Lm})/(1-\omega_L^m)=0$.
+\end{proof}
+\begin{theorem}[DFT inversion with folding]\label{thm:fold}
+Let $G(x,y)=\sum_{a,b}p_{ab}x^ay^b$ and $0<r\le1$. Evaluate on the $L_A\times L_B$ grid $g_{jl}=G(r\omega_{L_A}^j,\,r\omega_{L_B}^l)$. Then
+\[
+c_{ab}:=\frac1{L_AL_B}\sum_{j,l}g_{jl}\,\omega_{L_A}^{-ja}\omega_{L_B}^{-lb}=\sum_{s,t\ge0}p_{a+sL_A,\,b+tL_B}\;r^{\,a+sL_A+b+tL_B},
+\qquad 0\le a<L_A,\ 0\le b<L_B .
+\]
+\end{theorem}
+\begin{proof}
+Substitute the series, exchange sums (absolute convergence), apply Lemma~\ref{lem:orth} in each variable.
+\end{proof}
+\begin{corollary}
+(i) \emph{Exact recovery:} if $p_{ab}=0$ whenever $a\ge L_A$ or $b\ge L_B$, then $p_{ab}=c_{ab}r^{-(a+b)}$; with $r=1$, $p_{ab}=c_{ab}$. For GW, $L_A,L_B\ge2^n+1$ is always exact (Corollary~\ref{cor:degree}).
+(ii) \emph{Aliasing error} otherwise: $\big|c_{ab}r^{-(a+b)}-p_{ab}\big|\le\max(r^{L_A},r^{L_B})\;\Prob(Z_A\ge L_A\ \text{or}\ Z_B\ge L_B)$.
+\end{corollary}
+The transform $g\mapsto c$ is the 2-D DFT. With numpy's sign convention (\code{fft} uses $e^{-2\pi i\,jk/L}$),
+\[
+p=\mathrm{Re}\big(\code{fft2}(g)\big)/(L_AL_B)\qquad(\text{for }r=1),
+\]
+\emph{not} \code{ifft2}, which returns $p$ with indices reversed ($p_{-a,-b}$). The real part discards round-off; the exact $c$ are real.
+
+\subsection{The FFT}
+A direct DFT of length $L$ costs $O(L^2)$; the Cooley--Tukey FFT costs $O(L\log L)$ by splitting the sum over even and odd indices recursively. A 2-D DFT is 1-D DFTs along each axis: $O(L_AL_B\log(L_AL_B))$. FFT libraries are fastest for lengths with small prime factors (\code{scipy.fft.next_fast_len}).
+
+\subsection{Choosing the grid: tails, damping, round-off}\label{sec:alias}
+\paragraph{Truncation at $r=1$ (analysis scripts, \code{bhexact.py}).} Pick $L$ so the missed mass is negligible. The marginal pgfs $F(x,1)$ and $F(1,y)$ give the marginal laws on a long 1-D grid ($N=8192$) cheaply, and
+\[
+\Prob(Z_A\ge L_A\ \text{or}\ Z_B\ge L_B)\le\Prob(Z_A\ge L_A)+\Prob(Z_B\ge L_B).
+\]
+Examples: GW $n=10$ at the reference truth, $L=384$ reproduces the alias-free $L=1025$ table to $10^{-17}$; BH at 240\,h, $(L_A,L_B)=(768,512)$ misses $6\cdot10^{-9}$ (\code{bhexact_validation.md}).
+
+\paragraph{Damping (\code{exact_gw}).} Evaluating at radius $r<1$ multiplies the folded terms by $r^{L}$, but computing $p=c\,r^{-(a+b)}$ multiplies the absolute round-off of $c$ (about $\varepsilon\approx10^{-16}$ times $\max|g|\le1$) by up to $r^{-(L_A+L_B)}$. Choosing $r$ so that this amplification is at most $D$ bounds
+\[
+\text{round-off}\lesssim D\varepsilon,\qquad\text{aliasing}\lesssim\Prob(\text{count}\ge L)\cdot D^{-1/2}\text{ to }D^{-1}
+\]
+(depending on how the budget is split between the axes). \code{exact_gw} uses $D=10^4$ with $L$ = next fast length $\ge1.25\times$(largest observed count)$+16$, i.e.\ a grid sized by the data rather than by the model's tail. Damping too hard is harmful: an early attempt with $r^L=10^{-12}$ amplified round-off to $10^{24}$ and returned garbage.
+
+\paragraph{Round-off floor.} Even at $r=1$ the computed $p_{ab}$ carry absolute errors $\approx10^{-17}$ and can be slightly negative. Probabilities below $\approx10^{-15}$ are noise: floor them before taking logs (\S\ref{sec:lik}).
+
+\paragraph{Symmetry.} Real coefficients give $g(\bar x,\bar y)=\overline{g(x,y)}$ (Proposition~\ref{prop:pgfbasic}), i.e.\ $g_{L_A-j,\,L_B-l}=\overline{g_{jl}}$: only half the grid needs the expensive evaluation (\code{bhexact.py} evaluates $j\le L_A/2$ and fills the rest).
+
+\refs{DFT and aliasing: Briggs \& Henson [7]; FFT practice: Press et al.\ Ch.~12 [8]; Cooley \& Tukey [9]. Inversion of pgfs specifically, including damping and error analysis: Abate \& Whitt [10, 11].}
+
+%======================================================================
+\section{Exact derivatives}\label{sec:deriv}
+\paragraph{Linearity.} The map from grid values to coefficients is linear and does not depend on $\theta$, so $\partial_\theta p=\mathrm{DFT}(\partial_\theta g)$: differentiate the pgf values, then apply the same FFT.
+
+\paragraph{GW, forward mode.} For a direction $d$ in parameter space, differentiate the recursion $F_n=f(F_{n-1};\theta)$:
+\[
+\dot F_{n,k}=\underbrace{(\partial_\theta f_k)[d](F_{n-1})}_{\text{explicit}}+\partial_xf_k(F_{n-1})\,\dot F_{n-1,A}+\partial_yf_k(F_{n-1})\,\dot F_{n-1,B},\qquad\dot F_0=0 .
+\]
+For the direction ``increase $\pi_{k,o}$'' the explicit term is the monomial $x^{a_{ko}}y^{b_{ko}}$ evaluated at $F_{n-1}$ in row $k$, zero in the other row. All 12 directions can be carried in one vectorised pass (\code{law_and_jac} in \code{profile.py}). Simplex constraints are handled afterwards by the chain rule: e.g.\ the direction $e_{k,o}-e_{k,\mathrm{death}}$, or the softmax/stick-breaking Jacobian.
+
+\paragraph{BH, tangent ODE.} Differentiate the right-hand side $R(G;\theta)$ of Theorem~\ref{thm:phase}: $\dot G'=J_R(G)\,\dot G+\partial_\theta R$, integrated with the \emph{same} Runge--Kutta steps alongside $G$. This gives the exact derivative of the \emph{discrete} solution (discretise-then-differentiate), which differs from the derivative of the true solution by the same $O(h^8)$ as the solution itself. For mean lifetimes, $\lambda_k=m/\mu_k$ gives $\partial\lambda_k/\partial\log\mu_k=-\lambda_k$, so $\partial_{\log\mu_k}R$ is minus the type-$k$ rows of $R$.
+
+\paragraph{Conditioning.} For the detected law $\tilde p_z=p_z/(1-p_{00})$:
+\[
+\partial\log\tilde p_z=\frac{\partial p_z}{p_z}+\frac{\partial p_{00}}{1-p_{00}}\qquad(z\neq0).
+\]
+
+\paragraph{Check.} Always compare with central finite differences: GW $\sim10^{-11}$ relative, BH $6\cdot10^{-12}$--$3\cdot10^{-10}$.
+
+\refs{Forward-mode (tangent) differentiation: Griewank \& Walther [12]; sensitivity equations for ODEs: Hairer, N\o rsett \& Wanner [14].}
+
+%======================================================================
+\section{The likelihood}\label{sec:lik}
+\begin{proposition}
+For a design with endpoints $h$ and observed detected clones $z_{h,1},\dots,z_{h,N_h}$, independent across clones and endpoints,
+\[
+\ell(\theta)=\sum_h\sum_{i=1}^{N_h}\log\tilde p_h(z_{h,i};\theta)=\sum_h\sum_{z}n_h(z)\,\log\tilde p_h(z;\theta),
+\]
+with $n_h(z)$ the number of clones with counts $z$ at endpoint $h$.
+\end{proposition}
+One table per endpoint gives the probability of \emph{every} count at once; the histogram form makes an evaluation one dot product, so the cost hardly depends on the number of organoids. For BH all endpoints come from one ODE trajectory.
+
+\paragraph{Practicalities.}
+\begin{itemize}
+\item \textbf{Floor:} use $\log\max(\tilde p,10^{-15})$. Without it, a count with numerically zero probability under some $\theta$ gives $-\infty$ or, in the score, a ratio $\tilde p^\star/\tilde p$ of order $10^{280}$ (this happened in the profile optimisation).
+\item \textbf{Floor the detection probability} too ($1-p_{00}\ge10^{-6}$ in \code{exact_gw}): where detection is nearly impossible the conditioned law is numerically meaningless and can produce spurious high likelihood.
+\item \textbf{Counts outside the table:} either size the grid from the data (\code{exact_gw}) or return $-\infty$ (\code{bhexact.log_lik}).
+\end{itemize}
+
+\paragraph{Derived quantities.} Score $\nabla\ell=\sum n_h(z)\nabla\log\tilde p_h(z)$; per-clone Fisher information $I_h=\sum_z\tilde p_h(z)\,\nabla\log\tilde p_h(z)\nabla\log\tilde p_h(z)^\top$ (summing over the table, not the data); KL divergence between two parameter values $\sum_z\tilde p_h(z;\theta^\star)\log\big(\tilde p_h(z;\theta^\star)/\tilde p_h(z;\theta)\big)$, the expected per-clone log-likelihood ratio. These are what \code{note.pdf} uses.
+
+\refs{Likelihood, score, Fisher information: Pawitan [19]; Lehmann \& Casella Ch.~2 [20]; KL as expected log-likelihood ratio: Cover \& Thomas Ch.~11 [21].}
+
+%======================================================================
+\section{Inference on top of the exact likelihood}\label{sec:inf}
+\subsection{Parameterisation}
+Each probability row lives on a simplex. Two unconstrained parameterisations are used:
+\begin{itemize}
+\item \textbf{Softmax} (optimisation, \code{profile.py}): $\pi_k=\mathrm{softmax}(z_k)$, gradient $\partial\pi/\partial z=\mathrm{diag}(\pi)-\pi\pi^\top$.
+\item \textbf{Stick-breaking + logit} (Bayesian, \code{exact_gw}, same as the NPE prior): for a Dirichlet$(\alpha)$ row, $v_i\sim\mathrm{Beta}(\alpha_i,\sum_{j>i}\alpha_j)$ independently, $\pi_i=v_i\prod_{j<i}(1-v_j)$; then $u_i=\mathrm{logit}\,v_i$. The log prior density in $u$ is $\sum_i\big[\log\mathrm{Beta}(v_i)+\log v_i+\log(1-v_i)\big]$ (Jacobian of the logit). Fixed entries (e.g.\ B divisions $=0$) simply leave the row with fewer free entries.
+\end{itemize}
+
+\subsection{Maximum likelihood, profiles, Fisher}
+L-BFGS(-B) with the exact gradient, several starts (prior draws), keep the best; profile likelihoods by fixing one function of $\theta$ (e.g.\ B-division mass $\delta$) and optimising the rest. Fisher information at the optimum gives Wald intervals and Cram\'er--Rao bounds. At boundary truths (e.g.\ $\delta=0$) the asymptotics are non-standard [22].
+
+\subsection{Posterior sampling: NUTS}
+Hamiltonian Monte Carlo uses $\nabla\log\pi(u\mid\text{data})$ to make long, informed proposals; the No-U-Turn Sampler (NUTS) chooses trajectory lengths automatically. \code{exact_gw}'s settings: 4 chains, 300 warm-up iterations (dual-averaging step size, dense mass matrix), 500 draws, maximum tree depth 8, target acceptance 0.8. Chains are started at the best of 8 L-BFGS optima from prior draws, keeping only optima within 20 nats of the best (a guard against poor local optima). Diagnostics: split-$\hat R$ and effective sample size. SBC means one full MCMC per calibration dataset, so it is run on few cases (configurable).
+
+\paragraph{Cost.} Each NUTS iteration needs up to $2^{\text{depth}}$ gradient evaluations. GW: one law plus 12 tangents at $n=10$ is $\sim0.1$--$1$\,s, so a fit takes minutes. BH: one likelihood at 240\,h is $\sim40$\,s on 2 threads ($\sim4$\,s on 20) without gradients, so NUTS for BH needs a faster kernel (GPU, coarser $h$, smaller data-driven grids) before it is practical.
+
+\refs{HMC: Neal [23]; Betancourt [24]; NUTS: Hoffman \& Gelman [25]; $\hat R$ and ESS: Vehtari et al.\ [26]; SBC: Talts et al.\ [27]; L-BFGS: Nocedal \& Wright Ch.~7 [13]; boundary asymptotics: Self \& Liang [22].}
+
+%======================================================================
+\section{Implementation}\label{sec:impl}
+\subsection{Algorithms}
+\begin{algorithm}[H]
+\caption{GW endpoint law and derivatives (\code{law_and_grads}, \code{law_and_jac})}
+\begin{algorithmic}[1]
+\Require rows $\pi$, generation $n$, grid sizes $L_A,L_B$ (alias-free $\ge2^n+1$, or tail-checked), directions $d_1..d_D$
+\State $x_j\gets\omega_{L_A}^j$, $y_l\gets\omega_{L_B}^l$ on the grid; $(U,V)\gets F_0^{\mathrm{obs}}(x,y)$; $\dot U_d,\dot V_d\gets0$
+\For{$t=1,\dots,n$}
+  \State $\dot U_d\gets(\partial_\theta f_A)[d](U,V)+\partial_xf_A\,\dot U_d+\partial_yf_A\,\dot V_d$; same for $\dot V_d$ with $f_B$ \Comment{use old $U,V$}
+  \State $(U,V)\gets(f_A(U,V),\,f_B(U,V))$
+\EndFor
+\State $p\gets\mathrm{Re}\,\code{fft2}(U)/(L_AL_B)$;\quad $\partial_dp\gets\mathrm{Re}\,\code{fft2}(\dot U_d)/(L_AL_B)$
+\State \Return $p,\ \partial p$ \Comment{founder mixture and conditioning applied afterwards}
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[H]
+\caption{BH endpoint laws (\code{bhexact.law_bh}; \code{law_bh_jac} adds tangents)}
+\begin{algorithmic}[1]
+\Require rows $\pi$, means $\mu_A,\mu_B$, integer shape $m$, horizons $t_1<\dots<t_H$, grid $(L_A,L_B)$, step $h$
+\State $\lambda_k\gets m/\mu_k$; half grid $j\le L_A/2$ (conjugate symmetry)
+\ForAll{grid points $(x,y)$ \textbf{in parallel}}
+  \State $G_{k,j}\gets s_k(x,y)$ for all $k,j$ \Comment{$s_A=x$, $s_B=y$, or $F_0^{\mathrm{obs}}$}
+  \For{$i=1..H$}
+     \State integrate Theorem~\ref{thm:phase} from $t_{i-1}$ to $t_i$ with fixed-step DOP853 ($\lceil(t_i-t_{i-1})/h\rceil$ steps)
+     \State $F_i(x,y)\gets G_{A,1}$
+  \EndFor
+\EndFor
+\State fill the other half by $F(\bar x,\bar y)=\overline{F(x,y)}$; $p_i\gets\mathrm{Re}\,\code{fft2}(F_i)/(L_AL_B)$
+\State check tails with the 1-D marginals $F(x,1)$, $F(1,y)$ on $N=8192$ points
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[H]
+\caption{Exact log-likelihood (both models)}
+\begin{algorithmic}[1]
+\Require data $\{z_{h,i}\}$, parameters $\theta$
+\For{each endpoint $h$}
+  \State $n_h\gets$ histogram of the observed $(A,B)$ \Comment{once per dataset}
+  \State $p_h\gets$ endpoint law (Alg.~1 or 2), grid covering $\max z$
+  \State $\tilde p_h\gets p_h/\max(1-p_{h,00},\,10^{-6})$, $\tilde p_{h,00}\gets0$; $\tilde p_h\gets\max(\tilde p_h,10^{-15})$
+\EndFor
+\State \Return $\sum_h\langle n_h,\log\tilde p_h\rangle$
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Cost and memory}
+\begin{center}\small
+\begin{tabular}{@{}lll@{}}\toprule
+ & GW, generation $n$ & BH, horizon $t$, shape $m$ \\\midrule
+pgf evaluation & $O(nL_AL_B)$ & $O(\frac{t}{h}\,s\,m\,L_AL_B)$, $s=12$ stages (DOP853) \\
++ $D$ derivatives & $\times(1+D)$ & $\times(1+D)$ \\
+FFT & $O(L_AL_B\log(L_AL_B))$ per table & same \\
+memory & a few complex $L_A\times L_B$ arrays & $O(m)$ per point (streamed) \\
+measured & $n=10$, $L=384$: $\approx0.1$--$0.2$\,s & 240\,h, $768\times512$: 40\,s (2 threads), $\approx4$\,s (20) \\\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Validation checklist}
+Every implementation in this project was checked against all of these; reuse them for new variants.
+\begin{enumerate}
+\item \textbf{Normalisation}: $\sum p=1$ to $10^{-15}$; negative mass $\lesssim10^{-13}$.
+\item \textbf{Means}: GW against $e_AM^n$ (agreement to machine precision); BH with $m=1$ against the matrix-exponential means (\code{expected_counts}, $\le5\cdot10^{-12}$).
+\item \textbf{Simulator agreement}: means (z-scores), single probabilities such as $P(1,0)$, and the whole 2-D law by total variation with a \emph{parametric-bootstrap} reference (multinomial samples from the exact law) and a pooled $\chi^2$; repeat any isolated small $p$-value with fresh seeds before calling it a failure (one BH $p=0.004$ was chance).
+\item \textbf{Grid}: tail mass from the marginals; compare against a larger grid.
+\item \textbf{Integrator} (BH): halve the step; changes must be at round-off level.
+\item \textbf{Derivatives}: against central finite differences.
+\item \textbf{End to end}: recover the truth on simulated data (MLE and posterior); for Bayesian runs, SBC on a few cases.
+\end{enumerate}
+
+\subsection{Pitfalls we hit}
+\begin{itemize}
+\item \textbf{FFT sign convention}: \code{ifft2} instead of \code{fft2}$/L^2$ returns the table with reversed indices. The normalisation check passes anyway; the mean check catches it.
+\item \textbf{Row ordering}: the repository's B row is (death, to\_A, persist); scripts use (death, persist, to\_A).
+\item \textbf{Unnormalised rows}: posterior means read from files may not sum exactly to 1; renormalise each row before evaluating (a 1\% deficit produced a fake heavy tail).
+\item \textbf{Over-damping}: amplification $r^{-L}$ must stay modest ($\le10^4$).
+\item \textbf{Log of zero / exploding scores}: floor probabilities and detection.
+\item \textbf{Adaptive ODE steps}: make the likelihood non-smooth in $\theta$; use fixed steps.
+\item \textbf{Low-order integrators}: RK4 needs $\sim16\times$ more steps than DOP853 for $10^{-10}$ accuracy here.
+\item \textbf{CPU sharing}: the BH kernel and NUTS chains are parallel; cap threads when other jobs run.
+\end{itemize}
+
+\subsection{Extensions and limits}
+\begin{itemize}
+\item \textbf{Non-integer Gamma shape}: solve Theorem~\ref{thm:bhint} by product integration ($O(M^2)$ per point), or approximate the lifetime by a phase-type distribution with integer phases.
+\item \textbf{Third type C}: a third variable $z$, 3-D grid and 3-D FFT; memory grows as $L^3$.
+\item \textbf{Quiescence, desynchronised starts, random founder age}: extra phases or a modified initial condition.
+\item \textbf{Repeated measurements of the same clone}: needs the joint pgf over times (multi-time generating functions); not covered.
+\item \textbf{Large clones}: memory $\propto L_AL_B$; damping or data-sized grids help, beyond that a saddle-point or moment-based approximation is needed.
+\end{itemize}
+
+\paragraph{Where the code is.} \code{scripts/b_row_theory/gwexact.py}, \code{profile.py} (branch \code{worktree-b-row-theory}); \code{src/bio_sbi/inference/gw_exact.py}, \code{exact_gw.py}, \code{nuts.py}, \code{conf/inference/exact_gw.yaml} (branch \code{exact-gw}); \code{scripts/b_row_theory/bhexact.py}, \code{bhexact_validate.py}, \code{bhfisher.py}, \code{bhexact_validation.md} (branch \code{bh-exact}).
+
+%======================================================================
+\section{References}\label{sec:refs}
+\raggedright
+\emph{Chapter numbers refer to the editions listed and were given from memory; check the table of contents if a pointer seems off.}
+\begin{enumerate}\small
+\item[{[1]}] W.\ Feller, \emph{An Introduction to Probability Theory and Its Applications}, Vol.~I, 3rd ed., Wiley, 1968. Ch.~XI generating functions; Ch.~XII compound distributions and branching processes.
+\item[{[2]}] T.\,E.\ Harris, \emph{The Theory of Branching Processes}, Springer, 1963. Ch.~I single type, II multitype, VI age-dependent (Bellman--Harris) processes.
+\item[{[3]}] K.\,B.\ Athreya and P.\,E.\ Ney, \emph{Branching Processes}, Springer, 1972 (Dover 2004). Ch.~I Galton--Watson, IV age-dependent, V multitype.
+\item[{[4]}] M.\ Kimmel and D.\,E.\ Axelrod, \emph{Branching Processes in Biology}, 2nd ed., Springer, 2015.
+\item[{[5]}] P.\ Haccou, P.\ Jagers and V.\,A.\ Vatutin, \emph{Branching Processes: Variation, Growth, and Extinction of Populations}, Cambridge University Press, 2005.
+\item[{[6]}] P.\ Guttorp, \emph{Statistical Inference for Branching Processes}, Wiley, 1991.
+\item[{[7]}] W.\,L.\ Briggs and V.\,E.\ Henson, \emph{The DFT: An Owner's Manual for the Discrete Fourier Transform}, SIAM, 1995.
+\item[{[8]}] W.\,H.\ Press, S.\,A.\ Teukolsky, W.\,T.\ Vetterling and B.\,P.\ Flannery, \emph{Numerical Recipes}, 3rd ed., Cambridge University Press, 2007, Ch.~12.
+\item[{[9]}] J.\,W.\ Cooley and J.\,W.\ Tukey, ``An algorithm for the machine calculation of complex Fourier series'', \emph{Math.\ Comp.}\ 19 (1965) 297--301.
+\item[{[10]}] J.\ Abate and W.\ Whitt, ``Numerical inversion of probability generating functions'', \emph{Oper.\ Res.\ Lett.}\ 12 (1992) 245--251.
+\item[{[11]}] J.\ Abate and W.\ Whitt, ``The Fourier-series method for inverting transforms of probability distributions'', \emph{Queueing Systems} 10 (1992) 5--88.
+\item[{[12]}] A.\ Griewank and A.\ Walther, \emph{Evaluating Derivatives: Principles and Techniques of Algorithmic Differentiation}, 2nd ed., SIAM, 2008.
+\item[{[13]}] J.\ Nocedal and S.\,J.\ Wright, \emph{Numerical Optimization}, 2nd ed., Springer, 2006, Ch.~7.
+\item[{[14]}] E.\ Hairer, S.\,P.\ N\o rsett and G.\ Wanner, \emph{Solving Ordinary Differential Equations I: Nonstiff Problems}, 2nd ed., Springer, 1993 (Runge--Kutta methods, Dormand--Prince, DOP853).
+\item[{[15]}] S.\ Karlin and H.\,M.\ Taylor, \emph{A First Course in Stochastic Processes}, 2nd ed., Academic Press, 1975 (Markov branching processes, backward equations).
+\item[{[16]}] M.\,F.\ Neuts, \emph{Matrix-Geometric Solutions in Stochastic Models}, Johns Hopkins University Press, 1981 (phase-type distributions).
+\item[{[17]}] S.\ Asmussen, \emph{Applied Probability and Queues}, 2nd ed., Springer, 2003 (phase-type distributions).
+\item[{[18]}] N.\ MacDonald, \emph{Time Lags in Biological Models}, Lecture Notes in Biomathematics 27, Springer, 1978 (the linear chain trick).
+\item[{[19]}] Y.\ Pawitan, \emph{In All Likelihood}, Oxford University Press, 2001.
+\item[{[20]}] E.\,L.\ Lehmann and G.\ Casella, \emph{Theory of Point Estimation}, 2nd ed., Springer, 1998.
+\item[{[21]}] T.\,M.\ Cover and J.\,A.\ Thomas, \emph{Elements of Information Theory}, 2nd ed., Wiley, 2006.
+\item[{[22]}] S.\,G.\ Self and K.-Y.\ Liang, ``Asymptotic properties of maximum likelihood estimators and likelihood ratio tests under nonstandard conditions'', \emph{J.\ Amer.\ Statist.\ Assoc.}\ 82 (1987) 605--610.
+\item[{[23]}] R.\,M.\ Neal, ``MCMC using Hamiltonian dynamics'', in \emph{Handbook of Markov Chain Monte Carlo}, Chapman \& Hall/CRC, 2011.
+\item[{[24]}] M.\ Betancourt, ``A conceptual introduction to Hamiltonian Monte Carlo'', arXiv:1701.02434, 2017.
+\item[{[25]}] M.\,D.\ Hoffman and A.\ Gelman, ``The No-U-Turn sampler: adaptively setting path lengths in Hamiltonian Monte Carlo'', \emph{J.\ Mach.\ Learn.\ Res.}\ 15 (2014) 1593--1623.
+\item[{[26]}] A.\ Vehtari, A.\ Gelman, D.\ Simpson, B.\ Carpenter and P.-C.\ B\"urkner, ``Rank-normalization, folding, and localization: an improved $\hat R$ for assessing convergence of MCMC'', \emph{Bayesian Analysis} 16 (2021) 667--718.
+\item[{[27]}] S.\ Talts, M.\ Betancourt, D.\ Simpson, A.\ Vehtari and A.\ Gelman, ``Validating Bayesian inference algorithms with simulation-based calibration'', arXiv:1804.06788, 2018.
+\end{enumerate}
+
+\end{document}
