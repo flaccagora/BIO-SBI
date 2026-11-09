@@ -370,8 +370,11 @@ homogeneous law, two labels with any capture and 2x2 confusion (pgf substitution
 `x -> 1 - c + c (C x + ...)`), `selection` detected or all. Bellman-Harris, free founder
 parameters, clone heterogeneity and three types raise `ValueError`.
 
-Cost (2-4 threads; one likelihood + gradient evaluation): E0 at 4096 clones
-(generations 4/6/10) ~45 ms; see `TODO.md` (section XG) for per-preset run times.
+Cost per likelihood + gradient evaluation: ~2 ms (generations 2-3), ~15 ms (real-like
+6/10), ~50 ms (E0 at 4096 clones, 4/6/10), ~90 ms (E0 4/8/12 x 32: generation-12 grid).
+Runs with 4 threads take 2 min (early) to ~1 h (E0 x 32, wide posterior, deep NUTS
+trees); see `TODO.md` (section XG). Multimodal posteriors show up as R-hat >> 1
+(`exact_gw.chain_means` per chain).
 Presets: `exact_gw_e0_4096`, `exact_gw_e0`, `exact_gw_real_like`, `exact_gw_early`
 (reference datasets identical to the NPE runs they compare with).
 

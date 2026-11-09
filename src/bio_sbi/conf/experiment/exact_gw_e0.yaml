@@ -17,6 +17,8 @@ inference:
   method:           # wide, non-Gaussian posterior at 32 clones: deep NUTS trees and
     warmup: 200     # ~0.1 s per evaluation (generation-12 grid); smaller budget than default
     draws: 250
+    sbc:            # generation-12 SBC datasets with big clones cost ~15 min each
+      max_points: 1.0e+5
 workers: 4
 info:
   title: "Exact GW likelihood: E0 design (4/8/12 x 32 clones)"

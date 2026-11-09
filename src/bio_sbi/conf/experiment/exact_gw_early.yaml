@@ -20,7 +20,7 @@ design:
   horizons: ${early.horizons}
   clones: ${early.clones}
 inference:
-  sbc_cases: 10     # one MCMC run per case; 0 skips SBC
+  sbc_cases: 100    # cheap here (~2 ms per evaluation, ~10 s per SBC case); 0 skips SBC
 workers: 4
 info:
   title: "Exact GW likelihood: early endpoints (266 organoids)"

@@ -327,8 +327,23 @@ for each parameter?
       - `exact_gw_early` — {3} × 266 and {2, 3} × 133, two_type, seeds 0–4 (new design;
         NPE command in the header).
       Commands: `bio-sbi -m +experiment=<preset> hydra.sweep.dir=results/exact_gw/<name>`.
-      SBC re-runs MCMC per case: `inference.sbc_cases` (default 20, 10 in the 4096
-      preset; 0 skips). Cost per run: TIMINGS.
+      SBC re-runs MCMC per case: `inference.sbc_cases` (default 20; presets 10, early
+      100; 0 skips). SBC chains are short (2 x 100 + 100, tree depth <= 6), so per-case
+      R-hat is often > 1.1: treat SBC as a coarse check.
+      Single-seed validation (seed 0, 4 threads, 2026-11-09; ms = per likelihood +
+      gradient evaluation; B.to_A truth 0.80):
+      | preset / law | eval | MCMC | total | B.to_A | NPE, same data |
+      |---|---:|---:|---:|---|---|
+      | e0_4096 two_type | 49 ms | 19 min | 49 min* | 0.773 ± 0.018 | 0.32 ± 0.11 (20k) |
+      | e0 two_type (200+250 draws) | 94 ms | 48 min | 78 min (SBC 30 min, before cap 1e5) | 0.208 ± 0.149 | 0.18 ± 0.14 (b_row 20k) |
+      | e0 reversible_ab | 92 ms | 27 min | 30 min | 0.684 ± 0.101 | 0.70 ± 0.12 (b_row 20k) |
+      | real_like two_type | 15 ms | 21 min | 27 min | 0.36 ± 0.18 | — (X5a has 0.1–0.9) |
+      | real_like reversible_ab | 12 ms | 7 min | 9 min | 0.817 ± 0.077 | 0.73 ± 0.13 (x2/gw_data) |
+      | early {3} x 266 | 2 ms | 1 min | 1.6 min | 0.09 ± 0.09 | — |
+      | early {2,3} x 133 | 2 ms | 1 min | 1.4 min | 0.43 ± 0.18 | — |
+      (*SBC before the depth cap took 30 min; now ~10 min.) The exact posterior can be
+      multimodal (an SBC dataset had two near-equal modes: R-hat 23, chains in different
+      modes; see `exact_gw.chain_means`).
 
 ---
 
