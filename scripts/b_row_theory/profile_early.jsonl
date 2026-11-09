@@ -1,0 +1,15 @@
+{"design": "early_3", "delta": 0.05, "kl_per_clone": 0.0006069235031121519, "quadratic_prediction": 0.0006801697909781254, "B_to_A": 0.754, "A_death": 0.057}
+{"design": "early_3", "delta": 0.1, "kl_per_clone": 0.002115192490942633, "quadratic_prediction": 0.0027206791639125018, "B_to_A": 0.703, "A_death": 0.083}
+{"design": "early_3", "delta": 0.2, "kl_per_clone": 0.006052573683209887, "quadratic_prediction": 0.010882716655650007, "B_to_A": 0.591, "A_death": 0.13}
+{"design": "early_3", "delta": 0.3, "kl_per_clone": 0.009353299540390221, "quadratic_prediction": 0.02448611247521251, "B_to_A": 0.472, "A_death": 0.164}
+{"design": "early_3", "delta": 0.5, "kl_per_clone": 0.010028162134979332, "quadratic_prediction": 0.06801697909781253, "B_to_A": 0.113, "A_death": 0.071}
+{"design": "early_3", "delta": 0.7, "kl_per_clone": 0.011934167920209467, "quadratic_prediction": 0.13331327903171253, "B_to_A": 0.09, "A_death": 0.196}
+{"design": "early_2_3", "delta": 0.05, "kl_per_clone": 0.0010372903236360164, "quadratic_prediction": 0.0010851943137090427, "B_to_A": 0.755, "A_death": 0.053}
+{"design": "early_2_3", "delta": 0.1, "kl_per_clone": 0.003877362707454393, "quadratic_prediction": 0.004340777254836171, "B_to_A": 0.707, "A_death": 0.076}
+{"design": "early_2_3", "delta": 0.2, "kl_per_clone": 0.012715488696087478, "quadratic_prediction": 0.017363109019344684, "B_to_A": 0.594, "A_death": 0.116}
+{"design": "early_2_3", "delta": 0.3, "kl_per_clone": 0.021115455665339882, "quadratic_prediction": 0.03906699529352553, "B_to_A": 0.461, "A_death": 0.145}
+{"design": "early_2_3", "delta": 0.5, "kl_per_clone": 0.025017315699552754, "quadratic_prediction": 0.10851943137090427, "B_to_A": 0.139, "A_death": 0.083}
+{"design": "early_2_3", "delta": 0.7, "kl_per_clone": 0.039682291963039566, "quadratic_prediction": 0.21269808548697233, "B_to_A": 0.055, "A_death": 0.205}
+{"design": "reallike_6_10", "delta": 0.05, "kl_per_clone": 5.640927074552141e-05, "quadratic_prediction": 6.152165000098049e-05, "B_to_A": 0.759, "A_death": 0.048}
+{"design": "reallike_6_10", "delta": 0.1, "kl_per_clone": 0.00019060529466761772, "quadratic_prediction": 0.00024608660000392194, "B_to_A": 0.713, "A_death": 0.066}
+{"design": "reallike_6_10", "delta": 0.2, "kl_per_clone": 0.0005742713574729504, "quadratic_prediction": 0.0009843464000156878, "B_to_A": 0.627, "A_death": 0.097}
