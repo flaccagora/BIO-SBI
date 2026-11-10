@@ -14,10 +14,12 @@
 #        bio-sbi -m +experiment=exact_bh_ridge 'design.horizons=[96,144,240]' \
 #          design.clones=512 hydra.sweep.dir=results/exact_bh/ridge_512
 # Arm (i) is the reversible_ab half of exact_bh_real_like: skip it if that sweep ran.
-# Cost: (i) as exact_bh_real_like (~3.5-4.7 s per evaluation on 2 threads, ~2-2.5 h per
-# run; preset 4 threads ~1-1.25 h); (ii) counts up to (361, 217) at 240 h (seed 0) -> grid
-# ~500 x 320, ~5-6 s per evaluation on 2 threads, ~2.5-3 h per run (4 threads ~1.5 h).
-# 5 runs per arm. Check exact_bh.pareto_k (> 0.7: raise particles / max_iterations).
+# Sampler: tempered SMC + adaptive Metropolis chains to ESS 400 / tail ESS 200 / nested
+# R-hat 1.01 (inference defaults), dt = 3 h (log-likelihood within 1e-7 nats of dt = 1 h
+# at posterior draws), grid 1.1 x max + 16 (default). Cost: (i) as exact_bh_real_like;
+# (ii) counts up to (361, 217) at 240 h (seed 0) -> grid ~410 x 260, three horizons on
+# one trajectory: ~0.2 s per evaluation at 16 threads, up to max_evals = 40000 (~2 h).
+# 5 runs per arm. Check exact_bh.reliable (else raise inference.method.max_evals).
 defaults:
   - override /simulator: bellman_harris
   - override /law: reversible_ab
@@ -30,7 +32,8 @@ law:
 inference:
   sbc_cases: 0
   method:
-    threads: 4
+    threads: 16
+    dt: 3.0
 workers: 4
 info:
   title: "Exact BH likelihood: lifetime / self-renewal ridge"

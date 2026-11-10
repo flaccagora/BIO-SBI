@@ -1,6 +1,7 @@
 # @package _global_
 # Exact-likelihood posterior for Bellman-Harris (inference=exact_bh: method of stages +
-# FFT, Laplace-initialised AMIS) on the real-like design: 144/240 h x 165/101 clones,
+# FFT; tempered SMC + adaptive Metropolis chains run to ESS / nested R-hat targets) on the
+# real-like design: 144/240 h x 165/101 clones,
 # lifetime shape 8, uniform Dirichlet prior, log-uniform lifetimes on [10, 80] h, all
 # transitions free (two_type) and B divisions fixed (reversible_ab), reference truth
 # (A.div_AA 0.55, A 20 h, B 30 h), seeds 0-4 (data_seed = seed):
@@ -11,11 +12,16 @@
 #   two_type: no NPE run at the reference truth and this design. Same datasets with NPE:
 #     bio-sbi -m simulator=bellman_harris law=two_type design=real_like budget=dev \
 #       seed=0,1,2,3,4 hydra.sweep.dir=results/exact_bh/npe_two_type
-# Cost (measured 2026-11-09, 2 threads): one likelihood evaluation ~3.5 s (grid ~400 x 300,
-# one ODE trajectory for both horizons; 4.7 s under load), one gradient 40-45 s. A run =
-# 33 candidate evals + 2 x 10-40 gradients + up to 1200 AMIS evals ~ 2-2.5 h on 2 threads;
-# the preset uses 4 threads (~1-1.25 h per run, 10 runs ~10-12 h); threads=10 ~20-30 min.
-# Multirun jobs run one after another: set inference.method.threads to the free cores.
+# Numerics (preset): dt = 3 h and grid 1.0 x max + 8 (log-likelihood within 1e-7 and
+# 5e-5 nats of dt = 1 h / grid 1.25 x max + 32 at posterior draws; ~0.15 s per evaluation
+# at 16 threads, 1.7x faster than the inference defaults dt = 2 h, grid 1.1 x max + 16).
+# Cost (measured 2026-11-10, reversible_ab seed 0, 16 threads): optimisation ~1.5 min,
+# tempering 6 stages ~9 min, then the final chains until min bulk ESS >= 400, tail ESS
+# >= 200 and nested R-hat <= 1.01 or max_evals = 40000 (~1.7 h at 16 threads; see TODO XB
+# for whether seed 0 reached the targets). two_type (12 parameters) mixes slower. Check
+# exact_bh.reliable / ess / smc.max_nested_rhat in metrics.json.
+# Multirun jobs run one after another: set inference.method.threads to the free cores
+# (best a divisor of inference.method.chains = 64, e.g. 8 or 16: no idle threads).
 defaults:
   - override /simulator: bellman_harris
   - override /observation: perfect
@@ -25,9 +31,13 @@ defaults:
 law:
   concentration: {}
 inference:
-  sbc_cases: 0       # one full sampler run per case (~1 h each on 2 threads): off
+  sbc_cases: 0       # one full sampler run per case (hours): off
   method:
-    threads: 4
+    threads: 16
+    dt: 3.0
+    grid:
+      factor: 1.0
+      margin: 8
 workers: 4
 info:
   title: "Exact BH likelihood: real-like design"
@@ -38,9 +48,8 @@ info:
     20 h; results/x3/bh_control) a property of the data or of NPE + moment summaries?
   notes: |
     Same reference datasets as results/x3/bh_control and results/x5/b_vague
-    (reversible_ab, seeds 0-4). Check exact_bh.ess / pareto_k in metrics.json
-    (k > 0.7 or ESS < ~100: raise inference.method.particles / max_iterations or set
-    inference.method.mh_steps).
+    (reversible_ab, seeds 0-4). Check exact_bh.reliable (ESS >= 400, tail ESS >= 200,
+    nested R-hat <= 1.01) in metrics.json; if false, raise inference.method.max_evals.
 hydra:
   sweeper:
     params:

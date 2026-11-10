@@ -604,7 +604,7 @@ class ExactBH(InferenceMethod):
         imh_scale: float = 1.2,
         imh_components: int = 1,
         de_prob: float = 0.0,
-        rw_scale_sd: float = 0.0,
+        rw_scale_sd: float = 1.0,
         max_rhat: float = 1.01,
         tail_fraction: float = 0.5,
         superchains: int = 4,

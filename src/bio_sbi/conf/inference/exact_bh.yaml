@@ -46,7 +46,9 @@ method:
   imh_scale: 1.2
   imh_components: 1            # >1: Gaussian-mixture fit (BIC) for the independence proposal
   de_prob: 0.0                 # share of differential-evolution moves (population differences)
-  rw_scale_sd: 0.0             # log-normal jitter of the random-walk scale
+  rw_scale_sd: 1.0             # log-normal jitter (sd of log) of the random-walk scale: small
+                               #   steps unstick chains in narrow regions, big ones cross tails
+                               #   (validation design: ~1.5x the ESS per evaluation of 0)
   # final stage (beta = 1): stop when min bulk ESS >= target_ess, min tail ESS >=
   # tail_fraction x target_ess and max nested R-hat <= max_rhat (all theta coordinates;
   # superchains = contiguous groups of chains, i.e. different strata of the population)
