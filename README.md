@@ -455,8 +455,10 @@ evaluations). A real-like run = 33 candidate evaluations + 2 x 15-25 gradients
 (~2 min) + tempering (~6 stages x 448 evaluations, ~15 min at 16 threads) + the final
 chains, which dominate: the random walk mixes slowly along the lifetime / self-renewal
 ridge and in the long tails, so the targets need tens of thousands of evaluations
-(validation design: ~150k cheap evaluations; real-like seed 0: see TODO XB). Use 16+
-threads per run; `max_evals` caps the cost (the run then reports `reliable: false`).
+(validation design: ~150k cheap evaluations; real-like reversible_ab seed 0: 40k
+evaluations = 91 min at 16 threads with the preset numerics reached min ESS 176 / nested
+R-hat 1.010, i.e. not yet the targets; see TODO XB). Use 16+ threads per run; `max_evals`
+caps the cost (the run then reports `reliable: false`, with the diagnostics).
 Validation (2026-11-10, `scripts/exact_bh_sampler/`): validation design {96,144} h x 64,
 reversible_ab, seed 0; reference = 32 random-walk + independence Metropolis chains x
 4000 steps (128k evaluations, min bulk ESS 400; agrees with a separate 60k-evaluation
@@ -464,7 +466,11 @@ random-walk run). Default SMC + final chains (150k evaluations, 16 min at 16 thr
 all 11 posterior means within 0.72 MC standard errors of the reference, sds within 1.45
 (e.g. A.div_AA 0.435 +- 0.090 vs 0.432 +- 0.090, A lifetime 17.96 +- 1.98 vs
 17.88 +- 2.08 h, B.to_A 0.674 +- 0.163 vs 0.680 +- 0.161; 5/95 % quantiles agree),
-nested R-hat 1.011, min bulk ESS 241 (budget-limited). Variants that stop early were
+nested R-hat 1.011, min bulk ESS 241 (budget-limited); with the random-walk scale jitter
+(`rw_scale_sd = 1`, default) 60k evaluations give means within 1.65 se and sds within
+1.76 se (ESS 225). The optional position-dependent random walk (`local_k = 60`: covariance
+of the 60 nearest chain states) gave ESS 344 at 60k but sds 5-10 % low (z down to -3.1):
+left off. Variants that stop early were
 biased beyond their MC error (Laplace-started SMC with 7-23 moves per stage: sds
 15-20 % low, mean z up to 7.8; pooled prior-started islands: z up to 6.9) - in each case
 the nested R-hat flagged it (1.02-1.22). The old AMIS reference of this design

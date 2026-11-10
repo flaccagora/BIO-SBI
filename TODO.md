@@ -344,14 +344,16 @@ for each parameter?
       (*SBC before the depth cap took 30 min; now ~10 min.) The exact posterior can be
       multimodal (an SBC dataset had two near-equal modes: R-hat 23, chains in different
       modes; see `exact_gw.chain_means`).
-- [ ] **XB – Exact BH likelihood** (`inference=exact_bh`, branch `exact-bh`): exact
-      likelihood of the raw counts for Bellman-Harris with integer lifetime shape
-      (method of stages ODE + 2-D FFT, prototype `scripts/b_row_theory/bhexact*.py`), same
-      theta coordinates and prior as NPE (incl. log mean lifetimes); posterior by
-      Laplace-initialised AMIS (see README "Exact likelihood for Bellman-Harris").
+- [ ] **XB – Exact BH likelihood** (`inference=exact_bh`, branches `exact-bh`,
+      `exact-bh-sampler`): exact likelihood of the raw counts for Bellman-Harris with
+      integer lifetime shape (method of stages ODE + 2-D FFT, prototype
+      `scripts/b_row_theory/bhexact*.py`), same theta coordinates and prior as NPE (incl.
+      log mean lifetimes); posterior by **tempered SMC + adaptive Metropolis chains run to
+      ESS 400 / tail ESS 200 / nested R-hat 1.01** (`sampler=smc`, default since
+      2026-11-10; README "Exact likelihood for Bellman-Harris"; old `sampler=amis` kept).
       Questions: is NPE's BH ridge bias (A.div_AA ~0.32 vs 0.55, A lifetime ~15.9 vs 20 h)
       in the data or in NPE + summaries? Where is B's row? Presets (datasets identical to
-      the NPE runs named in their headers, `data_seed = seed`; not launched yet):
+      the NPE runs named in their headers, `data_seed = seed`):
       - `exact_bh_real_like` — 144/240 h x 165/101, two_type + reversible_ab, seeds 0–4
         (compare `results/x3/bh_control` = `results/x5/b_vague`; two_type: NPE command
         in the header);
@@ -359,22 +361,41 @@ for each parameter?
         `results/e4/bh_512_20k`, `results/e4/bh`); CR bound at real-like: sd 0.23
         (A.div_AA), 3.8 h (A lifetime).
       Commands: `bio-sbi -m +experiment=<preset> hydra.sweep.dir=results/exact_bh/<name>`
-      (ridge 512 arm: add `'design.horizons=[96,144,240]' design.clones=512`). Cost
-      (2 threads): ~3.5 s per real-like evaluation, ~40 s per gradient, ~1.5–2 h per run
-      with the default budget (1200 AMIS evaluations); presets use 4 threads. SBC off
-      (`inference.sbc_cases`, ~1 h per case). Check `exact_bh.pareto_k` / `ess`.
-      Validation (2026-11-09, 2 threads): tiny design
-      ({96,144} h x 64, reversible_ab, seed 0, defaults): 3.3 min, 1259 evaluations +
-      27 gradients (0.2 s / 1.1-1.5 s), ESS 112, Pareto k 0.57; A.div_AA 0.445 ± 0.077,
-      A lifetime 18.4 ± 1.6 h, B.to_A 0.70 ± 0.12 = 6000-evaluation AMIS reference
-      (0.445 ± 0.075, 18.2 ± 1.5 h, 0.70 ± 0.14). Real-like seed 0, reversible_ab,
-      *reduced* budget (1 start x 15 LM steps, 2 x 150 particles): 40 min, optimiser
-      not converged (log posterior -2002.9), ESS 7.8, k 2.3 (unreliable); weighted mean
-      A.div_AA 0.53 ± 0.05, A lifetime 18.9 h (NPE on the same data, x3/bh_control
-      seed 0: 0.385 ± 0.084, 16.6 h) — a hint, to be confirmed by the default-budget
-      sweep. Grid check: max relative error 3.6e-9. GPU (RTX A1000, numba.cuda): 3.3 s
-      per real-like evaluation = 2 CPU threads (FP64-bound): not used.
-
+      (ridge 512 arm: add `'design.horizons=[96,144,240]' design.clones=512`). Presets:
+      16 threads, dt = 3 h (log-likelihood within 1e-7 nats of dt = 1 h at posterior
+      draws), `max_evals` 40000. SBC off. Check `exact_bh.reliable` (and `ess`,
+      `smc.max_nested_rhat`).
+      First-look AMIS runs (2026-11-09/10, `results/exact_bh/{real_like_rev_a,_rev_b,
+      real_like_two_a,_two_b,ridge_512_a}`): ESS 12–38 of ~1300, Pareto k 0.67–0.94,
+      4–6 h each on 3 threads — unreliable (seed 0 rev: A.div_AA 0.47 ± 0.07, A lifetime
+      17.7 h).
+      Sampler study (2026-11-10, `scripts/exact_bh_sampler/`, 16 threads): see README.
+      In `u = logit` the posterior has long tails (probabilities allowed ~0) and the curved
+      lifetime / self-renewal ridge: Laplace / Gaussian-mixture IS proposals fitted even
+      to posterior draws have efficiency < 1 %; SMC populations (Laplace or prior start,
+      7–23 moves per stage, RW / independence / DE moves, probit coordinates, pooled
+      independent "islands") are biased beyond their MC error; only long adaptive chains
+      matched the reference. Validation design {96,144} h x 64, reversible_ab, seed 0:
+      reference 128k evaluations (RW + independence MH, 32 chains, min ESS 400; = a
+      separate 60k RW run); SMC + final chains, default settings: 150k evaluations
+      (16 min at 16 threads) all means within 0.72 MC se, sds within 1.45 se (A.div_AA
+      0.435 ± 0.090 vs 0.432 ± 0.090, A lifetime 17.96 ± 1.98 vs 17.88 ± 2.08 h); with
+      the random-walk scale jitter (`rw_scale_sd = 1`, now default) 60k evaluations:
+      means within 1.65 se, sds within 1.76 se, ESS 225. Real-like seed 0 (reversible_ab,
+      `results/exact_bh/smc_check_rev0_c`: preset numerics dt 3 h / grid 1.0 x max + 8,
+      16 threads, `local_k = 60`): 40k evaluations in 91 min (optimisation 1 min,
+      7 tempering stages 9 min, final chains 80 min; 0.135 s per evaluation) and still
+      `reliable: false` — min bulk ESS 176 (target 400), tail ESS 223, nested R-hat 1.010
+      (split R-hat 1.29: the chains have not mixed along the slowest direction). Posterior:
+      A.div_AA 0.492 ± 0.060 (5–95 % 0.38–0.59), A lifetime 18.3 ± 1.4 h (15.9–20.7),
+      B lifetime 24.3 ± 7.6 h, B.to_A 0.65 ± 0.11 (first-look AMIS: 0.47 ± 0.07, 17.7 h;
+      NPE x3/bh_control seed 0: 0.385 ± 0.084, 16.6 h); grid check 2.7e-5. Two earlier
+      attempts without `local_k` reached only ESS ~90 after 10–18k evaluations (killed).
+      To meet the targets at real-like expect ~100k evaluations (~3.5–4 h at 16 threads
+      for reversible_ab; two_type and the 512-clone ridge more).
+      Ideas if the cost matters: HMC with the population metric (a gradient costs
+      8.4 evaluations), a reparametrisation along the ridge, dt = 4 h (< 4e-6 nats).
+      GPU (RTX A1000, numba.cuda): 3.3 s per real-like evaluation = 2 CPU threads: not used.
 
 ---
 
