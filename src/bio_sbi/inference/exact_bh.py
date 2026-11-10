@@ -13,11 +13,11 @@ Parameters and prior are those of NPE: ``theta`` = the stick-breaking coordinate
 free log mean lifetimes (uniform on ``log lifetime_mean_bounds``). The sampler works on
 ``u = logit((theta - low) / (high - low))`` (prior Jacobian included).
 
-Posterior sampling. One likelihood evaluation costs seconds (real-like design: ~3.5 s
-on 2 threads), a gradient (forward-mode tangents) ~11 times more, so gradient-based MCMC
-(NUTS needs ~10^4-10^5 gradients) is out of reach. ``exact_bh`` uses
-**Laplace-initialised adaptive multiple importance sampling (AMIS)**, O(10^2-10^3)
-likelihood evaluations:
+Posterior sampling. One likelihood evaluation costs ~0.2 s at 16 threads on the
+real-like design (dt = 2 h, grid ~340 x 260), a gradient (forward-mode tangents) ~8-10
+evaluations. The default sampler (``sampler=smc``) is **adaptive tempered SMC followed by
+adaptive Metropolis chains run to a convergence target**
+(:func:`bio_sbi.inference.smc.tempered_smc`):
 
 1. *Start*: the prior centre and ``init_candidates`` prior draws are evaluated (in
    parallel); the best ``opt_starts`` start optimisations.
@@ -26,22 +26,36 @@ likelihood evaluations:
    derivatives; typically 10-30 gradient evaluations per start.
 3. *Laplace*: covariance = inverse curvature at each distinct mode within
    ``mode_tolerance`` nats of the best (eigenvalues floored at ``1 / laplace_max_var``);
-   first proposal = mixture of t (``df``) components, weighted by Laplace evidence, plus
-   wider defensive copies (``defensive_weight``, ``defensive_scale``).
-4. *AMIS*: iterations of ``particles`` draws from the current mixture, evaluated in
-   parallel (one particle per thread); all draws are re-weighted against the mixture of
-   all proposals so far (deterministic-mixture weights, Pareto-smoothed) and the mixture
-   is refitted by one weighted EM step (PMC; covariances shrunk towards the previous
-   ones when a component's effective sample size is small). It stops once the ESS
-   reaches ``target_ess`` with Pareto ``k <= 0.7``, or after ``max_iterations``.
-5. *Optional resample-move* (``mh_steps``): ``particles`` weighted resamples moved by
-   random-walk Metropolis steps (removes duplicates; the moved draws are the output).
+   mixture of t (``df``) components weighted by Laplace evidence.
+4. *Tempering* (``start=laplace``): ``chains x steps`` draws from the Laplace mixture
+   widened by ``start_inflate``, then the geometric path ``q^(1-beta) posterior^beta``
+   with adaptive ``beta`` (ESS of the incremental weights = ``ess_fraction``), waste-free
+   resample-move stages (``chains`` resampled starts x ``steps - 1`` MH steps; random
+   walk with the population covariance + independence t proposals). ``start=prior``
+   tempers the likelihood from the prior instead (no optimisation; ``coords=probit``).
+5. *Final chains* at ``beta = 1``: the ``chains`` chains run on with adaptive Metropolis
+   (covariance, scale and independence proposal refitted from the pooled chains) until
+   min bulk ESS ``>= target_ess``, min tail ESS ``>= tail_fraction x target_ess`` and
+   max nested R-hat (superchains = contiguous groups of chains) ``<= max_rhat``, or the
+   ``max_evals`` budget; the first ``final_burn`` of the chains is discarded. The draws
+   (equal weights) are the remaining chain states. ``islands > 0`` replaces 5. by
+   independent tempered runs pooled until the same targets hold across islands.
 
-Diagnostics (``metrics.json`` under ``exact_bh``): Kish effective sample size of the
-final (PSIS) weights and of the raw ones, PSIS Pareto ``k`` of the weight tail (``k >
-0.7``: unreliable), per-iteration ESS / ``k``, optima and optimisation traces, evaluation
-counts and timings, grid and a grid accuracy check at the posterior median. Posterior
-draws are a weighted resample of the particles.
+Why not importance sampling: the posterior in ``u`` has long tails (probabilities the
+data allow to be ~0) and the curved lifetime / self-renewal ridge, so Laplace or
+mixture proposals give Pareto ``k > 0.7`` (the first-look AMIS runs: ESS 12-38 of
+~1300); a Laplace-started SMC population alone is under-dispersed (tails); only long
+chains matched a 128k-evaluation reference on the validation design.
+
+Legacy ``sampler=amis``: Laplace-initialised adaptive multiple importance sampling,
+``max_iterations`` x ``particles`` draws with deterministic-mixture PSIS weights and a
+weighted EM refit per iteration; optional resample-move (``mh_steps``).
+
+Diagnostics (``metrics.json`` under ``exact_bh``): ``sampler``, ``ess`` (smc: min bulk
+ESS; amis: PSIS ESS), ``reliable`` (smc: all targets met), ``smc`` (temperatures, stage
+ESS / Pareto ``k`` / acceptance rates, final checks, per-coordinate nested and split
+R-hat, bulk and tail ESS), optima, evaluation counts and timings, grid and a grid accuracy
+check at the posterior median.
 
 Supported: ``simulator=bellman_harris`` with integer ``lifetime_shape`` (per type
 allowed), two types (``two_type``, ``reversible_ab``, any fixed entries), fixed founder

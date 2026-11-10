@@ -1,6 +1,6 @@
 """Adaptive tempered SMC sampler for expensive, low-dimensional posteriors.
 
-Used by :mod:`bio_sbi.inference.exact_bh` (one likelihood evaluation costs ~0.3-5 s), but
+Used by :mod:`bio_sbi.inference.exact_bh` (one likelihood evaluation costs ~0.01-5 s), but
 generic: it needs a batched log target ``logpost(U) -> (n,)`` on ``R^d`` and a tractable
 reference distribution ``q`` (sampler + normalised log density).
 
@@ -15,14 +15,23 @@ Algorithm (waste-free tempered SMC, Dau & Chopin 2022, with an adaptive schedule
   each extended by ``steps - 1`` Metropolis-Hastings steps; all ``chains x steps`` states
   form the next (equally weighted) population. The kernel is a random mixture of a
   random walk ``N(u, s^2 Sigma)`` (``Sigma`` = weighted particle covariance, scale ``s``
-  tuned between stages towards ``rw_acceptance``) and an independence proposal
-  ``t_df(mean, imh_scale^2 Sigma)`` fitted to the population (probability ``imh_prob``);
-  both leave ``gamma_beta`` invariant;
-* at ``beta = 1`` the ``chains`` chains run on (kernel frozen) until rank-normalised
-  split R-hat ``<= max_rhat`` and bulk ESS ``>= target_ess`` for every coordinate
-  (Vehtari, Gelman, Simpson, Carpenter & Buerkner 2021; checked every
-  ``check_every`` steps), or until ``max_evals`` / ``max_final_steps``. Output = all
-  final-stage states (equal weights).
+  tuned between stages towards ``rw_acceptance``, optional log-normal scale jitter
+  ``rw_scale_sd``), an independence proposal (t, or a BIC-selected t mixture, fitted to
+  the population; share ``imh_prob`` adapted to twice its acceptance) and optional
+  differential-evolution moves with differences of the stage population (``de_prob``);
+  all leave ``gamma_beta`` invariant;
+* at ``beta = 1`` the ``chains`` chains run on until, for every coordinate, the
+  rank-normalised bulk ESS ``>= target_ess``, the tail ESS ``>= tail_fraction x
+  target_ess`` and the nested R-hat ``<= max_rhat`` (Vehtari, Gelman, Simpson, Carpenter
+  & Buerkner 2021; Margossian et al. 2024; ``superchains`` contiguous groups of chains,
+  i.e. starts from different strata of the population), checked every ``check_every``
+  steps after the first ``final_burn`` of the chains, or until ``max_evals`` /
+  ``max_final_steps``. Until ``adapt_final_steps`` the random-walk covariance and scale
+  and the independence proposal are refitted from the pooled chains at every check
+  (adaptive Metropolis: the population can be narrower than the posterior). Output =
+  the final-stage states after the burn-in (equal weights).
+
+:func:`smc_islands` pools independent tempered runs instead (one superchain per island).
 
 Every MH step is one batch of ``chains`` evaluations (evaluated in parallel by the
 caller). Diagnostics: temperature schedule, per-stage ESS / Pareto ``k`` of the
@@ -554,6 +563,7 @@ def tempered_smc(
                     # from the pooled chain states (the burn-in fraction is discarded)
                     pooled = arr.reshape(-1, d)
                     chol = _chol(np.cov(pooled.T))
+                    x = pooled  # DE differences from the chains' past (DE-MCz)
                     win = (acc_rw - last_acc[0]) / max(n_rw - last_acc[1], 1)
                     rw_scale *= math.exp(1.5 * (win - rw_acceptance))
                     last_acc = (acc_rw, n_rw)

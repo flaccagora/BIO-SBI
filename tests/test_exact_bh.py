@@ -239,6 +239,17 @@ def test_smc_sampler_on_a_gaussian_target():
     np.testing.assert_allclose(D.std(0), np.sqrt(np.diag(cov)), rtol=0.15)
     # log evidence of a normalised target is 0
     assert abs(info["log_evidence"]) < 1.5  # noisy with 192 particles (sd ~0.6)
+    # pooled independent runs ("islands"): same answer, one superchain per island
+    from bio_sbi.inference.smc import smc_islands
+
+    isl = smc_islands(lambda U: target.logpdf(np.atleast_2d(U)).reshape(-1),
+                      lambda r, n: ref.rvs(n, random_state=r).reshape(n, d),
+                      lambda U: ref.logpdf(np.atleast_2d(U)).reshape(-1), rng, islands=3,
+                      max_islands=3, final_steps=8, target_ess=100, chains=16, steps=6,
+                      max_evals=20000)  # fmt: skip
+    assert isl.info["islands"] == 3 and isl.chains.shape[:2] == (48, 9)
+    assert np.all(np.abs(isl.draws.mean(0) - mu) < 0.1)
+    assert len(isl.info["ess_between"]) == d
     # diagnostics on iid draws: R-hats ~1, ESS ~ number of draws
     x = rng.normal(size=(8, 500))
     assert rhat(x) < 1.01 and nested_rhat(x) < 1.01
