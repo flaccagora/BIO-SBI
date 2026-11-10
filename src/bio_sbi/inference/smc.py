@@ -355,6 +355,36 @@ def fit_proposal(rng, x: np.ndarray, w: np.ndarray, components: int, scale: floa
     return _MixT(m, c * scale, lp, df), len(lp)
 
 
+def _logdiag(chols: np.ndarray) -> np.ndarray:
+    return np.log(np.diagonal(chols, axis1=1, axis2=2)).sum(axis=1)
+
+
+class _Archive:
+    """Local covariances: ``(1 - mix) cov(k nearest archive states) + mix cov(archive)``.
+
+    Nearest in the Mahalanobis metric of the global Cholesky factor ``chol``.
+    """
+
+    def __init__(self, pts: np.ndarray, chol: np.ndarray, k: int, mix: float) -> None:
+        self.pts = np.asarray(pts, float)
+        self.k = int(min(max(k, pts.shape[1] + 2), len(pts) - 1))
+        self.mix = float(mix)
+        self.chol = chol
+        self.white = solve_triangular(chol, self.pts.T, lower=True).T
+        self.glob = chol @ chol.T
+
+    def chols(self, x: np.ndarray) -> np.ndarray:
+        """Lower Cholesky factors ``(n, d, d)`` of the local covariances at ``x``."""
+        xw = solve_triangular(self.chol, np.atleast_2d(x).T, lower=True).T
+        d2 = (xw**2).sum(1)[:, None] - 2 * xw @ self.white.T + (self.white**2).sum(1)[None]
+        idx = np.argpartition(d2, self.k, axis=1)[:, : self.k]
+        nb = self.pts[idx]  # (n, k, d)
+        c = nb - nb.mean(axis=1, keepdims=True)
+        cov = np.einsum("nki,nkj->nij", c, c) / (self.k - 1)
+        cov = (1 - self.mix) * cov + self.mix * self.glob
+        return np.linalg.cholesky(cov + 1e-12 * np.eye(len(self.glob)))
+
+
 def systematic(rng, w: np.ndarray, n: int) -> np.ndarray:
     """Systematic resampling: ``n`` indices for normalised weights ``w``."""
     c = np.cumsum(w)
@@ -421,6 +451,8 @@ def tempered_smc(
     final_burn: float = 0.25,
     adapt_final: bool = True,
     adapt_final_steps: int = 1000,
+    local_k: int = 0,
+    local_mix: float = 0.1,
     check_every: int = 8,
     max_evals: int = 20000,
     max_stages: int = 100,
@@ -489,6 +521,12 @@ def tempered_smc(
         cur_h = prop_q.logpdf(cur)
         is_final = beta >= 1.0
         n_steps = int(max_final_steps) if is_final else steps - 1
+        # position-dependent random walk (final stage): covariance of the local_k nearest
+        # archive states, so the steps follow a curved ridge; MH uses both proposal densities
+        local = is_final and local_k > 0
+        if local:
+            arch = _Archive(x, chol, int(local_k), local_mix)
+            cur_lc = arch.chols(cur)
         path_x, path_lp, path_lq = [cur.copy()], [cur_lp.copy()], [cur_lq.copy()]
         acc_rw, acc_imh, acc_de, n_rw, n_imh, n_de = 0, 0, 0, 0, 0, 0
         last_acc = (0, 0)
@@ -500,7 +538,11 @@ def tempered_smc(
             use_de = ~use_imh & (r_kind < p_imh + de_prob)
             # random walk with a log-normal scale mixture (bigger and smaller jumps)
             scales = rw_scale * np.exp(rw_scale_sd * rng.standard_normal(chains))
-            prop = cur + scales[:, None] * (rng.standard_normal((chains, d)) @ chol.T)
+            z = rng.standard_normal((chains, d))
+            if local:
+                prop = cur + scales[:, None] * np.einsum("nij,nj->ni", cur_lc, z)
+            else:
+                prop = cur + scales[:, None] * (z @ chol.T)
             if use_imh.any():
                 prop[use_imh] = prop_q.sample(rng, int(use_imh.sum()))
             if use_de.any():
@@ -518,9 +560,18 @@ def tempered_smc(
             p_g = target(p_lp, p_lq, beta)
             p_h = prop_q.logpdf(prop)
             log_a = p_g - cur_g + np.where(use_imh, cur_h - p_h, 0.0)
+            if local:
+                prop_lc = arch.chols(prop)
+                rw = ~use_imh & ~use_de
+                # log q(cur | prop) - log q(prop | cur), same scale both ways
+                back = np.linalg.solve(prop_lc, ((cur - prop) / scales[:, None])[:, :, None])
+                log_a += np.where(rw, -0.5 * (back[:, :, 0] ** 2).sum(1) + 0.5 * (z**2).sum(1)
+                                  - _logdiag(prop_lc) + _logdiag(cur_lc), 0.0)  # fmt: skip
             ok = np.isfinite(p_g) & (np.log(rng.uniform(size=chains)) < log_a)
             cur[ok], cur_lp[ok], cur_lq[ok] = prop[ok], p_lp[ok], p_lq[ok]
             cur_g[ok], cur_h[ok] = p_g[ok], p_h[ok]
+            if local:
+                cur_lc[ok] = prop_lc[ok]
             use_rw = ~use_imh & ~use_de
             acc_rw += int((ok & use_rw).sum())
             acc_imh += int((ok & use_imh).sum())
@@ -564,6 +615,11 @@ def tempered_smc(
                     pooled = arr.reshape(-1, d)
                     chol = _chol(np.cov(pooled.T))
                     x = pooled  # DE differences from the chains' past (DE-MCz)
+                    if local:
+                        sub = pooled[rng.choice(len(pooled), min(len(pooled), 4096),
+                                                replace=False)]  # fmt: skip
+                        arch = _Archive(sub, chol, int(local_k), local_mix)
+                        cur_lc = arch.chols(cur)
                     win = (acc_rw - last_acc[0]) / max(n_rw - last_acc[1], 1)
                     rw_scale *= math.exp(1.5 * (win - rw_acceptance))
                     last_acc = (acc_rw, n_rw)

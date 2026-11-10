@@ -616,6 +616,7 @@ class ExactBH(InferenceMethod):
         final_burn: float = 0.25,
         adapt_final: bool = True,
         adapt_final_steps: int = 1000,
+        local_k: int = 0,
         check_every: int = 8,
         max_evals: int = 40000,
         grid: dict | None = None,
@@ -653,7 +654,7 @@ class ExactBH(InferenceMethod):
             "final_steps": int(final_steps),
             "min_final_steps": int(min_final_steps), "max_final_steps": int(max_final_steps),
             "final_burn": float(final_burn), "adapt_final": bool(adapt_final),
-            "adapt_final_steps": int(adapt_final_steps),
+            "adapt_final_steps": int(adapt_final_steps), "local_k": int(local_k),
             "check_every": int(check_every), "max_evals": int(max_evals),
         }  # fmt: skip
         if start not in ("laplace", "prior"):
@@ -821,7 +822,8 @@ class ExactBH(InferenceMethod):
                 tail_fraction=s["tail_fraction"], superchains=s["superchains"],
                 min_final_steps=s["min_final_steps"], max_final_steps=s["max_final_steps"],
                 final_burn=s["final_burn"], adapt_final=s["adapt_final"],
-                adapt_final_steps=s["adapt_final_steps"], check_every=s["check_every"], max_evals=s["max_evals"], name=name,
+                adapt_final_steps=s["adapt_final_steps"], local_k=s["local_k"],
+                check_every=s["check_every"], max_evals=s["max_evals"], name=name,
             )  # fmt: skip
         smc_seconds = time.perf_counter() - t2
         self.last_smc, self.last_to_u = res, to_u  # final-stage chains (inspection)

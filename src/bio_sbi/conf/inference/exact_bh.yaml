@@ -59,6 +59,10 @@ method:
   final_burn: 0.25             # first fraction of the final chains discarded (output and checks)
   adapt_final: true            # refit RW covariance / scale and IMH proposal from the chains
   adapt_final_steps: 1000      #   at every check until this chain length
+  local_k: 0                   # >0: final random walk with the covariance of the local_k
+                               #   nearest chain states (position-dependent, MH-corrected);
+                               #   validation design: 1.5-2x the ESS per evaluation, sds 5-10 %
+                               #   below the reference: experimental, off
   min_final_steps: 16          # final chains: at least this long, checked every check_every steps
   check_every: 8
   max_final_steps: 5000
