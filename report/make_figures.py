@@ -2372,8 +2372,6 @@ def fig_exact_speed():
     if not gwm:
         raise FileNotFoundError("no exact_gw real_like runs")
     s_gw = pick("gwprod", design="real_like").query("op == 'loglik'").seconds.iloc[0]
-    s_bh = pick("bhlik", "768x512", 2.0, 8.0).seconds.iloc[0]
-    j_bh = pick("bhjac", "768x512", 2.0, 8.0).seconds.iloc[0]
     npe = t[t.kind == "npe"].pivot_table(index="job", columns="op", values="seconds")
     npe["budget"] = ["full" if "full" in j else "dev" for j in npe.index]
     samp = npe.reference_sampling
@@ -2383,8 +2381,15 @@ def fig_exact_speed():
                  100 * mh1))
     meth.append(("exact GW, NUTS as run\n(exact_gw, real-like)", min(gwm), max(gwm),
                  100 * min(gwm), 100 * max(gwm)))
-    lo, hi = 1000 * s_bh + 20 * j_bh, 1300 * s_bh + 80 * j_bh
-    meth.append(("exact BH, AMIS estimate\n(1000–1300 evals, 20 thr.)", lo, hi, 100 * lo,
+    # exact BH: tempered SMC + adaptive chains (results/exact_bh/smc_check_rev0_c, real-like
+    # seed 0, 16 threads): measured wall seconds per likelihood evaluation, scaled to the
+    # ~1e5 evaluations a converged real-like posterior needs (that run stopped at 40k,
+    # not converged). The AMIS budget (1000-1300 evals) gave unreliable weights.
+    smc = json.loads((RES / "exact_bh" / "smc_check_rev0_c" / "metrics.json").read_text())
+    smc = smc["exact_bh"]
+    per = smc["seconds"] / smc["likelihood_evals"]
+    lo, hi = 0.92 * 1e5 * per, 1.05 * 1e5 * per
+    meth.append(("exact BH, SMC + MCMC\n(~1e5 evals, 16 thr.)", lo, hi, 100 * lo,
                  100 * hi))
     for b, lab in (("dev", "NPE dev (5k sims)"), ("full", "NPE full (50k sims)")):
         u = npe[npe.budget == b]
