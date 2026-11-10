@@ -213,8 +213,43 @@ def test_importance_sampling_helpers():
     assert pareto_k(np.log(rng.pareto(1.0, 4000) + 1)) > 0.7
 
 
-def test_sampler_recovers_a_toy_posterior(rng):
-    """Two free parameters (A.div_AA vs death, A lifetime): AMIS vs a brute-force grid."""
+def test_smc_sampler_on_a_gaussian_target():
+    """Tempered SMC (prior-like reference -> correlated Gaussian): moments and diagnostics."""
+    from scipy.stats import multivariate_normal as mvn
+
+    from bio_sbi.inference.smc import ess_bulk, nested_rhat, rhat, tempered_smc
+
+    rng = np.random.default_rng(0)
+    d = 3
+    cov = np.array([[1.0, 0.8, 0.0], [0.8, 1.0, -0.3], [0.0, -0.3, 0.5]]) * 0.04
+    mu = np.array([1.0, -0.5, 0.2])
+    target = mvn(mu, cov)
+    ref = mvn(np.zeros(d), 4 * np.eye(d))
+    res = tempered_smc(lambda U: target.logpdf(np.atleast_2d(U)).reshape(-1),
+                       lambda r, n: ref.rvs(n, random_state=r).reshape(n, d),
+                       lambda U: ref.logpdf(np.atleast_2d(U)).reshape(-1), rng,
+                       chains=32, steps=6, target_ess=400, max_evals=20000)  # fmt: skip
+    info = res.info
+    assert info["reached_posterior"] and info["status"] == "converged"
+    assert info["min_ess_bulk"] >= 400 and info["max_nested_rhat"] <= 1.01
+    assert info["temperatures"][-1] == 1.0 and len(info["temperatures"]) > 1
+    D = res.draws
+    se = np.sqrt(np.diag(cov) / info["min_ess_bulk"])
+    assert np.all(np.abs(D.mean(0) - mu) < 5 * se)
+    np.testing.assert_allclose(D.std(0), np.sqrt(np.diag(cov)), rtol=0.15)
+    # log evidence of a normalised target is 0
+    assert abs(info["log_evidence"]) < 1.5  # noisy with 192 particles (sd ~0.6)
+    # diagnostics on iid draws: R-hats ~1, ESS ~ number of draws
+    x = rng.normal(size=(8, 500))
+    assert rhat(x) < 1.01 and nested_rhat(x) < 1.01
+    assert 3000 < ess_bulk(x) < 5500
+    # stuck chains (constant offsets) are flagged
+    assert rhat(x + np.arange(8)[:, None]) > 1.5
+
+
+@pytest.mark.parametrize("sampler", ["smc", "amis"])
+def test_sampler_recovers_a_toy_posterior(rng, sampler):
+    """Two free parameters (A.div_AA vs death, A lifetime): SMC / AMIS vs a brute-force grid."""
     law = load_law("reversible_ab")
     law["fixed"] = {
         "founder": {"A": 1.0},
@@ -227,11 +262,15 @@ def test_sampler_recovers_a_toy_posterior(rng):
                                        "A.mean_lifetime": 12.0})  # fmt: skip
     obs = ObservationModel(sim.types)
     cohorts = [Cohort(h, detected(sim, truth, h, 60, rng)) for h in (24.0, 48.0)]
-    method = ExactBH(threads=2, particles=150, max_iterations=4, target_ess=300,
-                     init_candidates=4, seed=1)  # fmt: skip
+    method = ExactBH(threads=2, sampler=sampler, particles=150, max_iterations=4,
+                     target_ess=300, init_candidates=4, chains=32, steps=6, seed=1)  # fmt: skip
     lik = method.likelihood(sim, obs, cohorts)
     theta, w, diag = method.run(lik)
-    assert sim.theta_dim == 2 and diag["ess"] > 100 and diag["pareto_k"] < 1.0
+    assert sim.theta_dim == 2 and diag["sampler"] == sampler
+    if sampler == "amis":
+        assert diag["ess"] > 100 and diag["pareto_k"] < 1.0
+    else:
+        assert diag["reliable"] and diag["ess"] >= 300 and diag["smc"]["max_nested_rhat"] <= 1.01
     # brute force on a u-grid covering +-7 sd of the particles
     u = lik.u_from_theta(theta)
     mu = w @ u
@@ -282,11 +321,14 @@ def test_pipeline_run_writes_standard_artifacts(tmp_path):
         "data.simulator.model.lifetime_shape=2", "data.simulator.reference.A.mean_lifetime=12",
         "data.simulator.reference.B.mean_lifetime=18",
         "design.clones=12", "design.horizons=[20,36]",
-        "inference.method.particles=24", "inference.method.max_iterations=2",
+        "inference.method.chains=8", "inference.method.steps=3",
+        "inference.method.min_final_steps=4", "inference.method.check_every=2",
+        "inference.method.max_evals=200", "inference.method.target_ess=50",
         "inference.method.init_candidates=2", "inference.method.opt_maxiter=4",
         "inference.sbc_cases=2", "inference.method.sbc.particles=16",
         "inference.method.sbc.max_iterations=1", "inference.method.sbc.opt_maxiter=2",
-        "inference.method.sbc.init_candidates=1",
+        "inference.method.sbc.init_candidates=1", "inference.method.sbc.chains=4",
+        "inference.method.sbc.steps=2", "inference.method.sbc.max_evals=40",
         "budget.ppc_samples=5", "budget.sbc_samples=10",
     )  # fmt: skip
     out = tmp_path / "exact"
@@ -299,7 +341,9 @@ def test_pipeline_run_writes_standard_artifacts(tmp_path):
     assert saved["inference"] == "exact_bh" and saved["posterior_support_mass"] == 1.0
     assert saved["posterior_samples_drawn"] == 40
     d = saved["exact_bh"]
-    assert d["sampler"] == "amis" and d["particles"] == 48 and "A.mean_lifetime" in d["weighted_sd"]
+    assert d["sampler"] == "smc" and d["smc"]["evals"] <= 200
+    assert "A.mean_lifetime" in d["weighted_sd"] and "A.mean_lifetime" in d["quantiles"]
+    assert set(d["smc"]["ess_bulk"]) == set(build_components(cfg).simulator.space.theta_names)
     assert d["grid_check"][0]["max_rel_error"] < 1e-5
     cal = saved["calibration"]
     assert cal["cases"] + cal["invalid_cases"] + cal["excluded_leakage"] == 2

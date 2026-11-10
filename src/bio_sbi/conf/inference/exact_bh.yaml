@@ -1,53 +1,95 @@
 # Exact-likelihood Bayesian inference for the two-type Bellman-Harris model: method of
 # stages (integer lifetime shape) + 2-D FFT for the law of the raw endpoint counts, same
-# theta coordinates and prior as NPE (incl. log mean lifetimes). Posterior by
-# Laplace-initialised adaptive multiple importance sampling (AMIS), O(10^2-10^3)
-# likelihood evaluations (each costs seconds). No training: budget.simulations /
-# max_epochs are unused. Supports simulator=bellman_harris (no density dependence),
-# integer lifetime_shape, two types (two_type, reversible_ab, any fixed entries), fixed
-# founder rows, homogeneous law, two labels (any capture / 2x2 confusion), selection
-# detected or all; anything else raises ValueError (non-integer shape: NotImplementedError).
+# theta coordinates and prior as NPE (incl. log mean lifetimes). Posterior by adaptive
+# tempered SMC (default; Laplace-started, waste-free, RW + independence MH moves, final
+# chains run to ESS / nested R-hat targets) or Laplace-initialised AMIS (sampler=amis).
+# No training: budget.simulations / max_epochs are unused. Supports
+# simulator=bellman_harris (no density dependence), integer lifetime_shape, two types
+# (two_type, reversible_ab, any fixed entries), fixed founder rows, homogeneous law, two
+# labels (any capture / 2x2 confusion), selection detected or all; anything else raises
+# ValueError (non-integer shape: NotImplementedError).
 #   bio-sbi inference=exact_bh simulator=bellman_harris law=reversible_ab design=real_like
 name: exact_bh
-# SBC cases (one full optimisation + AMIS run each: ~0.5-2 h per case at the real-like
-# design on 2 threads). null = use budget.sbc_cases; 0 = skip SBC.
+# SBC cases (one full sampler run each, cheaper settings under method.sbc).
+# null = use budget.sbc_cases; 0 = skip SBC.
 sbc_cases: 0
 method:
   _target_: bio_sbi.inference.ExactBH
-  threads: 2                   # grid split within one evaluation; particles in parallel
-  dt: 1.0                      # fixed Runge-Kutta step (hours); 2.0 halves the cost (~2e-13 error)
+  threads: 2                   # threads per run: particles / chains evaluated in parallel
+                               #   (one per thread; small batches split the grid instead)
+  dt: 2.0                      # fixed Runge-Kutta step (hours); log-likelihood error < 1e-7
+                               #   nats vs dt=1 at posterior draws (real-like)
   integrator: dop853           # dop853 (8th order) | rk4 (needs dt ~0.06 h for the same accuracy)
+  sampler: smc                 # smc | amis (legacy: unreliable weights at 9-12 parameters)
+  # ---- start: optimisation + Laplace approximation (also the SMC reference distribution)
   init_candidates: 32          # prior draws evaluated (in parallel) to pick the optimisation starts
   opt_starts: 2                # optimisations from the best candidates (multimodality check)
   opt_maxiter: 40              # Levenberg-Marquardt steps (1 gradient each, ~11 evals; stops when converged)
   opt_tol: 1.0e-3              # stop when the Newton decrement (predicted gain) < tol
   mode_tolerance: 20           # optima > 20 nats below the best are dropped; distinct others
-                               #   become components of the first proposal
+                               #   become mixture components
   laplace_max_var: 4.0         # variance cap of the Laplace covariance in u = logit coordinates
+  df: 5                        # t degrees of freedom (Laplace mixture, IMH / AMIS proposals)
+  # ---- smc (sampler=smc): tempering gamma_beta ~ q^(1-beta) posterior^beta, beta 0 -> 1,
+  # then the chains run on at beta = 1 (adaptive Metropolis) until the stopping rule holds
+  start: laplace               # laplace (q = Laplace t mixture, scale x start_inflate; needs
+                               #   the optimisation) | prior (likelihood tempering, no gradients)
+  start_inflate: 2.0
+  coords: probit               # start=prior only: probit (Gaussian tails) | logit coordinates
+  chains: 64                   # MH chains (one batch of `chains` evaluations per MH step;
+                               #   use a multiple of threads)
+  steps: 8                     # states per chain and tempering stage: population = chains x steps
+  ess_fraction: 0.5            # next beta keeps the ESS of the incremental weights at this fraction
+  rw_acceptance: 0.3           # random-walk scale tuned towards this acceptance
+  imh_prob: 0.5                # share of independence (t fitted to the population) proposals;
+  imh_min: 0.05                #   adapted to 2 x its acceptance, within [imh_min, imh_prob]
+  imh_scale: 1.2
+  imh_components: 1            # >1: Gaussian-mixture fit (BIC) for the independence proposal
+  de_prob: 0.0                 # share of differential-evolution moves (population differences)
+  rw_scale_sd: 0.0             # log-normal jitter of the random-walk scale
+  # final stage (beta = 1): stop when min bulk ESS >= target_ess, min tail ESS >=
+  # tail_fraction x target_ess and max nested R-hat <= max_rhat (all theta coordinates;
+  # superchains = contiguous groups of chains, i.e. different strata of the population)
+  target_ess: 400              # (amis: PSIS ESS target)
+  tail_fraction: 0.5
+  max_rhat: 1.01
+  superchains: 4
+  final_burn: 0.25             # first fraction of the final chains discarded (output and checks)
+  adapt_final: true            # refit RW covariance / scale and IMH proposal from the chains
+  adapt_final_steps: 1000      #   at every check until this chain length
+  min_final_steps: 16          # final chains: at least this long, checked every check_every steps
+  check_every: 8
+  max_final_steps: 5000
+  max_evals: 40000             # SMC evaluation budget (tempering + final chains, not the
+                               #   optimisation); at the budget the run stops and metrics say
+                               #   whether the targets were met (exact_bh.reliable)
+  islands: 0                   # >0: instead, independent tempered SMC runs ("islands", each
+  max_islands: 8               #   ending with final_steps MH steps) pooled until the targets
+  final_steps: 16              #   hold with one superchain per island (no long final chains)
+  # ---- amis (sampler=amis)
   inflate: 1.0                 # first proposal = t(df) with scale inflate^2 * Laplace covariance
-                               #   (t5 sd is already 1.29x; inflation costs ~inflate^d in ESS)
-  df: 5                        # t proposal degrees of freedom
-  defensive_weight: 0.0        # first proposal: wider copy of every Laplace component (weight;
-                               #   0 = off: on the tiny validation design it cost ESS)
-  defensive_scale: 2.0         #   and its scale factor (bounds the weights in skewed tails)
+  defensive_weight: 0.0        # first proposal: wider copy of every Laplace component (weight)
+  defensive_scale: 2.0         #   and its scale factor
   particles: 200               # likelihood evaluations per AMIS iteration
   max_iterations: 6            # AMIS iterations (evaluation budget = particles x max_iterations)
-  target_ess: 300              # stop early once the (PSIS) ESS reaches this with Pareto k <= 0.7
   psis: true                   # Pareto-smoothed importance weights (PSIS)
   mh_steps: 0                  # resample-move: random-walk MH steps on `particles` resampled draws
-                               #   (particles evaluations per step; output = moved draws)
+  # ---- likelihood
   floor: 1.0e-15               # probability floor of the likelihood
   min_detection: 1.0e-6        # floor of P(detected) in the conditioning (as exact_gw)
   grid:                        # one FFT grid for all horizons, from the largest A and B counts
-    factor: 1.25               # L = next_fast_len(max(min_size, factor * max_count + margin))
-    margin: 32
-    min_size: 32
-    damping: 1.0e+4            # evaluation radius: round-off amplification <= damping; aliasing <~3e-3
+    factor: 1.1                # L = next_fast_len(max(min_size, factor * max_count + margin));
+    margin: 16                 #   1.1 / 16: max |log-lik error| 5e-6 nats at real-like posterior
+    min_size: 32               #   draws, 0.7x the cost of 1.25 / 32
+    damping: 1.0e+4            # evaluation radius: round-off amplification <= damping
     max_points: 2.0e+6         # Lx * Ly cap (cost) for the reference data
   sbc:                         # sampler settings of each SBC case (cheaper than the reference fit)
     init_candidates: 8
     opt_starts: 1
     opt_maxiter: 15
+    chains: 32
+    steps: 6
+    max_evals: 4000
     particles: 100
     max_iterations: 3
     target_ess: 100

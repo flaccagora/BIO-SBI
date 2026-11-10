@@ -62,13 +62,14 @@ from typing import Any
 
 import numpy as np
 from scipy.linalg import solve_triangular
-from scipy.special import expit, gammaln, log_expit, logsumexp
+from scipy.special import betaln, expit, gammaln, log_expit, log_ndtr, logsumexp, ndtri
 
 from ..rng import rng_for
 from .base import InferenceMethod
 from .bh_exact import BHModel, check_shapes, detection_and_grad, law_and_jac
 from .exact_gw import ExactPosterior, GridTooLarge
 from .gw_exact import GridSpec, grid_spec, histogram
+from .smc import psis, smc_islands, tempered_smc
 
 LOG = logging.getLogger(__name__)
 
@@ -334,11 +335,50 @@ class BHLikelihood:
         return ll + prior, gu, 0.5 * (curv + curv.T)
 
     def log_posterior_batch(self, U: np.ndarray) -> np.ndarray:
-        """Log posterior of every row of ``U``: one particle per thread."""
+        """Log posterior of every row of ``U``: one particle per thread.
+
+        Batches smaller than ``threads`` give each particle ``threads // len(U)`` threads
+        (grid split; one particle alone uses all of them).
+        """
         U = np.atleast_2d(U)
         if self._pool is None or len(U) == 1:
             return np.array([self.log_posterior_u(u) for u in U])
-        return np.array(list(self._pool.map(lambda u: self.log_posterior_u(u, workers=1), U)))
+        per = self.threads // len(U)
+        if per <= 1:
+            return np.array(list(self._pool.map(lambda u: self.log_posterior_u(u, workers=1),
+                                                U)))  # fmt: skip
+        return np.array(list(self._pool.map(lambda u: self._lane_eval(u, per), U)))
+
+    def _lane_eval(self, u: np.ndarray, workers: int) -> float:
+        """One particle on its own ``workers``-thread pool (no nesting in ``_pool``)."""
+        with ThreadPoolExecutor(workers) as inner:
+            return self._log_posterior_with_pool(np.asarray(u, dtype=float), workers, inner)
+
+    def _log_posterior_with_pool(self, u, workers, pool) -> float:
+        t0 = time.perf_counter()
+        P, means, _ = self.parameters(self.theta_from_u(u))
+        if not (np.all(np.isfinite(P)) and np.all(np.isfinite(means))):
+            return -np.inf
+        p, _ = law_and_jac(self.model, P, means, self.horizons, self.grid, workers=workers,
+                           pool=pool)  # fmt: skip
+        ll = self._loglik_from_law(p, P, means)
+        with self._lock:
+            self.evals += 1
+            self.eval_seconds += time.perf_counter() - t0
+        prior = float(self.prior_a @ log_expit(u) + self.prior_b @ log_expit(-u))
+        return ll + prior if np.isfinite(ll) else -np.inf
+
+    def _loglik_from_law(self, p, P, means) -> float:
+        if self.model.detected:
+            q, _ = detection_and_grad(self.model, P, means, self.horizons)
+        total = 0.0
+        for d in self.data:
+            pc = p[d.index, d.a, d.b]
+            total += float(d.weight @ np.log(np.where(pc > self.floor, pc, self.floor)))
+            if self.model.detected:
+                qh = float(q[d.index])
+                total -= d.clones * math.log(max(qh, self.min_detection))
+        return total
 
     @property
     def seconds_per_eval(self) -> float:
@@ -403,53 +443,6 @@ def kish_ess(log_w: np.ndarray) -> float:
         return 0.0
     w = np.exp(lw - lw.max())
     return float(w.sum() ** 2 / (w**2).sum())
-
-
-def _gpd_fit(x: np.ndarray) -> tuple[float, float]:
-    """Shape ``k`` and scale of a generalised Pareto fit (Zhang & Stephens 2009, weak prior as PSIS)."""
-    x = np.sort(x)
-    n = len(x)
-    m = 30 + int(math.sqrt(n))
-    b = 1 - np.sqrt(m / (np.arange(1, m + 1) - 0.5))
-    b /= 3 * x[int(n / 4 + 0.5) - 1]
-    b += 1 / x[-1]
-    k = np.log1p(-b[:, None] * x).mean(axis=1)
-    ls = n * (np.log(-(b / k)) - k - 1)
-    w = 1 / np.exp(ls - ls[:, None]).sum(axis=1)
-    keep = w >= 10 * np.finfo(float).eps
-    w, b = w[keep] / w[keep].sum(), b[keep]
-    b_post = float((b * w).sum())
-    k_post = float(np.log1p(-b_post * x).mean())
-    sigma = -k_post / b_post
-    return (n * k_post + 10 * 0.5) / (n + 10), sigma  # weakly informative prior towards 0.5
-
-
-def psis(log_w: np.ndarray) -> tuple[np.ndarray, float]:
-    """Pareto-smoothed log weights and the Pareto ``k`` of the weight tail.
-
-    PSIS (Vehtari, Simpson, Gelman, Yao & Gabry 2024): the largest
-    ``M = min(n / 5, 3 sqrt(n))`` weights are replaced by quantiles of a generalised
-    Pareto fit to them (capped at the largest raw weight). ``k < 0.5`` good,
-    ``0.5-0.7`` acceptable, ``> 0.7`` the weights are unreliable.
-    """
-    lw = np.asarray(log_w, float).copy()
-    finite = np.isfinite(lw)
-    n = int(finite.sum())
-    tail = int(min(n / 5, 3 * math.sqrt(n)))
-    if tail < 5:
-        return lw, float("nan")
-    idx = np.flatnonzero(finite)[np.argsort(lw[finite])]
-    top = lw[idx[-1]]
-    cutoff = math.exp(lw[idx[-tail - 1]] - top)
-    x = np.exp(lw[idx[-tail:]] - top) - cutoff
-    if np.all(x <= 0):
-        return lw, float("-inf")
-    k, sigma = _gpd_fit(np.maximum(x, 1e-300))
-    if np.isfinite(k) and sigma > 0:
-        p = (np.arange(1, tail + 1) - 0.5) / tail
-        q = sigma / k * ((1 - p) ** -k - 1) if abs(k) > 1e-12 else -sigma * np.log1p(-p)
-        lw[idx[-tail:]] = np.log(np.minimum(cutoff + q, 1.0)) + top
-    return lw, float(k)
 
 
 def pareto_k(log_w: np.ndarray) -> float:
@@ -567,7 +560,7 @@ class ExactBH(InferenceMethod):
     def __init__(
         self,
         threads: int = 2,
-        dt: float = 1.0,
+        dt: float = 2.0,
         integrator: str = "dop853",
         init_candidates: int = 32,
         opt_starts: int = 2,
@@ -581,9 +574,36 @@ class ExactBH(InferenceMethod):
         df: float = 5.0,
         particles: int = 200,
         max_iterations: int = 6,
-        target_ess: float = 300.0,
+        target_ess: float = 400.0,
         psis: bool = True,
         mh_steps: int = 0,
+        sampler: str = "smc",
+        start: str = "laplace",
+        coords: str = "probit",
+        start_inflate: float = 2.0,
+        chains: int = 64,
+        steps: int = 8,
+        ess_fraction: float = 0.5,
+        rw_acceptance: float = 0.3,
+        imh_prob: float = 0.5,
+        imh_min: float = 0.05,
+        imh_scale: float = 1.2,
+        imh_components: int = 1,
+        de_prob: float = 0.0,
+        rw_scale_sd: float = 0.0,
+        max_rhat: float = 1.01,
+        tail_fraction: float = 0.5,
+        superchains: int = 4,
+        islands: int = 0,
+        max_islands: int = 8,
+        final_steps: int = 16,
+        min_final_steps: int = 16,
+        max_final_steps: int = 5000,
+        final_burn: float = 0.25,
+        adapt_final: bool = True,
+        adapt_final_steps: int = 1000,
+        check_every: int = 8,
+        max_evals: int = 40000,
         grid: dict | None = None,
         floor: float = 1e-15,
         min_detection: float = 1e-6,
@@ -607,7 +627,23 @@ class ExactBH(InferenceMethod):
             "inflate": float(inflate), "df": float(df), "particles": int(particles),
             "max_iterations": int(max_iterations), "target_ess": float(target_ess),
             "psis": bool(psis), "mh_steps": int(mh_steps),
+            "sampler": str(sampler), "start": str(start), "coords": str(coords), "start_inflate": float(start_inflate),
+            "chains": int(chains), "steps": int(steps), "ess_fraction": float(ess_fraction),
+            "rw_acceptance": float(rw_acceptance), "imh_prob": float(imh_prob),
+            "imh_min": float(imh_min),
+            "imh_scale": float(imh_scale), "imh_components": int(imh_components),
+            "de_prob": float(de_prob), "rw_scale_sd": float(rw_scale_sd),
+            "max_rhat": float(max_rhat),
+            "tail_fraction": float(tail_fraction), "superchains": int(superchains),
+            "islands": int(islands), "max_islands": int(max_islands),
+            "final_steps": int(final_steps),
+            "min_final_steps": int(min_final_steps), "max_final_steps": int(max_final_steps),
+            "final_burn": float(final_burn), "adapt_final": bool(adapt_final),
+            "adapt_final_steps": int(adapt_final_steps),
+            "check_every": int(check_every), "max_evals": int(max_evals),
         }  # fmt: skip
+        if start not in ("laplace", "prior"):
+            raise ValueError(f"exact_bh: unknown start {start!r} (laplace | prior)")
         self.grid = dict(grid or {})
         self.floor = float(floor)
         self.min_detection = float(min_detection)
@@ -701,6 +737,143 @@ class ExactBH(InferenceMethod):
                 "unique_final": int(len(np.unique(cur, axis=0)))}  # fmt: skip
         return cur, np.full(n, 1.0 / n), info
 
+    def _run_smc(self, lik: BHLikelihood, s: dict, rng, name: str, ref: MixtureT | None,
+                 optima: list, t0: float, t_init: float, t_opt: float, init_best: float
+                 ) -> tuple[np.ndarray, np.ndarray, dict]:  # fmt: skip
+        """Tempered SMC from ``ref`` (Laplace mixture) or, for ``ref=None``, the prior."""
+        logpost, to_u = lik.log_posterior_batch, None
+        if ref is None and s["coords"] == "probit":
+            # v = probit(unit-scaled theta): posteriors piling up at a boundary of a stick
+            # (e.g. a probability ~0 the data allow) have Gaussian, not exponential, tails
+            a, b = lik.prior_a, lik.prior_b
+            log_norm = float(betaln(a, b).sum())
+
+            def to_u(V):
+                V = np.atleast_2d(V)
+                return log_ndtr(V) - log_ndtr(-V)
+
+            def log_jac(V):  # log |du/dv|
+                return (-0.5 * V**2 - 0.5 * math.log(2 * math.pi) - log_ndtr(V)
+                        - log_ndtr(-V)).sum(axis=1)  # fmt: skip
+
+            def logpost(V):
+                V = np.atleast_2d(V)
+                return lik.log_posterior_batch(to_u(V)) + log_jac(V)
+
+            def ref_sample(r, n):
+                return ndtri(np.clip(r.beta(a, b, size=(n, lik.dim)), 1e-15, 1 - 1e-15))
+
+            def ref_logpdf(V):
+                V = np.atleast_2d(V)
+                return (log_ndtr(V) @ (a - 1) + log_ndtr(-V) @ (b - 1) - log_norm
+                        + (-0.5 * V**2 - 0.5 * math.log(2 * math.pi)).sum(axis=1))  # fmt: skip
+        elif ref is None:
+            a, b = lik.prior_a, lik.prior_b
+            log_norm = float(betaln(a, b).sum())
+
+            def ref_sample(r, n):
+                v = np.clip(r.beta(a, b, size=(n, lik.dim)), 1e-12, 1 - 1e-12)
+                return np.log(v) - np.log1p(-v)
+
+            def ref_logpdf(U):
+                U = np.atleast_2d(U)
+                return log_expit(U) @ a + log_expit(-U) @ b - log_norm
+        else:
+
+            def ref_sample(r, n):
+                return np.clip(ref.sample(r, n), -30, 30)
+
+            ref_logpdf = ref.logpdf
+        t2 = time.perf_counter()
+        common = {
+            "chains": s["chains"], "steps": s["steps"], "ess_fraction": s["ess_fraction"],
+            "rw_acceptance": s["rw_acceptance"], "imh_prob": s["imh_prob"],
+            "imh_min": s["imh_min"], "imh_scale": s["imh_scale"],
+            "imh_components": s["imh_components"], "df": s["df"],
+            "de_prob": s["de_prob"], "rw_scale_sd": s["rw_scale_sd"],
+        }  # fmt: skip
+        if s["islands"] > 0:
+            res = smc_islands(
+                logpost, ref_sample, ref_logpdf, rng, islands=s["islands"],
+                max_islands=s["max_islands"], final_steps=s["final_steps"],
+                target_ess=s["target_ess"], max_rhat=s["max_rhat"],
+                tail_fraction=s["tail_fraction"], max_evals=s["max_evals"], name=name,
+                **common,
+            )  # fmt: skip
+        else:
+            res = tempered_smc(
+                logpost, ref_sample, ref_logpdf, rng, **common,
+                target_ess=s["target_ess"], max_rhat=s["max_rhat"],
+                tail_fraction=s["tail_fraction"], superchains=s["superchains"],
+                min_final_steps=s["min_final_steps"], max_final_steps=s["max_final_steps"],
+                final_burn=s["final_burn"], adapt_final=s["adapt_final"],
+                adapt_final_steps=s["adapt_final_steps"], check_every=s["check_every"], max_evals=s["max_evals"], name=name,
+            )  # fmt: skip
+        smc_seconds = time.perf_counter() - t2
+        self.last_smc, self.last_to_u = res, to_u  # final-stage chains (inspection)
+        info = res.info
+        u = res.draws if to_u is None else to_u(res.draws)
+        w = np.full(len(u), 1.0 / len(u))
+        theta = lik.theta_from_u(u)
+        physical = lik.space.decode(theta)
+        free = [i for i, n in enumerate(lik.space.names) if n in set(lik.space.free_names)]
+        mean = w @ physical
+        sd = np.sqrt(np.maximum(w @ (physical - mean) ** 2, 0))
+        coords = list(lik.space.theta_names)
+        per_coord = {k: dict(zip(coords, map(float, info[k]), strict=True))
+                     for k in ("nested_rhat", "rhat", "ess_bulk", "ess_tail")}  # fmt: skip
+        best_opt = max(optima, key=lambda o: o["log_posterior"]) if optima else None
+        reliable = bool(info["reached_posterior"] and info["min_ess_bulk"] >= s["target_ess"]
+                        and info["max_nested_rhat"] <= s["max_rhat"]
+                        and info["min_ess_tail"] >= s["tail_fraction"] * s["target_ess"])  # fmt: skip
+        diag = {
+            "sampler": "smc",
+            "settings": s,
+            "dt": lik.model.dt,
+            "integrator": lik.model.integrator,
+            "threads": lik.threads,
+            "particles": int(len(u)),
+            "iterations": int(np.sum(info["stages"])),
+            # ``ess`` = smallest bulk ESS over the theta coordinates (MCMC estimate over the
+            # final-stage chains); ``pareto_k`` = largest PSIS k of the incremental
+            # tempering weights over the stages (information only: moves correct them)
+            "ess": float(info["min_ess_bulk"]),
+            "ess_tail": float(info["min_ess_tail"]),
+            "pareto_k": float(np.nanmax([g["pareto_k"] for g in _flat(info["stage_diagnostics"])]
+                                        + [-np.inf])),
+            "reliable": reliable,
+            "smc": {**{k: v for k, v in info.items()
+                       if k not in ("nested_rhat", "rhat", "ess_bulk", "ess_tail")},
+                    **per_coord},
+            "weighted_mean": {lik.space.names[i]: float(mean[i]) for i in free},
+            "weighted_sd": {lik.space.names[i]: float(sd[i]) for i in free},
+            "quantiles": {lik.space.names[i]: np.quantile(physical[:, i], [0.05, 0.25, 0.5,
+                                                                           0.75, 0.95]).tolist()
+                          for i in free},
+            "finite_fraction": float(np.isfinite(res.log_post).mean()),
+            "modes": len(ref.logpi) if ref is not None else 0,
+            "optima_log_posterior": [o["log_posterior"] for o in optima],
+            "optima_status": [o["status"] for o in optima],
+            "optimisation_traces": [o["trace"] for o in optima],
+            "mode_theta": lik.theta_from_u(best_opt["u"]).tolist() if best_opt else None,
+            "mode_log_posterior": best_opt["log_posterior"] if best_opt else None,
+            "laplace_sd_u": np.sqrt(np.diag(_floored_inverse(
+                best_opt["curvature"], s["laplace_max_var"]))).tolist() if best_opt else None,
+            "init_best_log_posterior": init_best,
+            "init_seconds": t_init,
+            "optimisation_seconds": t_opt,
+            "smc_seconds": smc_seconds,
+            "seconds": time.perf_counter() - t0,
+            "likelihood_evals": lik.evals,
+            "gradient_evals": lik.grad_evals,
+            "seconds_per_eval": lik.seconds_per_eval,
+            "seconds_per_gradient": lik.grad_seconds / lik.grad_evals if lik.grad_evals else None,
+            "grid": {"Lx": lik.grid.Lx, "Ly": lik.grid.Ly, "rx": lik.grid.rx, "ry": lik.grid.ry},
+            "horizons": lik.horizons,
+            "clones": [c.clones for c in lik.data],
+        }  # fmt: skip
+        return theta, w, diag
+
     def run(self, lik: BHLikelihood, key=("reference",), **overrides
             ) -> tuple[np.ndarray, np.ndarray, dict]:  # fmt: skip
         """Sample the posterior of ``lik``; returns ``(theta particles, weights, diagnostics)``."""
@@ -709,6 +882,10 @@ class ExactBH(InferenceMethod):
         rng = rng_for(self.seed, "exact-bh", *key)
         t0 = time.perf_counter()
         d = lik.dim
+        if s["sampler"] not in ("smc", "amis"):
+            raise ValueError(f"exact_bh: unknown sampler {s['sampler']!r} (smc | amis)")
+        if s["sampler"] == "smc" and s["start"] == "prior":
+            return self._run_smc(lik, s, rng, name, None, [], t0, 0.0, 0.0, float("nan"))
         # 1. starts: prior centre + prior draws, best few
         cand = rng.beta(lik.prior_a, lik.prior_b, size=(s["init_candidates"], d))
         cand = np.clip(cand, 1e-3, 1 - 1e-3)
@@ -746,6 +923,10 @@ class ExactBH(InferenceMethod):
         LOG.info("%s: %d optimisations (%.0fs): log posteriors %s (%s); %d mode(s)", name,
                  len(optima), t_opt, [round(o["log_posterior"], 2) for o in optima],
                  [o["status"] for o in optima], len(comps))  # fmt: skip
+        if s["sampler"] == "smc":
+            ref = MixtureT(means, chols * s["start_inflate"], logpi, s["df"])
+            return self._run_smc(lik, s, rng, name, ref, optima, t0, t_init, t_opt,
+                                 float(lp0.max()))  # fmt: skip
         # 4. AMIS with mixture-of-t proposals (deterministic-mixture weights)
         proposals, X, LP, ess_trace, k_trace = [], [], [], [], []
         t2 = time.perf_counter()
@@ -842,10 +1023,19 @@ class ExactBH(InferenceMethod):
                 LOG.warning("exact_bh grid check (horizon %g): tail mass %.2g, max relative "
                             "error %.2g on observed cells; raise inference.method.grid.factor",
                             g["horizon"], g["tail_mass"], g["max_rel_error"])  # fmt: skip
-        LOG.info("exact_bh: %d particles in %.1fs (%.2fs/eval, %s s/gradient), ESS %.1f, "
-                 "Pareto k %.2f", diag["particles"], diag["seconds"], diag["seconds_per_eval"],
+        LOG.info("exact_bh (%s): %d particles in %.1fs (%d evaluations, %.2fs/eval, %s "
+                 "s/gradient), ESS %.1f, Pareto k %.2f", diag["sampler"], diag["particles"],
+                 diag["seconds"], diag["likelihood_evals"], diag["seconds_per_eval"],
                  diag["seconds_per_gradient"], diag["ess"], diag["pareto_k"])  # fmt: skip
-        if diag["pareto_k"] > 0.7 or diag["ess"] < 0.25 * self.settings["target_ess"]:
+        if diag["sampler"] == "smc":
+            if not diag["reliable"]:
+                m = diag["smc"]
+                LOG.warning("exact_bh: SMC diagnostics fail (reached beta=1: %s, min ESS bulk "
+                            "%.0f / tail %.0f, nested R-hat %.3f; status %s); raise "
+                            "inference.method.max_evals", m["reached_posterior"],
+                            m["min_ess_bulk"], m["min_ess_tail"], m["max_nested_rhat"],
+                            m["status"])  # fmt: skip
+        elif diag["pareto_k"] > 0.7 or diag["ess"] < 0.25 * self.settings["target_ess"]:
             LOG.warning("exact_bh: importance weights unreliable (ESS %.1f, Pareto k %.2f); "
                         "increase inference.method.particles / max_iterations",
                         diag["ess"], diag["pareto_k"])  # fmt: skip
@@ -867,7 +1057,7 @@ class ExactBH(InferenceMethod):
         keeps ranks uniform). Ranks count resampled draws below the truth.
         """
         opts = {"init_candidates": 8, "opt_starts": 1, "opt_maxiter": 15, "particles": 100,
-                "max_iterations": 3,
+                "max_iterations": 3, "chains": 32, "steps": 6, "max_evals": 4000,
                 "target_ess": 100, **self.sbc}  # fmt: skip
         max_points = float(opts.pop("max_points", 1e5))
         info = {"invalid_cases": 0, "excluded_grid": 0, "seconds": [], "ess": [],
@@ -896,6 +1086,14 @@ class ExactBH(InferenceMethod):
             LOG.info("SBC case %d: %.1fs, ESS %.1f", i, diag["seconds"], diag["ess"])
         info["draws_per_case"] = n_draws
         return np.asarray(ranks, dtype=float).reshape(-1, theta.shape[1]), info
+
+
+def _flat(items: list) -> list:
+    """Flatten one level of nesting (per-island lists of stage records)."""
+    out = []
+    for x in items:
+        out.extend(x if isinstance(x, list) else [x])
+    return out
 
 
 def _weighted_median(theta: np.ndarray, w: np.ndarray) -> np.ndarray:
