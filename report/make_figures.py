@@ -2381,16 +2381,17 @@ def fig_exact_speed():
                  100 * mh1))
     meth.append(("exact GW, NUTS as run\n(exact_gw, real-like)", min(gwm), max(gwm),
                  100 * min(gwm), 100 * max(gwm)))
-    # exact BH: tempered SMC + adaptive chains (results/exact_bh/smc_check_rev0_c, real-like
-    # seed 0, 16 threads): measured wall seconds per likelihood evaluation, scaled to the
-    # ~1e5 evaluations a converged real-like posterior needs (that run stopped at 40k,
-    # not converged). The AMIS budget (1000-1300 evals) gave unreliable weights.
-    smc = json.loads((RES / "exact_bh" / "smc_check_rev0_c" / "metrics.json").read_text())
-    smc = smc["exact_bh"]
-    per = smc["seconds"] / smc["likelihood_evals"]
-    lo, hi = 0.92 * 1e5 * per, 1.05 * 1e5 * per
-    meth.append(("exact BH, SMC + MCMC\n(~1e5 evals, 16 thr.)", lo, hi, 100 * lo,
-                 100 * hi))
+    # exact BH: tempered SMC + adaptive chains, real-like seed 0, 16 threads, as measured.
+    # results/exact_bh/real_like_rev0_stable: ridge reparametrisation (stable+probit),
+    # converged (reliable) after ~3e4 evaluations; results/exact_bh/converged_rev0: no
+    # reparametrisation, stopped at its 3e5-evaluation budget, not converged (lower bound).
+    for run, lab in (("real_like_rev0_stable",
+                      "exact BH, SMC as run,\nridge reparam. (converged)"),
+                     ("converged_rev0",
+                      "exact BH, SMC as run,\nno reparam. (not converged)")):
+        m = json.loads((RES / "exact_bh" / run / "metrics.json").read_text())
+        sec = m["total_seconds"]
+        meth.append((lab, sec, sec, 100 * sec, 100 * sec))
     for b, lab in (("dev", "NPE dev (5k sims)"), ("full", "NPE full (50k sims)")):
         u = npe[npe.budget == b]
         lo1, hi1 = (u.pipeline_total + samp[u.index]).min(), (u.pipeline_total + samp[u.index]).max()
@@ -2409,7 +2410,7 @@ def fig_exact_speed():
                          hi_1=hi1, lo_100=lo100, hi_100=hi100))
     ax.set_xscale("log")
     ax.set_yticks(y, [m[0] for m in meth], fontsize=5.9)
-    ax.set_xlim(3, 3e6)
+    ax.set_xlim(3, 3e7)
     for sec, lab in ((60, "1 min"), (3600, "1 h"), (86400, "1 day")):
         ax.axvline(sec, color=AXIS, lw=0.6, ls=":", zorder=1)
         ax.text(sec * 1.15, len(meth) - 0.42, lab, fontsize=5.8, color=INK2, ha="left")
