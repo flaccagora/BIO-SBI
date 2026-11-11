@@ -394,7 +394,20 @@ for each parameter?
       To meet the targets at real-like expect ~100k evaluations (~3.5–4 h at 16 threads
       for reversible_ab; two_type and the 512-clone ridge more).
       Ideas if the cost matters: HMC with the population metric (a gradient costs
-      8.4 evaluations), a reparametrisation along the ridge, dt = 4 h (< 4e-6 nats).
+      8.4 evaluations), dt = 4 h (< 4e-6 nats).
+      **Ridge reparametrisation** (branch `exact-bh-ridge`, `inference.method.reparam`,
+      default `none`; README): `stable` shears both log lifetimes onto the surface of
+      constant Malthusian parameter and stable B:A ratio (mode values; unit Jacobian,
+      prior / posterior unchanged, tests), `+probit` adds probit sticks. The random walk
+      alone is near its Gaussian-target ceiling (~7 ESS per 1k evaluations); the gain
+      comes from the independence proposal (acceptance 0.07 -> 0.19). Validation design,
+      40k evaluations, 2 seeds: ESS per 1k evaluations 5.4 / 4.2 (`none`) -> 13.0 / 11.2
+      (`stable+probit`), means / sds within 2.2 / 2.0 se of the reference.
+      Design {120,192} h x 100 (`none` stalls like real-like): 4.1 -> 10.7. Real-like
+      seed 0 probe (t proposal on the smc_check_rev0_c draws): independence acceptance
+      0.04 -> 0.40. To do: rerun real-like seed 0 with
+      `inference.method.reparam=stable+probit` (estimate 20-50k evaluations, ~1-2 h at
+      16 threads) and compare with converged_rev0; if it agrees, make it the default.
       GPU (RTX A1000, numba.cuda): 3.3 s per real-like evaluation = 2 CPU threads: not used.
 
 ---

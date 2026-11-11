@@ -41,6 +41,14 @@ adaptive Metropolis chains run to a convergence target**
    (equal weights) are the remaining chain states. ``islands > 0`` replaces 5. by
    independent tempered runs pooled until the same targets hold across islands.
 
+Optional sampler coordinates (``reparam``, :mod:`bio_sbi.inference.bh_reparam`, needs
+``start=laplace``): after the optimisation, stages 4-5 run on ``v``, a bijection of ``u``
+anchored at the mode, with the exact log Jacobian (prior and posterior unchanged; the
+Laplace mixture is mapped to ``v``; R-hat / ESS are computed on ``u``). ``stable`` shears
+both log mean lifetimes onto the surface where the Malthusian parameter and the stable
+B:A ratio keep their values at the mode, which straightens the lifetime / self-renewal
+ridge; ``+probit`` adds probit stick coordinates (Gaussian tails at probabilities ~0).
+
 Why not importance sampling: the posterior in ``u`` has long tails (probabilities the
 data allow to be ~0) and the curved lifetime / self-renewal ridge, so Laplace or
 mixture proposals give Pareto ``k > 0.7`` (the first-look AMIS runs: ESS 12-38 of
@@ -81,6 +89,8 @@ from scipy.special import betaln, expit, gammaln, log_expit, log_ndtr, logsumexp
 from ..rng import rng_for
 from .base import InferenceMethod
 from .bh_exact import BHModel, check_shapes, detection_and_grad, law_and_jac
+from .bh_reparam import SPECS as REPARAM_SPECS
+from .bh_reparam import Reparam
 from .exact_gw import ExactPosterior, GridTooLarge
 from .gw_exact import GridSpec, grid_spec, histogram
 from .smc import psis, smc_islands, tempered_smc
@@ -562,6 +572,9 @@ class ExactBH(InferenceMethod):
             weights, each moved by this many random-walk Metropolis steps (proposal
             covariance ``2.38^2 / d`` x weighted covariance; ``particles`` evaluations per
             step). The moved draws (equal weights) are the output. 0 disables.
+        reparam: SMC sampler coordinates (:mod:`~bio_sbi.inference.bh_reparam`):
+            ``none`` (``u``), ``stable``, ``growth``, ``probit`` or ``stable+probit`` /
+            ``growth+probit``; needs ``sampler=smc`` and ``start=laplace``.
         grid: Grid options (see :class:`BHLikelihood`).
         floor, min_detection: Likelihood floors.
         sbc: Overrides of the sampler settings (and ``max_points``) for SBC cases.
@@ -594,6 +607,7 @@ class ExactBH(InferenceMethod):
         sampler: str = "smc",
         start: str = "laplace",
         coords: str = "probit",
+        reparam: str = "none",
         start_inflate: float = 2.0,
         chains: int = 64,
         steps: int = 8,
@@ -642,7 +656,8 @@ class ExactBH(InferenceMethod):
             "inflate": float(inflate), "df": float(df), "particles": int(particles),
             "max_iterations": int(max_iterations), "target_ess": float(target_ess),
             "psis": bool(psis), "mh_steps": int(mh_steps),
-            "sampler": str(sampler), "start": str(start), "coords": str(coords), "start_inflate": float(start_inflate),
+            "sampler": str(sampler), "start": str(start), "coords": str(coords),
+            "reparam": str(reparam or "none"), "start_inflate": float(start_inflate),
             "chains": int(chains), "steps": int(steps), "ess_fraction": float(ess_fraction),
             "rw_acceptance": float(rw_acceptance), "imh_prob": float(imh_prob),
             "imh_min": float(imh_min),
@@ -659,6 +674,13 @@ class ExactBH(InferenceMethod):
         }  # fmt: skip
         if start not in ("laplace", "prior"):
             raise ValueError(f"exact_bh: unknown start {start!r} (laplace | prior)")
+        if self.settings["reparam"] not in REPARAM_SPECS:
+            raise ValueError(f"exact_bh: unknown reparam {reparam!r} ({' | '.join(REPARAM_SPECS)})")
+        if self.settings["reparam"] != "none" and (start != "laplace" or sampler != "smc"):
+            raise ValueError(
+                "exact_bh: reparam needs sampler=smc and start=laplace (the "
+                "growth shear is anchored at the posterior mode)"
+            )
         self.grid = dict(grid or {})
         self.floor = float(floor)
         self.min_detection = float(min_detection)
@@ -756,7 +778,7 @@ class ExactBH(InferenceMethod):
                  optima: list, t0: float, t_init: float, t_opt: float, init_best: float
                  ) -> tuple[np.ndarray, np.ndarray, dict]:  # fmt: skip
         """Tempered SMC from ``ref`` (Laplace mixture) or, for ``ref=None``, the prior."""
-        logpost, to_u = lik.log_posterior_batch, None
+        logpost, to_u, reparam_info = lik.log_posterior_batch, None, {"spec": "none"}
         if ref is None and s["coords"] == "probit":
             # v = probit(unit-scaled theta): posteriors piling up at a boundary of a stick
             # (e.g. a probability ~0 the data allow) have Gaussian, not exponential, tails
@@ -793,12 +815,32 @@ class ExactBH(InferenceMethod):
             def ref_logpdf(U):
                 U = np.atleast_2d(U)
                 return log_expit(U) @ a + log_expit(-U) @ b - log_norm
-        else:
+        elif s["reparam"] == "none":
 
             def ref_sample(r, n):
                 return np.clip(ref.sample(r, n), -30, 30)
 
             ref_logpdf = ref.logpdf
+        else:
+            # sampler coordinates v (bh_reparam): the target and the Laplace mixture are
+            # transformed with the exact Jacobian; convergence is checked on u
+            best_u = max(optima, key=lambda o: o["log_posterior"])["u"]
+            rp = Reparam(lik, s["reparam"], anchor_u=best_u)
+            to_u = rp.to_u
+            reparam_info = rp.info()
+            LOG.info("%s: reparam %s", name, reparam_info)
+
+            def logpost(V):
+                V = np.atleast_2d(V)
+                return lik.log_posterior_batch(rp.to_u(V)) + rp.log_jac(V)
+
+            def ref_sample(r, n):
+                return rp.to_v(np.clip(ref.sample(r, n), -30, 30))
+
+            def ref_logpdf(V):
+                V = np.atleast_2d(V)
+                return ref.logpdf(rp.to_u(V)) + rp.log_jac(V)
+
         t2 = time.perf_counter()
         common = {
             "chains": s["chains"], "steps": s["steps"], "ess_fraction": s["ess_fraction"],
@@ -807,13 +849,14 @@ class ExactBH(InferenceMethod):
             "imh_components": s["imh_components"], "df": s["df"],
             "de_prob": s["de_prob"], "rw_scale_sd": s["rw_scale_sd"],
         }  # fmt: skip
+        monitor = to_u if s["reparam"] != "none" else None  # diagnostics on u
         if s["islands"] > 0:
             res = smc_islands(
                 logpost, ref_sample, ref_logpdf, rng, islands=s["islands"],
                 max_islands=s["max_islands"], final_steps=s["final_steps"],
                 target_ess=s["target_ess"], max_rhat=s["max_rhat"],
                 tail_fraction=s["tail_fraction"], max_evals=s["max_evals"], name=name,
-                **common,
+                monitor=monitor, **common,
             )  # fmt: skip
         else:
             res = tempered_smc(
@@ -824,6 +867,7 @@ class ExactBH(InferenceMethod):
                 final_burn=s["final_burn"], adapt_final=s["adapt_final"],
                 adapt_final_steps=s["adapt_final_steps"], local_k=s["local_k"],
                 check_every=s["check_every"], max_evals=s["max_evals"], name=name,
+                monitor=monitor,
             )  # fmt: skip
         smc_seconds = time.perf_counter() - t2
         self.last_smc, self.last_to_u = res, to_u  # final-stage chains (inspection)
@@ -868,6 +912,7 @@ class ExactBH(InferenceMethod):
                           for i in free},
             "finite_fraction": float(np.isfinite(res.log_post).mean()),
             "modes": len(ref.logpi) if ref is not None else 0,
+            "reparam": reparam_info,
             "optima_log_posterior": [o["log_posterior"] for o in optima],
             "optima_status": [o["status"] for o in optima],
             "optimisation_traces": [o["trace"] for o in optima],

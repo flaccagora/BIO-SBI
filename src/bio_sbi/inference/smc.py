@@ -425,6 +425,14 @@ class SMCResult:
         return self.chains.reshape(-1, self.chains.shape[-1])
 
 
+def _monitored(X: np.ndarray, monitor: Callable[[np.ndarray], np.ndarray] | None) -> np.ndarray:
+    """Chains ``(C, L, d)`` mapped row-wise by ``monitor`` (diagnostic coordinates)."""
+    if monitor is None:
+        return X
+    C, L, d = X.shape
+    return np.asarray(monitor(X.reshape(-1, d)), float).reshape(C, L, -1)
+
+
 def tempered_smc(
     logpost: Callable[[np.ndarray], np.ndarray],
     ref_sample: Callable[[np.random.Generator, int], np.ndarray],
@@ -456,6 +464,7 @@ def tempered_smc(
     check_every: int = 8,
     max_evals: int = 20000,
     max_stages: int = 100,
+    monitor: Callable[[np.ndarray], np.ndarray] | None = None,
     name: str = "smc",
 ) -> SMCResult:
     """Waste-free adaptive tempered SMC (module docstring). Returns :class:`SMCResult`.
@@ -464,7 +473,9 @@ def tempered_smc(
     the evidence estimate (only reported). ``max_evals`` counts ``logpost`` evaluations
     (including the ``chains x steps`` initial draws); stages stop early once it is hit
     (``info["status"] = "budget"``; then the output is the last population and the
-    diagnostics say whether it reached ``beta = 1``).
+    diagnostics say whether it reached ``beta = 1``). ``monitor`` maps sampler
+    coordinates to the coordinates whose R-hat / ESS are checked and reported (e.g. the
+    model coordinates when the sampler runs on a reparametrisation; default identity).
     """
     t0 = time.perf_counter()
     chains, steps = int(chains), max(int(steps), 2)
@@ -588,7 +599,7 @@ def tempered_smc(
                 # (chains, length, d) without the first final_burn of the chains (transient
                 # from the population if it is not yet exactly the posterior)
                 arr = np.stack(path_x[int(final_burn * length) :], axis=1)
-                c = convergence(arr, superchains)
+                c = convergence(_monitored(arr, monitor), superchains)
                 checks.append({"length": length, "evals": evals, **{
                     k: c[k] for k in ("max_nested_rhat", "max_rhat", "min_ess_bulk",
                                       "min_ess_tail")}})  # fmt: skip
@@ -664,7 +675,7 @@ def tempered_smc(
             break
     else:
         status = "max_stages"
-    conv = convergence(X, superchains)
+    conv = convergence(_monitored(X, monitor), superchains)
     info = {
         "status": status if beta >= 1.0 else ("budget" if status == "converged" else status),
         "reached_posterior": bool(beta >= 1.0),
@@ -699,6 +710,7 @@ def smc_islands(
     tail_fraction: float = 0.5,
     max_evals: int = 40000,
     name: str = "smc",
+    monitor: Callable[[np.ndarray], np.ndarray] | None = None,
     **smc_options,
 ) -> SMCResult:
     """Independent tempered-SMC runs ("islands") pooled, with between-island diagnostics.
@@ -726,7 +738,7 @@ def smc_islands(
             logpost, ref_sample, ref_logpdf, rng, target_ess=0.0, max_rhat=float("inf"),
             tail_fraction=0.0, min_final_steps=int(final_steps),
             max_final_steps=int(final_steps), check_every=int(final_steps), max_evals=left,
-            final_burn=0.0,
+            final_burn=0.0, monitor=monitor,
             name=f"{name}/island{i}", **smc_options,
         )  # fmt: skip
         evals += r.info["evals"]
@@ -736,7 +748,8 @@ def smc_islands(
                  r.info["status"], r.info["stages"], r.info["evals"], evals,
                  time.perf_counter() - t0)  # fmt: skip
         if len(good) >= max(int(islands), 2):
-            conv = convergence(np.concatenate([x.chains for x in good], axis=0), len(good))
+            conv = convergence(_monitored(np.concatenate([x.chains for x in good], axis=0),
+                                          monitor), len(good))  # fmt: skip
             LOG.info("%s: %d islands: nested R-hat %.4f, min ESS bulk %.0f tail %.0f", name,
                      len(good), conv["max_nested_rhat"], conv["min_ess_bulk"],
                      conv["min_ess_tail"])  # fmt: skip
@@ -754,14 +767,17 @@ def smc_islands(
             "evals": evals, "seconds": time.perf_counter() - t0})  # fmt: skip
     X = np.concatenate([x.chains for x in good], axis=0)
     LP = np.concatenate([x.log_post for x in good], axis=0)
-    d = X.shape[2]
+    Xm = _monitored(X, monitor)
+    d = Xm.shape[2]
     if len(good) >= 2:
-        conv = convergence(X, len(good))
-        means = np.array([x.chains.reshape(-1, d).mean(0) for x in good])
+        conv = convergence(Xm, len(good))
+        sizes = np.cumsum([0] + [x.chains.shape[0] for x in good])
+        means = np.array([Xm[a:b].reshape(-1, d).mean(0)
+                          for a, b in zip(sizes[:-1], sizes[1:], strict=True)])  # fmt: skip
         between = np.maximum(means.var(axis=0, ddof=1), 1e-300)
-        ess_between = (len(good) * X.reshape(-1, d).var(0) / between).tolist()
+        ess_between = (len(good) * Xm.reshape(-1, d).var(0) / between).tolist()
     else:
-        conv = convergence(X, int(smc_options.get("superchains", 4)))
+        conv = convergence(Xm, int(smc_options.get("superchains", 4)))
         ess_between = [float("nan")] * d
     info = {
         "status": status,

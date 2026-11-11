@@ -36,6 +36,14 @@ method:
                                #   the optimisation) | prior (likelihood tempering, no gradients)
   start_inflate: 2.0
   coords: probit               # start=prior only: probit (Gaussian tails) | logit coordinates
+  reparam: none                # start=laplace: sampler coordinates (bh_reparam.py; exact
+                               #   Jacobian, prior and posterior unchanged, diagnostics on u):
+                               #   none | stable: shear both log lifetimes onto the surface of
+                               #   constant Malthusian parameter and stable B:A ratio (values
+                               #   at the mode), removing the lifetime / self-renewal ridge |
+                               #   growth: A lifetime only (constant growth rate) | +probit:
+                               #   probit sticks. stable+probit: 2.5x the ESS per
+                               #   evaluation of none (2 designs, README); experimental, off
   chains: 64                   # MH chains (one batch of `chains` evaluations per MH step;
                                #   use a multiple of threads)
   steps: 8                     # states per chain and tempering stage: population = chains x steps

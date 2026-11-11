@@ -1,7 +1,10 @@
 """Exact BH likelihood of a stored reference dataset (sampler benchmarks; run from the repo root).
 
 Names: rev0 / rev3 / two0 / ridge0 = first-look AMIS runs under results/exact_bh (their
-reference.npz and .hydra config); small<seed> = {96,144} h x 64, reversible_ab (simulated).
+reference.npz and .hydra config); small<seed> = {96,144} h x 64, mid<seed> = {120,192} h
+x 100, reversible_ab (simulated).
+Reparam study (2026-11-11): run_budget.sh (fixed budget, 2 threads), summarise.py
+(ESS per 1k evaluations, z vs reference), imh_probe.py (independence acceptance).
 Validation (2026-11-10): reference_mix.py small0 <pilot> ref.npz 32 4000 16 (128k evals),
 drive.py small0 out.json max_evals=300000, compare.py small0 ref.npz out.npz.
 """
@@ -48,6 +51,9 @@ def small(seed=0, horizons="[96,144]", clones=64, law="reversible_ab"):
 def load(name, dt=2.0, threads=1, grid=None, **kw):
     if name.startswith("small"):
         cfg, comp, cohorts = small(seed=int(name[5:] or 0))
+        d = None
+    elif name.startswith("mid"):
+        cfg, comp, cohorts = small(seed=int(name[3:] or 0), horizons="[120,192]", clones=100)
         d = None
     else:
         d = glob.glob(RUNS[name])[0]

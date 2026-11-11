@@ -20,6 +20,11 @@
 # (ii) counts up to (361, 217) at 240 h (seed 0) -> grid ~410 x 260, three horizons on
 # one trajectory: ~0.2 s per evaluation at 16 threads (estimate), up to max_evals =
 # 100000 (~5-6 h; real-like reversible_ab needed > 40k evaluations, see TODO XB).
+# Experimental (branch exact-bh-ridge, not validated at this design yet; default off):
+# inference.method.reparam=stable+probit samples in coordinates that straighten the
+# lifetime / composition ridge (README): 2.5x the ESS per evaluation on the validation
+# design and on {120,192} h x 100; real-like probe: independence acceptance 0.04 -> 0.40.
+# Expected: ESS 400 after ~20-50k evaluations (~1-2 h at 16 threads) instead of > 100k.
 # 5 runs per arm. Check exact_bh.reliable (else raise inference.method.max_evals).
 defaults:
   - override /simulator: bellman_harris

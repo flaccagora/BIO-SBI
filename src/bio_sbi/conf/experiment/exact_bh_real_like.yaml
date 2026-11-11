@@ -21,6 +21,11 @@
 # (91 min) reached ESS 176 / nested R-hat 1.010 (reliable: false), so the preset allows
 # 100k (~3.5-4 h at 16 threads; two_type, 12 parameters, likely more). Check
 # exact_bh.reliable / ess / smc.max_nested_rhat in metrics.json.
+# Experimental (branch exact-bh-ridge, not validated at this design yet; default off):
+# inference.method.reparam=stable+probit samples in coordinates that straighten the
+# lifetime / composition ridge (README): 2.5x the ESS per evaluation on the validation
+# design and on {120,192} h x 100; real-like probe: independence acceptance 0.04 -> 0.40.
+# Expected: ESS 400 after ~20-50k evaluations (~1-2 h at 16 threads) instead of > 100k.
 # Multirun jobs run one after another: set inference.method.threads to the free cores
 # (best a divisor of inference.method.chains = 64, e.g. 8 or 16: no idle threads).
 defaults:

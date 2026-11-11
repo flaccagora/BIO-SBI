@@ -258,7 +258,7 @@ def test_smc_sampler_on_a_gaussian_target():
     assert rhat(x + np.arange(8)[:, None]) > 1.5
 
 
-@pytest.mark.parametrize("sampler", ["smc", "amis"])
+@pytest.mark.parametrize("sampler", ["smc", "amis", "smc:growth+probit"])
 def test_sampler_recovers_a_toy_posterior(rng, sampler):
     """Two free parameters (A.div_AA vs death, A lifetime): SMC / AMIS vs a brute-force grid."""
     law = load_law("reversible_ab")
@@ -273,11 +273,15 @@ def test_sampler_recovers_a_toy_posterior(rng, sampler):
                                        "A.mean_lifetime": 12.0})  # fmt: skip
     obs = ObservationModel(sim.types)
     cohorts = [Cohort(h, detected(sim, truth, h, 60, rng)) for h in (24.0, 48.0)]
+    sampler, _, reparam = sampler.partition(":")
     method = ExactBH(threads=2, sampler=sampler, particles=150, max_iterations=4,
-                     target_ess=300, init_candidates=4, chains=32, steps=6, seed=1)  # fmt: skip
+                     target_ess=300, init_candidates=4, chains=32, steps=6, seed=1,
+                     reparam=reparam or "none")  # fmt: skip
     lik = method.likelihood(sim, obs, cohorts)
     theta, w, diag = method.run(lik)
     assert sim.theta_dim == 2 and diag["sampler"] == sampler
+    if reparam:
+        assert diag["reparam"]["spec"] == reparam and diag["reparam"]["alpha0"] > 0
     if sampler == "amis":
         assert diag["ess"] > 100 and diag["pareto_k"] < 1.0
     else:

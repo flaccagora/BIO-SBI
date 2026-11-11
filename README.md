@@ -470,7 +470,42 @@ nested R-hat 1.011, min bulk ESS 241 (budget-limited); with the random-walk scal
 (`rw_scale_sd = 1`, default) 60k evaluations give means within 1.65 se and sds within
 1.76 se (ESS 225). The optional position-dependent random walk (`local_k = 60`: covariance
 of the 60 nearest chain states) gave ESS 344 at 60k but sds 5-10 % low (z down to -3.1):
-left off. Variants that stop early were
+left off.
+**Ridge reparametrisation** (`inference.method.reparam`, experimental, default `none`;
+`src/bio_sbi/inference/bh_reparam.py`). With only a random walk, even a perfectly
+Gaussian 9-parameter target gives ~7 bulk ESS per 1000 evaluations at these settings;
+the sampler is fast only when its independence (t) proposal is accepted often (Gaussian
+target: acceptance ~0.5, ~110 ESS per 1000 evaluations). In `u` the BH posterior is a
+curved ridge: the data fix the Malthusian parameter (growth rate) and the stable B:A
+ratio, and given the outcome probabilities both mean lifetimes are nearly determined
+(real-like seed 0 posterior: log B lifetime sd 0.29, but 0.026 around the lifetime that
+keeps growth rate and composition at their mode values; A: 0.078 vs 0.018). The
+independence proposal was accepted 7 % of the time (small and real-like). `reparam:
+stable` runs stages 4-5 on `v`: both log lifetimes are sheared,
+`v_k = u_k - logit(clip(unit-scaled l*_k))`, with `l*` the log lifetimes giving the mode's
+Malthusian parameter (root of `rho(diag(L(alpha)) M) = 1`, `L` = Gamma lifetime Laplace
+transforms, `M` = mean offspring matrix) and stable B:A ratio
+(`L_A M_AB (1 - L_B) / ((1 - L_B M_BB)(1 - L_A))`) for the current outcome probabilities
+(closed form + bisection, vectorised, ~free). The shear has unit Jacobian and depends
+only on the sticks, so the target and the prior are unchanged for any choice of `l*`
+(tests: round trips, Jacobian vs finite differences, KS tests of prior draws sampled in
+`v`, constant growth rate / ratio along `v`, toy banana); R-hat / ESS are computed on `u`.
+`+probit` additionally uses probit sticks (Gaussian tails for probabilities ~0); `growth`
+shears only the A lifetime (constant growth rate) and does not help (B's lifetime ridge
+remains). Validation design (fixed budget 40k evaluations, 2 threads, ESS = min bulk ESS
+over the 9 coordinates per 1000 evaluations, two sampler seeds): `none` 5.4 / 4.2,
+`growth` 5.7, `probit` 5.4, `stable` 10.6, **`stable+probit` 13.0 / 11.2 (2.5x)**,
+independence acceptance 0.07-0.08 -> 0.18-0.19, nested R-hat 1.012 / 1.022 -> 1.005 /
+1.004; agreement with the reference: means within 2.2 / 1.4 se, sds within 2.0 / 1.2 se
+(`none` at the same budget: 2.1 / 1.2 and 3.7 / 3.0). Harder
+design {120,192} h x 100 (dt 3 h, 30k evaluations, 2 threads, ~1 h each; `none` stalls
+like real-like: ESS 96 -> 123 from 12k to 30k): `none` 4.1, `stable+probit` 10.7 (2.6x,
+ESS 321, nested R-hat 1.008; `none`'s sds 10-30 % lower = not mixed). Real-like seed 0
+(no run at 2 threads; `scripts/exact_bh_sampler/` probe: t proposal fitted to the
+`smc_check_rev0_c` draws, 500 exact evaluations): expected independence acceptance
+0.04 -> 0.40, Pareto k 0.91 -> 0.66 (validation design: 0.035 -> 0.125, which gave 2.5x),
+so the gain at real-like should be at least that of the validation design.
+Variants that stop early were
 biased beyond their MC error (Laplace-started SMC with 7-23 moves per stage: sds
 15-20 % low, mean z up to 7.8; pooled prior-started islands: z up to 6.9) - in each case
 the nested R-hat flagged it (1.02-1.22). The old AMIS reference of this design
