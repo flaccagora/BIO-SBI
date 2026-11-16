@@ -1152,6 +1152,83 @@ def fig_x5a():
     table(pd.concat(rows, ignore_index=True), "x5a")
 
 
+X5A_PARS = P_ROWS + ["B.div_AA", "B.div_AB", "B.div_BB"]
+
+
+def fig_x5a_params():
+    """X5a, all parameters: MSE of the posterior mean per parameter x true B->A, per prior.
+
+    MSE over the 5 seeds of (posterior mean - truth)^2, in units of 1e-3, shared log
+    colour scale. Rows 1-2: B divisions free / fixed (fixed parameters blank). Input:
+    ``x5a_params.csv`` of ``scripts/analyse_x5a.py``. Table ``x5a_params.csv``: per law,
+    prior, parameter and truth (``truth_to_A`` = "all" pools the five truths) the MSE,
+    bias, mean posterior sd, 90% coverage (covered / runs), mean contraction, and the
+    NPE training epochs (max over runs; cap ``max_epochs``).
+    """
+    from matplotlib.colors import LogNorm
+
+    frames = []
+    for sub, _, _ in X5A_LAWS:
+        require(f"x5/{sub}", 75)
+        require(f"x5/{sub}_bio", 50)
+        path = RES / "x5" / sub / "x5a_params.csv"
+        if not path.exists():
+            raise FileNotFoundError(f"{path} missing (rerun scripts/analyse_x5a.py)")
+        frames.append(pd.read_csv(path).assign(sub=sub))
+    d = pd.concat(frames, ignore_index=True)
+    d = d[d.inferred.astype(bool)].assign(err=lambda x: x.post_mean - x.truth)
+
+    def summ(g):
+        return pd.Series({
+            "mse": (g.err ** 2).mean(), "bias": g.err.mean(), "post_sd": g.post_sd.mean(),
+            "covered": int(g.covered.astype(bool).sum()), "n": len(g),
+            "contraction": g.contraction.mean(), "truth": g.truth.mean(),
+            "epochs_max": g.epochs.max(), "max_epochs": g.max_epochs.max(),
+        })  # fmt: skip
+
+    keys = ["law", "prior", "parameter"]
+    by_truth = d.groupby(keys + ["truth_to_A"]).apply(summ, include_groups=False).reset_index()
+    pooled = d.groupby(keys).apply(summ, include_groups=False).reset_index().assign(
+        truth_to_A="all")
+    tab = pd.concat([pooled, by_truth], ignore_index=True)
+
+    priors = [(k, lab) for k, lab, _ in X5_PRIORS] + [(k, lab) for k, lab, *_ in X5_BIO]
+    norm = LogNorm(vmin=0.1, vmax=500)
+    fig, axes = plt.subplots(2, len(priors), figsize=(W_FULL, 5.2), sharex=True, sharey=True,
+                             gridspec_kw=dict(wspace=0.06, hspace=0.18))
+    for i, (sub, title, _) in enumerate(X5A_LAWS):
+        law = sub.removeprefix("a_")
+        for j, (key, lab) in enumerate(priors):
+            ax = axes[i, j]
+            m = (by_truth[(by_truth.law == law) & (by_truth.prior == key)]
+                 .pivot(index="parameter", columns="truth_to_A", values="mse")
+                 .reindex(X5A_PARS) * 1e3)
+            im = heat(ax, m.clip(lower=0.1), SEQ, norm=norm, text=False)
+            for (r, c), v in np.ndenumerate(m.values):
+                if not np.isfinite(v):
+                    continue
+                rgba = SEQ(norm(max(v, 0.1)))
+                lum = 0.2126 * rgba[0] + 0.7152 * rgba[1] + 0.0722 * rgba[2]
+                ax.text(c, r, f"{v:.1f}" if v < 9.95 else f"{v:.0f}", ha="center",
+                        va="center", fontsize=5.0, color="white" if lum < 0.5 else INK)
+            if m.iloc[-3:].isna().all().all():
+                ax.text(2, 10, "fixed at 0", ha="center", va="center", fontsize=6,
+                        color=MUTED)
+            ax.set_yticks(range(len(X5A_PARS)), [PRETTY[p] for p in X5A_PARS])
+            ax.axhline(5.5, color=SURFACE, lw=1.5)
+            if i == 0:
+                ax.set_title(lab, fontsize=6.6)
+            if i == 1:
+                ax.set_xlabel("true B→A", fontsize=6.5)
+            ax.tick_params(labelsize=5.8)
+        axes[i, 0].set_ylabel(title.split(" (")[0], fontsize=6.8)
+    cb = fig.colorbar(im, ax=axes, fraction=0.02, pad=0.01)
+    cb.set_label("MSE of posterior mean (×10⁻³)", fontsize=6.5)
+    cb.ax.tick_params(labelsize=5.8)
+    save(fig, "x5a_params")
+    table(tab, "x5a_params")
+
+
 #: Dirichlet concentrations of the X5a priors (inference model), per law, as in the
 #: preset header of conf/experiment/x5a_truth_position.yaml. Missing entries = 1.
 X5A_CONC = {
@@ -2429,7 +2506,7 @@ FIGURES = [
     # pending sweeps: built only once complete
     fig_e4_gw, fig_e4_budget, fig_e1c_gw, fig_e1a_number_gw, fig_e2_gw, fig_e2c_model, fig_e2c_traj,
     fig_e2c_arms, fig_detectability_gw,
-    fig_e2c_prior, fig_x5a_priors, fig_x5a, fig_x5b, fig_x5c, fig_x5d,
+    fig_e2c_prior, fig_x5a_priors, fig_x5a, fig_x5a_params, fig_x5b, fig_x5c, fig_x5d,
     fig_x2, fig_e0_large,
     fig_x3, fig_real_ladder, fig_real_ppc, fig_real_posterior,
     fig_x1, fig_x4, fig_exact_gw, fig_exact_speed,

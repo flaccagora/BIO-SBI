@@ -150,7 +150,7 @@ Parameters: A$\to$AA etc.\ are outcome probabilities per cell event; \tA, \tB{} 
 \textbf{I. Identifiability and the prior (Part~\ref{part:ident}).}
 \begin{enumerate}[leftmargin=1.4em]
 \item \textbf{B's row is prior-dominated if all transitions are free} (E0): B$\to$A = 0.20 vs truth 0.80 at 5k--50k simulations, every design (uniform Dirichlet puts 0.03\% mass above 0.8; a flat prior gives 0.53). X5 shows this is not a tail effect: the estimate barely follows the truth (0.04 $\to$ 0.22 for truths 0.1 $\to$ 0.9) and 1024 organoids do not fix it.
-\item \textbf{Constraints, not priors or realistic numbers of organoids} (X5a, X5c): with B divisions free no prior (uniform, Jeffreys, flat) and no sample size up to 1024 organoids recovers B$\to$A; with them fixed every truth 0.1--0.9 is recovered under every prior. A weak biological prior (A mostly divides, B rarely) is the best soft option (B-division mass 0.54 $\to$ 0.11, lowest error, calibrated) but recovers B$\to$A only partly (0.59 at truth 0.9; constraint 0.79).
+\item \textbf{Constraints, not priors or realistic numbers of organoids} (X5a, X5c): with B divisions free no prior (uniform, Jeffreys, flat) and no sample size up to 1024 organoids recovers B$\to$A; with them fixed every truth 0.1--0.9 is recovered under every prior. Over all parameters: with B divisions free the error spreads from B's row to A's (mean MSE $\approx 0.03$; A death, A$\to$AA, A$\to$BB biased to compensate spurious B divisions; coverage 0.70--0.87); with them fixed all 7 parameters converge (MSE $\le 0.023$, coverage 0.88--0.96, contraction $\ge 0.73$), and every NPE run trained to convergence. A weak biological prior (A mostly divides, B rarely) is the best soft option (B-division mass 0.54 $\to$ 0.11, lowest error, calibrated) but recovers B$\to$A only partly (0.59 at truth 0.9; constraint 0.79).
 \item \textbf{NPE at 4096 organoids per endpoint fails} (\S\ref{sec:e0large}): with B divisions free, even 4096 organoids per endpoint on three endpoints and a 20k-simulation network give B$\to$A 0.17--0.34 (0/20 runs covered) and put about half of B's probability (0.49--0.57, the prior mean 0.5) on divisions that do not exist, with a clean PPC ($\le 0.6\%$); in GW also A's row is biased (A persist 0.16 vs 0.03). We first read this as structural non-identifiability.
 \item \textbf{Corrected by the exact likelihood: practical, not structural} (\S\ref{sec:exact}). On the same datasets the exact GW posterior (no simulations, no summaries) recovers \textbf{B$\to$A $=$ 0.78 $\pm$ 0.02} (B-division mass 0.04, A's row MAE 0.011) at 4096 $\times$ 3: the failure there was NPE's. At the E0 and real-like designs the exact posterior is as prior-dominated as NPE's (B$\to$A 0.25--0.27; Cram\'er--Rao sd 0.27--0.28, more than the prior sd): there the data are too weak. Early endpoints help partly (\{2,3\} $\times$ 133: 0.56 $\pm$ 0.15). With B divisions fixed exact and NPE agree (0.77 vs 0.71--0.75). Whether B divides must still be fixed or measured --- because feasible designs cannot decide it, not because the model cannot.
 \end{enumerate}
@@ -748,11 +748,59 @@ B-division mass & 0.21 & 0.11 & --- & --- \\\bottomrule
 
 B$\to$A posterior mean (seeds covered by the 90\% interval). Run MAE = range over truths of the mean per-run MAE (all free parameters); B-division mass = posterior total of B$\to$AA/AB/BB (truth 0; 0.54 under the uniform and flat priors). Reference priors, run MAE: free 0.12--0.15 (uniform), 0.10--0.16 (flat); fixed 0.02--0.06 (uniform). Numbers: \res{tables/x5a.csv}.
 \end{center}
+
+\textbf{All parameters.} The tables above follow B$\to$A only. Figure~\ref{fig:x5a_params} and the table below give the error and convergence of every free parameter, all 250 runs. MSE = mean over seeds of (posterior mean $-$ truth)$^2$. Convergence is checked at two levels. \emph{Training}: every NPE run stopped early (validation loss flat for 20 epochs) after 70--181 epochs, below the cap of 200, so no network is under-trained. \emph{Posterior}: 90\% coverage (runs whose interval contains the truth) and contraction ($1 - $ posterior var / prior var; 1 = data fully determine the parameter, $\le 0$ = posterior no narrower than the prior).
+\figorpending{x5a_params}{1.0}{X5a, all parameters: MSE of the posterior mean ($\times 10^{-3}$, 5 seeds, shared log colour scale) per parameter (rows; A's row above the white line, B's below) and true B$\to$A (columns), one panel per prior. Top: B divisions free; bottom: B divisions fixed to 0 (B$\to$AA/AB/BB not inferred). Truths of the other parameters: $\theta^\star$, B death = B persist = (1 $-$ B$\to$A)/2, B divisions 0. Numbers incl.\ bias, posterior sd, coverage and contraction per truth: \res{tables/x5a_params.csv}.}{X5a per-parameter MSE figure.}
+\begin{center}\scriptsize
+\setlength{\tabcolsep}{3.2pt}
+\begin{tabular}{@{}lrrrrr@{\hspace{8pt}}rrrrr@{}}\toprule
+ & \multicolumn{5}{c}{B divisions free (\code{two_type})} & \multicolumn{5}{c}{B divisions fixed (\code{reversible_ab})} \\\cmidrule(lr){2-6}\cmidrule(l){7-11}
+MSE $\times 10^{3}$ & unif. & Jeff. & flat & bio-B & bio & unif. & Jeff. & flat & bio-B & bio \\\midrule
+A death & 12 & 8.4 & 15 & 1.1 & 0.2 & 0.2 & 0.1 & 0.3 & 0.1 & 0.0 \\
+A persist & 11 & 15 & 6.4 & 2.1 & 0.4 & 0.2 & 0.2 & 0.1 & 0.3 & 0.1 \\
+A$\to$B & 2.2 & 1.4 & 10 & 2.0 & 0.5 & 0.7 & 0.7 & 1.0 & 0.5 & 0.4 \\
+A$\to$AA & 24 & 26 & 39 & 4.2 & 0.9 & 0.7 & 0.6 & 1.0 & 1.3 & 0.6 \\
+A$\to$AB & 1.9 & 2.0 & 2.4 & 2.8 & 1.7 & 1.7 & 2.0 & 2.3 & 4.1 & 2.0 \\
+A$\to$BB & 17 & 12 & 15 & 6.9 & 2.2 & 2.5 & 2.2 & 2.7 & 3.0 & 1.0 \\
+B death & 22 & 17 & 46 & 11 & 9.0 & 13 & 13 & 23 & 13 & 8.4 \\
+B persist & 14 & 13 & 29 & 3.3 & 2.2 & 10 & 9.0 & 12 & 11 & 4.9 \\
+B$\to$A & 184 & 171 & 69 & 59 & 43 & 7.9 & 11 & 7.3 & 13 & 13 \\
+B$\to$AA & 70 & 74 & 85 & 12 & 2.7 & --- & --- & --- & --- & --- \\
+B$\to$AB & 12 & 12 & 15 & 2.8 & 1.0 & --- & --- & --- & --- & --- \\
+B$\to$BB & 33 & 23 & 21 & 3.9 & 1.2 & --- & --- & --- & --- & --- \\\midrule
+mean & 33.7 & 31.2 & 29.3 & 9.3 & 5.4 & 4.2 & 4.3 & 5.5 & 5.2 & 3.3 \\\bottomrule
+\end{tabular}
+
+\medskip
+\begin{tabular}{@{}lccccc@{\hspace{8pt}}ccccc@{}}\toprule
+ & \multicolumn{5}{c}{B divisions free (\code{two_type})} & \multicolumn{5}{c}{B divisions fixed (\code{reversible_ab})} \\\cmidrule(lr){2-6}\cmidrule(l){7-11}
+cov.\,/\,contr. & unif. & Jeff. & flat & bio-B & bio & unif. & Jeff. & flat & bio-B & bio \\\midrule
+A death & 16\,/\,0.78 & 25\,/\,0.80 & 18\,/\,0.72 & 25\,/\,0.90 & 25\,/\,0.85 & 25\,/\,0.96 & 25\,/\,0.97 & 25\,/\,0.96 & 25\,/\,0.97 & 25\,/\,0.94 \\
+A persist & 23\,/\,0.60 & 25\,/\,0.66 & 25\,/\,0.64 & 25\,/\,0.85 & 25\,/\,0.77 & 25\,/\,0.95 & 25\,/\,0.96 & 25\,/\,0.95 & 25\,/\,0.94 & 25\,/\,0.87 \\
+A$\to$B & 25\,/\,0.84 & 25\,/\,0.87 & 22\,/\,0.65 & 25\,/\,0.81 & 24\,/\,0.72 & 25\,/\,0.91 & 24\,/\,0.92 & 25\,/\,0.90 & 24\,/\,0.91 & 24\,/\,0.85 \\
+A$\to$AA & 13\,/\,0.56 & 17\,/\,0.55 & 9\,/\,0.23 & 21\,/\,0.77 & 25\,/\,0.93 & 22\,/\,0.95 & 25\,/\,0.97 & 23\,/\,0.94 & 22\,/\,0.95 & 24\,/\,0.97 \\
+A$\to$AB & 25\,/\,0.79 & 25\,/\,0.82 & 25\,/\,0.72 & 24\,/\,0.83 & 25\,/\,0.86 & 24\,/\,0.90 & 24\,/\,0.92 & 22\,/\,0.88 & 22\,/\,0.87 & 23\,/\,0.88 \\
+A$\to$BB & 10\,/\,0.73 & 23\,/\,0.77 & 12\,/\,0.74 & 20\,/\,0.82 & 23\,/\,0.89 & 19\,/\,0.93 & 22\,/\,0.95 & 20\,/\,0.93 & 18\,/\,0.92 & 24\,/\,0.94 \\
+B death & 17\,/\,0.51 & 24\,/\,0.44 & 14\,/\,0.70 & 21\,/\,0.65 & 25\,/\,0.54 & 23\,/\,0.78 & 24\,/\,0.80 & 22\,/\,0.80 & 20\,/\,0.73 & 25\,/\,0.73 \\
+B persist & 24\,/\,0.29 & 25\,/\,0.41 & 22\,/\,0.20 & 25\,/\,0.57 & 25\,/\,0.70 & 23\,/\,0.84 & 23\,/\,0.86 & 22\,/\,0.83 & 22\,/\,0.77 & 24\,/\,0.82 \\
+B$\to$A & 4\,/\,0.44 & 7\,/\,0.45 & 16\,/\,0.68 & 14\,/\,0.38 & 15\,/\,0.52 & 25\,/\,0.81 & 24\,/\,0.82 & 24\,/\,0.85 & 19\,/\,0.74 & 21\,/\,0.81 \\
+B$\to$AA & ---\,/\,$-$0.11 & ---\,/\,$-$0.04 & ---\,/\,$-$0.63 & ---\,/\,$-$1.47 & ---\,/\,0.21 & --- & --- & --- & --- & --- \\
+B$\to$AB & ---\,/\,0.55 & ---\,/\,0.63 & ---\,/\,0.23 & ---\,/\,$-$0.18 & ---\,/\,0.47 & --- & --- & --- & --- & --- \\
+B$\to$BB & ---\,/\,0.41 & ---\,/\,0.54 & ---\,/\,0.21 & ---\,/\,$-$0.25 & ---\,/\,0.45 & --- & --- & --- & --- & --- \\\midrule
+coverage & 0.70 & 0.87 & 0.72 & 0.89 & 0.94 & 0.94 & 0.96 & 0.92 & 0.88 & 0.96 \\\bottomrule
+\end{tabular}
+
+Per parameter, pooled over the five truths (25 runs per cell). Top: MSE of the posterior mean ($\times 10^{-3}$; mean = over the free parameters). Bottom: 90\% coverage (runs covered, of 25) / mean contraction; last row = fraction covered over all parameters with an interior truth (nominal 0.90). B divisions free: their truth is 0, on the boundary of the simplex, where an equal-tailed 90\% interval cannot contain it (---); their MSE measures the spurious B-division mass. Fixed law: B divisions not inferred (---). Numbers per truth: \res{tables/x5a_params.csv}.
+\end{center}
 \Comment
 \begin{itemize}
 \item \textbf{B divisions free: the estimate hardly follows the truth} (0.04 $\to$ 0.22 as the truth goes 0.1 $\to$ 0.9, uniform prior); no truth $\ge 0.5$ is covered under the uniform or Jeffreys prior, and B$\to$A contraction falls to $\le 0$ at 0.9. At this design the data cannot separate switching from division, so the prior sets the answer --- at \emph{every} truth position, not only in the tail.
 \item A flat prior on B$\to$A tracks better (0.12 $\to$ 0.54) but still shrinks heavily and costs calibration (SBC 0.080) and coverage of the other parameters (run coverage 0.62--0.87).
 \item \textbf{B divisions fixed: every truth is recovered under every prior} (B$\to$A contraction 0.73--0.94; the three priors differ by $\le 0.06$, mild shrinkage at the extremes). The prior only matters where the data cannot separate switching from division.
+\item \textbf{All parameters, B divisions free: the confounding spreads to every parameter} (mean MSE $31$--$34\times10^{-3}$ under the reference priors vs $4$--$6\times10^{-3}$ fixed; overall coverage 0.70--0.87). NPE gives B spurious divisions (B$\to$AA bias $+0.18$ to $+0.32$, uniform prior, growing with the true B$\to$A), and A's row compensates: A death is overestimated ($+0.05$ to $+0.15$, truth 0.03), A$\to$AA ($-0.09$ to $-0.22$) and A$\to$BB ($\approx -0.12$) are underestimated, so A$\to$AA, A$\to$BB and A death are covered in only 13, 10 and 16 of 25 runs. Bias makes up $>90\%$ of the MSE of B$\to$A, B$\to$AA, A$\to$AA and A death: the errors are systematic, not seed noise. All of B's row converges poorly, not only B$\to$A (contraction of B persist 0.20--0.41, of B$\to$A 0.44--0.68).
+\item \textbf{Biological priors lower the error of every parameter} (mean MSE $9.3\times10^{-3}$ bio-B, $5.4\times10^{-3}$ bio, close to the fixed law; bio: every A-row MSE $\le 2.2\times10^{-3}$, overall coverage 0.94). What remains sits in B$\to$A ($43\times10^{-3}$, truths $\ge 0.5$) and B death ($9\times10^{-3}$). bio-B, whose A row is uniform, already cuts A's largest errors 2.5--11$\times$ (A death 12 $\to$ 1.1, A$\to$AA 24 $\to$ 4.2, A$\to$BB 17 $\to$ 6.9, $\times10^{-3}$): A's error is leakage from B's divisions, not missing information on A. Under bio-B the contraction of B's divisions is negative: its prior on them is narrow (Beta(0.2, 4.9), sd 0.08), and the NPE posterior is wider than that.
+\item \textbf{B divisions fixed: every parameter converges.} MSE $\le 4.1\times10^{-3}$ on A's row and $\le 23\times10^{-3}$ on B's, contraction 0.73--0.97, coverage 18--25 of 25 per parameter (overall 0.88--0.96, nominal 0.90). B's row is the least determined (contraction 0.73--0.86 vs 0.85--0.97 for A). Its largest errors are a death/persist trade-off at low B$\to$A (truth 0.1--0.3, uniform prior: B death $-0.16$ to $-0.18$, B persist $+0.09$ to $+0.13$, still covered in 3--5 of 5 seeds) and the shrinkage of B$\to$A at 0.9 (MSE $17\times10^{-3}$). The prior matters little (mean MSE $3.3$--$5.5\times10^{-3}$ over the five priors, lowest under bio).
+\item \textbf{Training converged in every run}: all 250 networks stopped early (70--181 epochs, cap 200). The B-row failure with B divisions free is therefore not under-training. It is the data, as the exact likelihood confirms on the same design (\S\ref{sec:exact}).
 \item Conclusion for E0 (\S\ref{sec:e0}): the B-row failure is the switching/division confounding, not a bad truth position; a prior cannot substitute for the constraint. The confounding is practical (Cram\'er--Rao sd of B$\to$A 0.28 at this design, more than the prior sd): the exact likelihood is as prior-dominated here (B$\to$A 0.25 $\pm$ 0.16 at truth 0.8) but recovers B$\to$A at 4096 organoids per endpoint, where NPE did not (\S\ref{sec:exact}, \S\ref{sec:e0large}).
 \item \textbf{Biological priors.} \emph{B divisions free}: the soft ``B rarely divides'' prior cuts the posterior B-division mass from 0.54 to 0.21 (bio-B) and 0.11 (bio); B$\to$A tracks like the flat prior (0.54--0.59 at truth 0.9) but with better calibration (SBC 0.05 vs 0.08) and the lowest error of any free-B prior (run MAE 0.03--0.07 for bio; the A-row prior gives most of this gain). It is still far from the hard constraint (0.79, 5/5 at truth 0.9): truths $\ge 0.5$ are mostly not covered. \emph{B divisions fixed}: the symmetric 1.5 prior on B's three outcomes (mean 1/3) shrinks B$\to$A toward 1/3, and truth 0.9 is covered in only 1/5 (bio-B) and 3/5 (bio) seeds; the A-row prior lowers the error and raises support mass (0.79--0.89 vs 0.64--0.79 uniform). A soft biological prior helps but does not replace the constraint; with the constraint, keep B's prior near-uniform.
 \end{itemize}

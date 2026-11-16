@@ -2,6 +2,9 @@
 
 Groups runs by prior (law.concentration override) and true B.to_A; reports B.to_A
 posterior mean / sd / coverage / contraction, run-level MAE, support, PPC and SBC.
+Also writes ``x5a_params.csv``: one row per run and parameter (all parameters, with
+posterior mean / sd, 90% coverage, contraction, squared error, training epochs), the
+input of the per-parameter MSE / convergence summary in the reports.
 
 Usage: uv run python scripts/analyse_x5a.py results/x5/a_reversible_ab [results/x5/a_reversible_ab_bio ...]
 (several folders of the same law are pooled; tables are written to the first one).
@@ -15,6 +18,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import yaml
 
 
 def sbc_error(cal: dict) -> float:
@@ -38,13 +42,27 @@ def prior_label(overrides: str) -> str:
 
 def main(roots: list[Path]) -> None:
     root = roots[0]
-    rows = []
+    rows, prows = [], []
     for path in sorted(p for r in roots for p in r.glob("*/metrics.json")):
         m = json.loads(path.read_text())
         per = {r["parameter"]: r for r in m["recovery"]["per_parameter"]}
         b = per["B.to_A"]
+        prior = prior_label((path.parent / ".hydra/overrides.yaml").read_text())
+        cfg = yaml.safe_load((path.parent / ".hydra/config.yaml").read_text())
+        train = m["training"][-1]
+        for r in m["recovery"]["per_parameter"]:
+            prows.append({
+                "law": m["law"], "prior": prior, "truth_to_A": round(b["truth"], 3),
+                "seed": m["seed"], "parameter": r["parameter"], "inferred": r["inferred"],
+                "truth": r["truth"], "post_mean": r["posterior_mean"],
+                "post_sd": r["posterior_std"], "covered": r["covered"],
+                "contraction": r["contraction"],
+                "sq_error": (r["posterior_mean"] - r["truth"]) ** 2,
+                "epochs": train["epochs"], "max_epochs": cfg["budget"]["max_epochs"],
+                "run": path.parent.name,
+            })  # fmt: skip
         rows.append({
-            "prior": prior_label((path.parent / ".hydra/overrides.yaml").read_text()),
+            "prior": prior,
             "truth_to_A": round(b["truth"], 3), "seed": m["seed"],
             "to_A_mean": b["posterior_mean"], "to_A_sd": b["posterior_std"],
             "to_A_covered": b["covered"], "to_A_contraction": b["contraction"],
@@ -60,6 +78,7 @@ def main(roots: list[Path]) -> None:
         mae=("mae", "mean"), coverage90=("coverage90", "mean"), support=("support", "median"),
         ppc=("ppc_out95", "mean"), sbc=("sbc_cov_err", "mean"))  # fmt: skip
     d.to_csv(root / "x5a_runs.csv", index=False)
+    pd.DataFrame(prows).to_csv(root / "x5a_params.csv", index=False)
     g.round(4).to_csv(root / "x5a_groups.csv")
     pd.set_option("display.width", 250)
     pd.set_option("display.max_columns", 20)
