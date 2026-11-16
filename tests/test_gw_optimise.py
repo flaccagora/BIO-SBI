@@ -324,3 +324,15 @@ def test_pipeline_writes_optimisation_json(tmp_path):
     saved = json.loads((out / "optimisation.json").read_text())
     assert saved["objective"] == "map" and saved["settings"]["workers"] == 2
     assert "optimisation" not in json.loads((out / "metrics.json").read_text())["exact_gw"]
+
+
+def test_map_refinement_is_not_stopped_by_zero_density_bounds():
+    # alpha > 1: log prior = -inf at some stick bounds; the box keeps a tiny gap there
+    lik, sim = make_lik(concentration={"A": {"death": 2.0}, "B": {"to_A": 3.0, "death": 2.0}})
+    obj = PointObjective(lik, "map")
+    assert np.any(obj.lower > 0) and np.any(obj.upper < 1)
+    assert np.isfinite(obj.value(obj.lower)) and np.isfinite(obj.value(obj.upper))
+    res = optimise(lik, objective="map", method="multistart", starts=3, refine_maxiter=200,
+                   log_every=0, validate=False)  # fmt: skip
+    for c in res["candidates"]:
+        assert c["refinement"]["nit"] > 3 and c["value"] > c["start_value"]

@@ -379,6 +379,44 @@ trees); see `TODO.md` (section XG). Multimodal posteriors show up as R-hat >> 1
 Presets: `exact_gw_e0_4096`, `exact_gw_e0`, `exact_gw_real_like`, `exact_gw_early`
 (reference datasets identical to the NPE runs they compare with).
 
+**Point estimates (MLE / physical MAP)** - `src/bio_sbi/inference/gw_optimise.py`,
+settings `inference.method.optimise.*` (off by default; NUTS unchanged):
+
+* `objective=mle` maximises the exact log likelihood above; `objective=map` adds the
+  Dirichlet log prior of the *normalised free probabilities*
+  `sum_k sum_j (alpha_kj - 1) log(p_kj / m_k)` (no coordinate Jacobian: this is not
+  NUTS's `log_posterior_u`; with the default `alpha = 1` the MAP is the MLE). With any
+  `alpha < 1` the density is unbounded at the boundary, so `map` needs
+  `boundary_eps > 0` and is reported as `map_eps_restricted`.
+* search in the stick coordinates on `[eps, 1 - eps]^dim` (default `[0, 1]`: exact
+  endpoints are evaluable), decoded by `ParameterSpace` (row sums and fixed entries hold
+  by construction): `method=pso` = `restarts` global-best swarms from the prior
+  (objective-only likelihood calls, `workers` threads, reproducible from `seed`), then
+  bounded L-BFGS-B with analytic gradients on the `refine_top` best distinct candidates;
+  `method=multistart` = L-BFGS-B from `starts` prior draws.
+* output `optimisation.json` (never in the posterior draws): value, sticks, probabilities,
+  log likelihood / log prior, candidates with pre/post-refinement values, evaluation
+  counts, timings, boundary proximity and `validation` (constraints; objective on 2x/4x
+  grids; floors x1e-3/x1e3; floored cells; `grid_check`; eps/10; `flags`).
+
+```bash
+# alongside NUTS (pipeline run):
+bio-sbi inference=exact_gw law=reversible_ab inference.method.optimise.enabled=true
+# alone, on a simulated dataset or a finished run's reference.npz:
+uv run python scripts/exact_gw_optimise.py --out opt/mle law=reversible_ab design.horizons=[4,6] design.clones=128
+uv run python scripts/exact_gw_optimise.py --out opt/map law=two_type inference.method.optimise.objective=map +law.concentration.B.to_A=3
+uv run python scripts/exact_gw_optimise.py --run-dir RUN --out RUN/opt inference.method.optimise.method=multistart
+```
+
+Benchmark (`scripts/pso_benchmark/`, 6 small cases x 5 seeds, 2 threads; `results.md`
+there): 8-start L-BFGS-B reached the best value found by any method in 27/30 runs in
+0.3-3 s; PSO + refinement in 25/30 in 4-10 s (one `two_type` run stuck 1.4 nats lower: both
+swarms converged to the wrong basin); PSO alone (~4850 evaluations) in 7/30, up to 7 nats
+short in 10 dimensions. The misses of both methods are distinct local optima on
+different boundary faces of B's row (`two_type` at 64 clones: `B.to_A` = 0.62 / 0.47 /
+0 within 1.5 nats), i.e. the B-row non-identifiability, not optimiser failures. On these
+designs, prefer `method=multistart` with more starts; PSO is a slower diversity check.
+
 #### Exact likelihood for Bellman-Harris (`inference=exact_bh`)
 
 For integer Gamma lifetime shapes `m` the Bellman-Harris clone law is also exact: a

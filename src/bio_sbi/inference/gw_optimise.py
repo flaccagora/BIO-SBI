@@ -30,7 +30,10 @@ whose gradient is used by the refinement (no transformation Jacobian added).
 Boundaries. Decoding and the likelihood accept exact stick endpoints (``0`` / ``1``:
 outcome probabilities become exactly zero, which the pgf kernel skips; impossible
 observed cells cost ``log floor``). So the MLE, and the MAP when every free
-``alpha >= 1``, are searched on the closed box ``[0, 1]`` (``boundary_eps = 0``). With any
+``alpha >= 1``, are searched on the closed box ``[0, 1]`` (``boundary_eps = 0``; for the
+MAP, bounds where an ``alpha > 1`` term makes the prior density zero are kept
+``ZERO_DENSITY_GAP = 1e-10`` inside, a numerical safeguard that cannot exclude the
+maximum). With any
 ``alpha < 1`` the prior density is unbounded where that ``q -> 0``: the posterior density
 may have no maximum. Then ``objective=map`` requires ``boundary_eps > 0``; the result is
 labelled ``map_eps_restricted`` (maximum over the stick box ``[eps, 1 - eps]``, *not* an
@@ -41,7 +44,10 @@ Algorithm (``method=pso``): ``restarts`` independent global-best swarms seeded f
 :func:`~bio_sbi.rng.rng_for` and initialised from the stick prior (the Dirichlet rows);
 objective-only evaluations (``log_likelihood(grad=False)``) in ``workers`` threads (the
 Numba kernel releases the GIL, FFTs use one worker; results do not depend on the number
-of workers). Then the ``refine_top`` best distinct personal bests (deduplicated on decoded
+of workers; the likelihood keeps no mutable state besides its locked counters, so
+concurrent calls are safe; memory per worker ~ ``16 Lx (Ly/2+1)`` bytes per horizon
+for an objective-only call, ``(1 + dim)`` times that with a gradient; keep ``workers``
+times the BLAS / Numba threads within the CPU budget). Then the ``refine_top`` best distinct personal bests (deduplicated on decoded
 probabilities) are refined by bounded L-BFGS-B with analytic gradients; a refinement
 never replaces its start by a worse or failed point. ``method=multistart`` is the
 baseline: L-BFGS-B from ``starts`` prior draws, same objective and bounds.
@@ -69,6 +75,9 @@ LOG = logging.getLogger(__name__)
 OBJECTIVES = ("mle", "map")
 METHODS = ("pso", "multistart")
 BOUNDARY_MODES = ("reflect", "clamp")
+
+#: Distance kept from stick bounds where the MAP prior density vanishes (see PointObjective).
+ZERO_DENSITY_GAP = 1e-10
 
 #: Defaults of every setting (``inference.method.optimise`` in ``exact_gw.yaml``).
 DEFAULTS = {
@@ -124,7 +133,6 @@ class PointObjective:
             raise ValueError("boundary_eps must lie in [0, 0.5)")
         self.lik, self.objective, self.eps = lik, objective, eps
         self.dim = lik.dim
-        self.lower, self.upper = eps, 1.0 - eps
         coef_s, coef_t, alpha_min = [], [], math.inf
         for r in lik.space.rows:
             if not r.n_sticks:  # deterministic row: q = 1 (or no free entry)
@@ -145,6 +153,15 @@ class PointObjective:
                 "the stick box [eps, 1 - eps] (reported as map_eps_restricted)"
             )
         self.name = "map_eps_restricted" if self.improper else objective
+        # Per-coordinate box. For map, a stick bound where the prior density is zero
+        # (alpha > 1 terms: log prior = -inf) is moved inside by ZERO_DENSITY_GAP: the
+        # maximum cannot lie there, and L-BFGS-B's projected steps onto such a bound would
+        # otherwise abort the line search on a nonfinite value.
+        self.lower = np.full(self.dim, eps)
+        self.upper = np.full(self.dim, 1.0 - eps)
+        if objective == "map":
+            self.lower[self.coef_s > 0] = max(eps, ZERO_DENSITY_GAP)
+            self.upper[self.coef_t > 0] = min(1.0 - eps, 1.0 - ZERO_DENSITY_GAP)
 
     def log_prior(self, theta: np.ndarray) -> tuple[float, np.ndarray]:
         """Dirichlet log density of the normalised free probabilities (+ const) and gradient.
@@ -303,9 +320,10 @@ def lbfgsb(obj: PointObjective, x0: np.ndarray, maxiter: int, lower=None, upper=
     Returns ``x``, ``value`` (the better of start and result), ``start_value``,
     ``refined_value`` (L-BFGS-B's own, may be worse / ``-inf``), ``improved``, status.
     """
-    lo = obj.lower if lower is None else lower
-    hi = obj.upper if upper is None else upper
-    x0 = np.clip(np.asarray(x0, dtype=float), lo, hi)
+    x0 = np.asarray(x0, dtype=float)
+    lo = np.broadcast_to(obj.lower if lower is None else lower, x0.shape)
+    hi = np.broadcast_to(obj.upper if upper is None else upper, x0.shape)
+    x0 = np.clip(x0, lo, hi)
     start = obj.value(x0)
     t0 = time.perf_counter()
 
@@ -316,7 +334,7 @@ def lbfgsb(obj: PointObjective, x0: np.ndarray, maxiter: int, lower=None, upper=
         return -val, -g
 
     try:
-        res = minimize(neg, x0, jac=True, method="L-BFGS-B", bounds=[(lo, hi)] * len(x0),
+        res = minimize(neg, x0, jac=True, method="L-BFGS-B", bounds=list(zip(lo, hi, strict=True)),
                        options={"maxiter": int(maxiter)})  # fmt: skip
         xr = np.clip(res.x, lo, hi)
         refined = obj.value(xr)  # objective-only re-evaluation at the returned point
@@ -367,10 +385,14 @@ def _describe(obj: PointObjective, x: np.ndarray, near_tol: float) -> dict:
         "log_prior": None if e["log_prior"] is None else float(e["log_prior"]),
         "boundary": {
             "sticks_at_lower": [
-                n for n, t in zip(space.theta_names, x, strict=True) if t - obj.lower <= near_tol
+                n
+                for n, t, b in zip(space.theta_names, x, obj.lower, strict=True)
+                if t - b <= near_tol
             ],
             "sticks_at_upper": [
-                n for n, t in zip(space.theta_names, x, strict=True) if obj.upper - t <= near_tol
+                n
+                for n, t, b in zip(space.theta_names, x, obj.upper, strict=True)
+                if b - t <= near_tol
             ],
             "probabilities_near_zero": [
                 n for n, p in zip(space.names, phys, strict=True) if n in free and p <= near_tol
@@ -531,7 +553,8 @@ def optimise(lik, seed: int = 0, key=("reference",), **overrides) -> dict:
     ev0, gr0 = lik.evals, lik.grad_evals
     out: dict = {"objective": obj.name, "method": s["method"], "seed": int(seed),
                  "key": [str(k) for k in key], "settings": s,
-                 "box": [obj.lower, obj.upper], "dim": obj.dim,
+                 "box": [obj.eps, 1.0 - obj.eps], "dim": obj.dim,
+                 "bounds": {"lower": obj.lower.tolist(), "upper": obj.upper.tolist()},
                  "note": "point estimate; not posterior draws, no global-optimality guarantee"}  # fmt: skip
     workers = max(int(s["workers"]), 1)
     if obj.dim == 0:  # every probability fixed: one admissible model
