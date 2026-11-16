@@ -393,7 +393,14 @@ settings `inference.method.optimise.*` (off by default; NUTS unchanged):
   by construction): `method=pso` = `restarts` global-best swarms from the prior
   (objective-only likelihood calls, `workers` threads, reproducible from `seed`), then
   bounded L-BFGS-B with analytic gradients on the `refine_top` best distinct candidates;
-  `method=multistart` = L-BFGS-B from `starts` prior draws.
+  `method=multistart` = L-BFGS-B from `starts` prior draws; `method=sgd` = Adam
+  (`sgd_optimizer=adam`) or heavy-ball momentum (`momentum`) from the same `starts`
+  prior draws as multistart, on the objective / total clones, `sgd_iter` steps with a
+  `sgd_schedule` (cosine) learning rate and stagnation stopping, in sticks with
+  projection (`sgd_coords=box`) or in `logit(stick)` (`logit`, no Jacobian: the MLE is
+  invariant; boundary faces only approached), optionally on minibatches of clones
+  (`sgd_batch` = fraction per horizon; unbiased rescaled counts), then (`sgd_polish`)
+  L-BFGS-B on the `refine_top` best distinct endpoints.
 * output `optimisation.json` (never in the posterior draws): value, sticks, probabilities,
   log likelihood / log prior, candidates with pre/post-refinement values, evaluation
   counts, timings, boundary proximity and `validation` (constraints; objective on 2x/4x
@@ -406,16 +413,26 @@ bio-sbi inference=exact_gw law=reversible_ab inference.method.optimise.enabled=t
 uv run python scripts/exact_gw_optimise.py --out opt/mle law=reversible_ab design.horizons=[4,6] design.clones=128
 uv run python scripts/exact_gw_optimise.py --out opt/map law=two_type inference.method.optimise.objective=map +law.concentration.B.to_A=3
 uv run python scripts/exact_gw_optimise.py --run-dir RUN --out RUN/opt inference.method.optimise.method=multistart
+uv run python scripts/exact_gw_optimise.py --out opt/adam law=two_type inference.method.optimise.method=sgd
 ```
 
-Benchmark (`scripts/pso_benchmark/`, 6 small cases x 5 seeds, 2 threads; `results.md`
-there): 8-start L-BFGS-B reached the best value found by any method in 27/30 runs in
-0.3-3 s; PSO + refinement in 25/30 in 4-10 s (one `two_type` run stuck 1.4 nats lower: both
-swarms converged to the wrong basin); PSO alone (~4850 evaluations) in 7/30, up to 7 nats
-short in 10 dimensions. The misses of both methods are distinct local optima on
-different boundary faces of B's row (`two_type` at 64 clones: `B.to_A` = 0.62 / 0.47 /
-0 within 1.5 nats), i.e. the B-row non-identifiability, not optimiser failures. On these
-designs, prefer `method=multistart` with more starts; PSO is a slower diversity check.
+Benchmark (`scripts/pso_benchmark/`, 6 small cases x 5 seeds, 2 threads, all methods in
+one session; `results.md` and convergence plots there; hit = within 0.01 nats of the
+best value any method found): 8-start L-BFGS-B 27/30 in 0.4-2.5 s (worst miss 0.16
+nats); Adam + polish 28/30, Adam in logit coordinates + polish 29/30, momentum + polish
+23/30, minibatch Adam + polish 26/30, all in 2-16 s with ~4000 gradient calls; PSO +
+refinement 25/30 in 3-9 s; SGD alone (no polish, 500 steps) 12/30 (Adam), 10/30
+(momentum), 0/30 (logit, minibatch), up to 7-8 nats short in 10 dimensions; PSO alone
+7/30. First-order steps crawl along the ill-conditioned, boundary-faced ridges of the B
+row; their value is diverse endpoints for the polish, not accuracy. Minibatching does
+not save time: a step costs the pgf recursion + FFTs regardless of the batch (one
+gradient call 36 ms at 128 and 41 ms at 1024 clones per horizon on generations
+4/6/8/10, ~93% of it in the pgf / FFT law, for any batch fraction 0.01-1), so it only
+adds noise. The misses of all methods are
+distinct local optima on different boundary faces of B's row (`two_type` at 64 clones:
+`B.to_A` = 0.62 / 0.47 / 0 within 1.5 nats), i.e. the B-row non-identifiability. On
+these designs, prefer `method=multistart` with more starts (fastest per hit); SGD +
+polish and PSO + refinement are slower diversity checks.
 
 #### Exact likelihood for Bellman-Harris (`inference=exact_bh`)
 
