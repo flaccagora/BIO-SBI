@@ -214,11 +214,16 @@ class ExactLikelihood:
                 dP[t, free[i]] = r.mass * (others if i == j else -si * others)
         return P, dP, rows
 
-    def log_likelihood(self, theta: np.ndarray, grad: bool = True) -> tuple[float, np.ndarray]:
+    def log_likelihood(self, theta: np.ndarray, grad: bool = True,
+                       weights: list[np.ndarray] | None = None) -> tuple[float, np.ndarray]:  # fmt: skip
         """Log-likelihood and its gradient with respect to ``theta``.
 
         ``grad=False`` skips the Jacobian and the derivative recursion (objective only;
         the returned gradient is empty). The value is the same computation either way.
+        ``weights`` (one array per horizon, aligned with that horizon's histogram cells)
+        replaces the cell multiplicities, e.g. rescaled minibatch counts (each must sum
+        to the horizon's clone count so the detection term is unchanged); the pgf / FFT
+        cost is the same as for the full data.
         """
         t0 = time.perf_counter()
         if grad:
@@ -226,7 +231,11 @@ class ExactLikelihood:
         else:
             P = self.probabilities(theta)
             dP, rows = np.zeros((0, self.n_outcomes_max)), np.zeros(0, dtype=np.int64)
-        ll, g = _log_likelihood(self.model, P, dP, rows, self.data, self.floor, self.min_detection)
+        data = self.data
+        if weights is not None:
+            data = [replace(h, weight=np.asarray(w, dtype=float))
+                    for h, w in zip(self.data, weights, strict=True)]  # fmt: skip
+        ll, g = _log_likelihood(self.model, P, dP, rows, data, self.floor, self.min_detection)
         with self._lock:
             self.evals += 1
             self.grad_evals += bool(grad)

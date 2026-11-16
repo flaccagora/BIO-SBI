@@ -10,7 +10,15 @@ from scipy.stats import dirichlet
 
 from bio_sbi.inference.exact_gw import ExactGW, ExactLikelihood
 from bio_sbi.inference.gw_exact import log_likelihood as raw_log_likelihood
-from bio_sbi.inference.gw_optimise import PointObjective, lbfgsb, optimise, pso, settings
+from bio_sbi.inference.gw_optimise import (
+    PointObjective,
+    lbfgsb,
+    minibatch_weights,
+    optimise,
+    pso,
+    settings,
+    sgd,
+)
 from bio_sbi.observation import ObservationModel
 from bio_sbi.simulators import GaltonWatson
 from bio_sbi.summaries import Cohort
@@ -336,3 +344,163 @@ def test_map_refinement_is_not_stopped_by_zero_density_bounds():
                    log_every=0, validate=False)  # fmt: skip
     for c in res["candidates"]:
         assert c["refinement"]["nit"] > 3 and c["value"] > c["start_value"]
+
+
+# ---------------------------------------------------------------------- SGD family
+SGD_FAST = {"method": "sgd", "starts": 3, "sgd_iter": 40, "refine_top": 2, "refine_maxiter": 30,
+            "log_every": 0, "validate": False}  # fmt: skip
+
+
+class Quadratic:
+    """Toy objective (maximum at ``target``, may lie outside the box) with gradients."""
+
+    def __init__(self, target, sign=1.0, lower=0.0, upper=1.0):
+        self.target, self.sign = np.asarray(target, float), sign
+        self.dim = len(self.target)
+        self.lower, self.upper = np.full(self.dim, lower), np.full(self.dim, upper)
+        self.n_clones, self.seen = 1, []
+
+    def value(self, x):
+        assert np.all(x >= self.lower) and np.all(x <= self.upper)  # projection holds
+        self.seen.append(-float(np.sum((x - self.target) ** 2)))
+        return self.seen[-1]
+
+    def value_and_grad(self, x, weights=None):
+        return self.value(x), self.sign * -2 * (x - self.target)
+
+
+@pytest.mark.parametrize("optimizer", ["adam", "momentum"])
+@pytest.mark.parametrize("coords", ["box", "logit"])
+def test_sgd_ascends_the_likelihood_on_a_small_case(rev, optimizer, coords):
+    lik, sim = rev
+    obj = PointObjective(lik)
+    x0 = np.clip(interior(sim) + 0.1, 0, 1)
+    lr = {"adam": 0.01, "momentum": 0.002}[optimizer] * (4 if coords == "logit" else 1)
+    s = settings({"sgd_optimizer": optimizer, "sgd_coords": coords, "sgd_lr": lr,
+                  "sgd_iter": 30, "sgd_patience": 0, "log_every": 0})  # fmt: skip
+    res = sgd(obj, x0, s)
+    assert res["start_value"] == pytest.approx(obj.value(x0))
+    assert res["best_value"] > res["start_value"] + 1.0
+    assert res["best_value"] == pytest.approx(obj.value(res["best_x"]))
+    # one small step along the gradient increases the objective (direction is ascent)
+    one = sgd(obj, x0, {**s, "sgd_iter": 1, "sgd_lr": 1e-4})
+    assert one["final_value"] > one["start_value"]
+
+
+@pytest.mark.parametrize("coords", ["box", "logit"])
+def test_sgd_projection_keeps_iterates_in_the_box(coords):
+    # maximum outside the box in some coordinates: iterates are projected onto it
+    obj = Quadratic([1.5, -0.3, 0.4], lower=0.1, upper=0.9)
+    s = settings({"sgd_coords": coords, "sgd_lr": 0.3, "sgd_iter": 200, "sgd_patience": 0,
+                  "sgd_schedule": "constant"})  # fmt: skip
+    res = sgd(obj, np.array([0.5, 0.5, 0.5]), s)  # Quadratic.value asserts the box
+    assert np.all(res["best_x"] >= 0.1) and np.all(res["best_x"] <= 0.9)
+    tol = 1e-6 if coords == "box" else 1e-3  # logit: the bound is only approached
+    assert np.allclose(res["best_x"], [0.9, 0.1, 0.4], atol=tol)
+
+
+def test_sgd_on_likelihood_keeps_probabilities_valid_and_fixed_entries():
+    fixed = {"founder": {"A": 1.0}, "A": {"death": 0.1}, "B": {"div_AA": 0.0, "div_AB": 0.0}}
+    lik, sim = make_lik("two_type", horizons=(3,), clones=16, fixed=fixed)
+    for coords in ("box", "logit"):
+        res = optimise(lik, sgd_coords=coords, sgd_lr=0.2, sgd_schedule="constant",
+                       sgd_polish=False, **SGD_FAST)  # fmt: skip
+        for c in res["candidates"]:
+            phys = np.array([c["physical"][n] for n in sim.space.names])
+            sim.space.validate(phys)
+            assert c["physical"]["A.death"] == 0.1 and c["physical"]["B.div_AA"] == 0.0
+            theta = np.array([c["theta"][n] for n in sim.space.theta_names])
+            assert np.all((theta >= 0) & (theta <= 1))
+
+
+def test_minibatch_gradient_is_unbiased(rev):
+    lik, sim = rev
+    obj = PointObjective(lik)
+    x = interior(sim)
+    v, g = obj.value_and_grad(x)
+    rng = np.random.default_rng(0)
+    vals, grads = [], []
+    for _ in range(400):
+        w = minibatch_weights(lik, rng, 0.25)
+        for h, wh in zip(lik.data, w, strict=True):
+            assert wh.sum() == pytest.approx(h.clones) and len(wh) == len(h.weight)
+        vb, gb = obj.value_and_grad(x, weights=w)
+        vals.append(vb)
+        grads.append(gb)
+    G = np.array(grads)
+    se = G.std(0) / np.sqrt(len(G))
+    assert np.all(np.abs(G.mean(0) - g) < 5 * se + 1e-9)
+    assert abs(np.mean(vals) - v) < 5 * np.std(vals) / np.sqrt(len(vals))
+    assert np.std(vals) > 0  # really stochastic
+    # the full weights reproduce the full-data evaluation exactly
+    assert obj.value_and_grad(x, weights=[h.weight for h in lik.data])[0] == v
+
+
+def test_sgd_is_reproducible_and_uses_the_multistart_starts(rev):
+    lik, _ = rev
+    kw = {**SGD_FAST, "sgd_batch": 0.5, "sgd_eval_every": 5}
+    a = optimise(lik, seed=3, workers=1, **kw)
+    b = optimise(lik, seed=3, workers=2, **kw)
+    c = optimise(lik, seed=4, workers=1, **kw)
+    json.dumps(a)
+    assert a["best"]["theta"] == b["best"]["theta"] and a["value"] == b["value"]
+    assert [r["history"] for r in a["sgd"]] == [r["history"] for r in b["sgd"]]
+    assert a["evaluations"] == b["evaluations"]
+    assert [r["history"] for r in a["sgd"]] != [r["history"] for r in c["sgd"]]
+    # fair comparison: SGD start i is multistart start i
+    ms = optimise(lik, seed=3, method="multistart", starts=3, refine_maxiter=1, log_every=0,
+                  validate=False)  # fmt: skip
+    assert sorted(r["start_value"] for r in a["sgd"]) == pytest.approx(
+        sorted(c["start_value"] for c in ms["candidates"])
+    )
+
+
+def test_sgd_never_returns_a_worse_point_than_its_best_visited():
+    # wrong-sign gradient: every step goes downhill; the start must be returned
+    obj = Quadratic([0.3, 0.3], sign=-1.0)
+    x0 = np.array([0.4, 0.2])
+    res = sgd(obj, x0, settings({"sgd_iter": 20, "sgd_lr": 0.05, "sgd_patience": 0}))
+    assert np.array_equal(res["best_x"], x0) and res["best_value"] == max(obj.seen)
+    assert res["final_value"] < res["best_value"]
+    assert np.all(np.diff(res["history"]) >= 0)
+    # with polish, a candidate is never worse than its SGD best either
+    lik, _ = make_lik(horizons=(3,), clones=16)
+    out = optimise(lik, **SGD_FAST)
+    for c in out["candidates"]:
+        assert c["value"] >= c["start_value"]
+    assert out["value"] >= out["sgd_best_value"]
+    assert out["evaluations"]["gradient"] >= out["evaluations_before_polish"]["gradient"]
+
+
+def test_sgd_nonfinite_step_returns_to_best_and_halves_the_rate():
+    class Holes(Quadratic):
+        def value_and_grad(self, x, weights=None):
+            v, g = super().value_and_grad(x)
+            return (np.nan, g) if x[0] > 0.45 else (v, g)
+
+    obj = Holes([0.9, 0.5])
+    s = settings({"sgd_iter": 50, "sgd_lr": 0.1, "sgd_patience": 0})
+    res = sgd(obj, np.array([0.2, 0.5]), s)
+    assert res["invalid_steps"] > 0 and res["best_x"][0] <= 0.45
+    assert np.isfinite(res["best_value"])
+
+
+def test_sgd_mle_and_map_are_separate_objectives():
+    lik, sim = make_lik(concentration={"A": {"death": 2.0}, "B": {"to_A": 3.0, "death": 2.0}})
+    mle = optimise(lik, objective="mle", **SGD_FAST)
+    mp = optimise(lik, objective="map", **SGD_FAST)
+    assert mle["objective"] == "mle" and mle["best"]["log_prior"] is None
+    assert mle["value"] == pytest.approx(mle["best"]["log_likelihood"])
+    assert mp["objective"] == "map" and mp["best"]["log_prior"] is not None
+    assert mp["value"] == pytest.approx(mp["best"]["log_likelihood"] + mp["best"]["log_prior"])
+    # MAP keeps off the zero-density stick bounds, like PSO / L-BFGS-B
+    assert mp["bounds"]["lower"] == PointObjective(lik, "map").lower.tolist()
+
+
+def test_sgd_settings_are_validated():
+    for bad in ({"sgd_optimizer": "rmsprop"}, {"sgd_coords": "simplex"},
+                {"sgd_schedule": "step"}, {"sgd_unknown": 1}):  # fmt: skip
+        with pytest.raises(ValueError):
+            settings({"method": "sgd", **bad})
+    with pytest.raises(ValueError, match="sgd_batch"):
+        sgd(Quadratic([0.5]), np.array([0.2]), settings({"sgd_batch": 1.5}))

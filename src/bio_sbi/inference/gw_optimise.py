@@ -53,6 +53,22 @@ never replaces its start by a worse or failed point. ``method=multistart`` is th
 baseline: L-BFGS-B from ``starts`` prior draws, same objective and bounds.
 PSO convergence is no proof of global optimality.
 
+Algorithm (``method=sgd``, MLE or MAP, see :func:`sgd`): first-order ascent (Adam or
+heavy-ball momentum) from the *same* ``starts`` prior draws as ``multistart`` (same RNG
+stream), on the objective divided by the total clone count (per-clone mean, so learning
+rates do not scale with the data size), with a learning-rate schedule, stagnation
+stopping and an optional bounded L-BFGS-B polish of the ``refine_top`` best distinct
+endpoints. Coordinates ``sgd_coords``: ``box`` = projected steps in the stick box (same
+box as PSO / L-BFGS-B; boundary faces reachable exactly) or ``logit`` = unconstrained
+``z = logit(theta)`` clipped to ``|z| <= sgd_logit_bound`` (the MLE is invariant to the
+reparametrisation, so no Jacobian is added; boundary faces are only approached,
+``theta >= expit(-bound)``). ``sgd_batch`` (fraction of clones per horizon) makes the
+gradient a minibatch estimate: clones sampled without replacement, cell counts rescaled
+by ``N_h / B_h`` (unbiased; the detection term is exact). Each minibatch step still
+computes the full pgf / FFT law, so it costs as much as a full-batch step (see the
+benchmark in ``scripts/pso_benchmark``); the best point is then tracked by full
+objective-only evaluations every ``sgd_eval_every`` steps.
+
 Output (:func:`optimise`): a JSON-serialisable dict (written to ``optimisation.json``);
 swarm particles are *not* posterior draws and never go to ``ExactPosterior.draws``.
 """
@@ -66,6 +82,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 from scipy.optimize import minimize
+from scipy.special import expit, logit
 
 from ..rng import rng_for
 from .gw_exact import law_and_jac
@@ -73,7 +90,10 @@ from .gw_exact import law_and_jac
 LOG = logging.getLogger(__name__)
 
 OBJECTIVES = ("mle", "map")
-METHODS = ("pso", "multistart")
+METHODS = ("pso", "multistart", "sgd")
+SGD_OPTIMIZERS = ("adam", "momentum")
+SGD_COORDS = ("box", "logit")
+SGD_SCHEDULES = ("constant", "cosine", "exp")
 BOUNDARY_MODES = ("reflect", "clamp")
 
 #: Distance kept from stick bounds where the MAP prior density vanishes (see PointObjective).
@@ -102,8 +122,24 @@ DEFAULTS = {
     # refinement / baseline
     "refine_top": 4,  # distinct PSO candidates refined by L-BFGS-B (0 = PSO alone)
     "refine_maxiter": 500,
-    "starts": 8,  # method=multistart: L-BFGS-B starts
+    "starts": 8,  # method=multistart / sgd: L-BFGS-B / SGD starts (same prior draws)
     "dedup_tol": 1e-2,  # candidates closer than this (max |dp|) are duplicates
+    # SGD family (method=sgd; refine_top / refine_maxiter apply to the polish)
+    "sgd_optimizer": "adam",  # adam | momentum (heavy ball)
+    "sgd_coords": "box",  # box (projected, sticks) | logit (unconstrained, clipped)
+    "sgd_lr": 0.02,  # step size in sgd_coords (Adam: ~max move per step)
+    "sgd_schedule": "cosine",  # constant | cosine | exp (to sgd_lr * sgd_lr_final)
+    "sgd_lr_final": 0.01,
+    "sgd_momentum": 0.9,  # momentum (momentum) / beta1 (adam)
+    "sgd_beta2": 0.999,
+    "sgd_iter": 500,  # steps per start
+    "sgd_max_evals": None,  # gradient evaluations per start (None = sgd_iter)
+    "sgd_batch": None,  # None / 1 = full batch; fraction of clones per horizon (minibatch)
+    "sgd_eval_every": 10,  # minibatch: full objective-only evaluation every N steps
+    "sgd_patience": 100,  # stop if the best improved < sgd_tol over this many steps
+    "sgd_tol": 1e-3,
+    "sgd_logit_bound": 15.0,  # sgd_coords=logit: |z| <= bound
+    "sgd_polish": True,  # bounded L-BFGS-B on the refine_top best distinct endpoints
     # execution / reporting
     "workers": 1,
     "log_every": 10,
@@ -133,6 +169,7 @@ class PointObjective:
             raise ValueError("boundary_eps must lie in [0, 0.5)")
         self.lik, self.objective, self.eps = lik, objective, eps
         self.dim = lik.dim
+        self.n_clones = sum(h.clones for h in lik.data)  # gradient scale of method=sgd
         coef_s, coef_t, alpha_min = [], [], math.inf
         for r in lik.space.rows:
             if not r.n_sticks:  # deterministic row: q = 1 (or no free entry)
@@ -178,10 +215,17 @@ class PointObjective:
                     g[nz] += sign * coef[nz] / x[nz]
         return lp, g
 
-    def evaluate(self, theta: np.ndarray, grad: bool = False) -> dict:
-        """``value`` (``-inf`` if not finite), ``log_likelihood``, ``log_prior`` (+ ``grad``)."""
+    def evaluate(self, theta: np.ndarray, grad: bool = False, weights=None) -> dict:
+        """``value`` (``-inf`` if not finite), ``log_likelihood``, ``log_prior`` (+ ``grad``).
+
+        ``weights``: minibatch cell weights per horizon (see
+        :meth:`ExactLikelihood.log_likelihood`); the prior term is always exact.
+        """
         theta = np.asarray(theta, dtype=float)
-        ll, gl = self.lik.log_likelihood(theta, grad=grad)
+        if weights is None:
+            ll, gl = self.lik.log_likelihood(theta, grad=grad)
+        else:
+            ll, gl = self.lik.log_likelihood(theta, grad=grad, weights=weights)
         lp, gp = self.log_prior(theta) if self.objective == "map" else (0.0, 0.0)
         value = ll + lp
         out = {"value": value if np.isfinite(value) else -math.inf, "log_likelihood": ll,
@@ -194,9 +238,9 @@ class PointObjective:
         """Objective value (objective-only likelihood path; ``-inf`` if not finite)."""
         return self.evaluate(theta)["value"]
 
-    def value_and_grad(self, theta: np.ndarray) -> tuple[float, np.ndarray]:
-        """Objective value and analytic gradient in stick coordinates."""
-        e = self.evaluate(theta, grad=True)
+    def value_and_grad(self, theta: np.ndarray, weights=None) -> tuple[float, np.ndarray]:
+        """Objective value and analytic gradient in stick coordinates (``weights``: minibatch)."""
+        e = self.evaluate(theta, grad=True, weights=weights)
         return e["value"], e["grad"]
 
 
@@ -309,6 +353,164 @@ def pso(obj: PointObjective, rng: np.random.Generator, s: dict, name: str = "pso
     return {
         "best_x": gbest_x, "best_value": gbest_f, "pbest_x": pbest_x, "pbest_f": pbest_f,
         "history": history, "iterations": it, "evals": evals, "invalid_evals": invalid,
+        "stop_reason": reason, "seconds": time.perf_counter() - t0,
+    }  # fmt: skip
+
+
+# ---------------------------------------------------------------------- SGD family
+def minibatch_weights(lik, rng: np.random.Generator, fraction: float, cells=None) -> list:
+    """Rescaled cell counts of a minibatch of clones (per horizon, without replacement).
+
+    ``B_h = max(1, round(fraction * N_h))`` clones of horizon ``h``; each sampled cell
+    count is multiplied by ``N_h / B_h``, so the weights sum to ``N_h`` and the
+    minibatch log likelihood and gradient are unbiased for the full ones.
+    ``cells`` (per horizon: the cell index of every clone) can be precomputed.
+    """
+    if cells is None:
+        cells = [np.repeat(np.arange(len(h.weight)), h.weight.astype(np.int64)) for h in lik.data]
+    out = []
+    for h, c in zip(lik.data, cells, strict=True):
+        n = len(c)
+        b = min(max(1, int(round(fraction * n))), n)
+        pick = rng.choice(n, size=b, replace=False)
+        out.append(np.bincount(c[pick], minlength=len(h.weight)) * (n / b))
+    return out
+
+
+def _lr(s: dict, it: int, n_iter: int) -> float:
+    """Learning rate of step ``it`` (0-based) out of ``n_iter``."""
+    lr, f = float(s["sgd_lr"]), float(s["sgd_lr_final"])
+    t = it / max(n_iter - 1, 1)
+    if s["sgd_schedule"] == "constant":
+        return lr
+    if s["sgd_schedule"] == "cosine":
+        return lr * (f + (1 - f) * 0.5 * (1 + math.cos(math.pi * t)))
+    if s["sgd_schedule"] == "exp":
+        return lr * f**t
+    raise ValueError(f"sgd_schedule must be one of {SGD_SCHEDULES}; got {s['sgd_schedule']!r}")
+
+
+def sgd(obj: PointObjective, x0: np.ndarray, s: dict, rng: np.random.Generator | None = None,
+        name: str = "sgd") -> dict:  # fmt: skip
+    """First-order ascent of ``obj`` from ``x0`` (Adam or momentum; full or minibatch).
+
+    The gradient is divided by ``obj.n_clones`` (per-clone mean objective). ``box``
+    coordinates: ``x <- clip(x + step, lower, upper)`` (projected ascent; moments are
+    kept). ``logit``: steps in ``z = logit(x)`` with ``dz = g * x (1 - x)``, ``z``
+    clipped to the box mapped to logits and to ``|z| <= sgd_logit_bound``.
+
+    Full batch: every step evaluates value and gradient at the iterate, so the best
+    visited point is tracked exactly. Minibatch (``0 < sgd_batch < 1``, needs ``rng``):
+    the gradient is a minibatch estimate and the best point is tracked by objective-only
+    full evaluations every ``sgd_eval_every`` steps and at the end. A nonfinite value or
+    gradient sends the iterate back to the best point, resets the moments and halves the
+    learning rate. Returns the best (tracked) point, never a worse one, with its value,
+    the start / final values, evaluations, the best value per step (``history``), the
+    stopping reason and wall time.
+    """
+    t0 = time.perf_counter()
+    lo, hi = np.asarray(obj.lower, float), np.asarray(obj.upper, float)
+    x0 = np.clip(np.asarray(x0, dtype=float), lo, hi)
+    coords, opt = s["sgd_coords"], s["sgd_optimizer"]
+    if coords not in SGD_COORDS:
+        raise ValueError(f"sgd_coords must be one of {SGD_COORDS}; got {coords!r}")
+    if opt not in SGD_OPTIMIZERS:
+        raise ValueError(f"sgd_optimizer must be one of {SGD_OPTIMIZERS}; got {opt!r}")
+    if coords == "logit":
+        bound = float(s["sgd_logit_bound"])
+        with np.errstate(divide="ignore"):
+            zlo, zhi = np.maximum(logit(lo), -bound), np.minimum(logit(hi), bound)
+        z = np.clip(logit(np.clip(x0, expit(-bound), expit(bound))), zlo, zhi)
+
+        def to_x(z):
+            return np.clip(expit(z), lo, hi)
+    else:
+        zlo, zhi, z = lo, hi, x0.copy()
+
+        def to_x(z):
+            return z
+    batch = s.get("sgd_batch")
+    if batch is not None and not 0.0 < float(batch) <= 1.0:
+        raise ValueError(f"sgd_batch must be None or a fraction in (0, 1]; got {batch!r}")
+    full = batch is None or float(batch) == 1.0
+    if not full:
+        if rng is None:
+            raise ValueError("minibatch SGD needs an rng")
+        lik = obj.lik
+        cells = [np.repeat(np.arange(len(h.weight)), h.weight.astype(np.int64)) for h in lik.data]
+    scale = 1.0 / max(float(getattr(obj, "n_clones", 1.0)), 1.0)
+    n_iter = int(s["sgd_iter"])
+    max_evals = int(s["sgd_max_evals"]) if s.get("sgd_max_evals") else n_iter
+    every, patience, tol = int(s["sgd_eval_every"]), int(s["sgd_patience"]), float(s["sgd_tol"])
+    b1, b2, eps = float(s["sgd_momentum"]), float(s["sgd_beta2"]), 1e-8
+    m, v = np.zeros_like(z), np.zeros_like(z)
+    best_x, best_f, best_z = x0.copy(), -math.inf, z.copy()
+    start_value = None
+    grad_evals = obj_evals = invalid = 0
+    lr_mult, t_adam = 1.0, 0
+    history: list[float] = []
+    reason, it = "sgd_iter", 0
+
+    def track(x, zz, f):
+        nonlocal best_x, best_f, best_z, start_value
+        if start_value is None:
+            start_value = float(f)
+        if np.isfinite(f) and f > best_f:
+            best_x, best_f, best_z = x.copy(), float(f), zz.copy()
+
+    for it in range(n_iter):
+        if grad_evals >= max_evals:
+            reason = "max_evals"
+            break
+        x = to_x(z)
+        if full:
+            f, g = obj.value_and_grad(x)
+            grad_evals += 1
+            track(x, z, f)
+            ok = np.isfinite(f)
+        else:
+            if it % every == 0:
+                f = obj.value(x)
+                obj_evals += 1
+                track(x, z, f)
+            _, g = obj.value_and_grad(x, weights=minibatch_weights(lik, rng, float(batch), cells))
+            grad_evals += 1
+            ok = True
+        g = np.asarray(g, dtype=float)
+        if not ok or not np.all(np.isfinite(g)):
+            invalid += 1
+            z, m, v, t_adam = best_z.copy(), np.zeros_like(z), np.zeros_like(z), 0
+            lr_mult *= 0.5
+            history.append(best_f)
+            continue
+        g = g * scale
+        if coords == "logit":
+            g = g * x * (1.0 - x)
+        lr = _lr(s, it, n_iter) * lr_mult
+        if opt == "adam":
+            t_adam += 1
+            m = b1 * m + (1 - b1) * g
+            v = b2 * v + (1 - b2) * g * g
+            step = lr * (m / (1 - b1**t_adam)) / (np.sqrt(v / (1 - b2**t_adam)) + eps)
+        else:
+            m = b1 * m + g
+            step = lr * m
+        z = np.clip(z + step, zlo, zhi)
+        history.append(best_f)
+        if patience and len(history) > patience and history[-1] - history[-1 - patience] < tol:
+            reason = "stagnation"
+            break
+        if s.get("log_every") and (it + 1) % (10 * int(s["log_every"])) == 0:
+            LOG.info("%s step %d: best %.4f", name, it + 1, best_f)
+    x = to_x(z)  # the last update has not been evaluated yet
+    final = obj.value(x)
+    obj_evals += 1
+    track(x, z, final)
+    history.append(best_f)
+    return {
+        "best_x": best_x, "best_value": best_f, "start_value": start_value,
+        "final_value": float(final), "history": history, "iterations": it + 1,
+        "grad_evals": grad_evals, "obj_evals": obj_evals, "invalid_steps": invalid,
         "stop_reason": reason, "seconds": time.perf_counter() - t0,
     }  # fmt: skip
 
@@ -532,18 +734,69 @@ def settings(overrides: dict | None = None) -> dict:
         raise ValueError(f"method must be one of {METHODS}; got {s['method']!r}")
     if s["boundary"] not in BOUNDARY_MODES:
         raise ValueError(f"boundary must be one of {BOUNDARY_MODES}; got {s['boundary']!r}")
+    for key, allowed in (("sgd_optimizer", SGD_OPTIMIZERS), ("sgd_coords", SGD_COORDS),
+                         ("sgd_schedule", SGD_SCHEDULES)):  # fmt: skip
+        if s[key] not in allowed:
+            raise ValueError(f"{key} must be one of {allowed}; got {s[key]!r}")
     s["validation_grids"] = list(s["validation_grids"] or [])
     return s
 
 
+def _sgd_candidates(obj, s, seed, key, workers, out) -> list[dict]:
+    """``method=sgd``: SGD from the multistart prior draws, then optional polish."""
+    # same RNG stream as multistart: start i is the same point for both methods
+    X0 = _initial(obj, rng_for(seed, "multistart", *key), int(s["starts"]), s["init"])
+
+    def run(i):
+        return sgd(obj, X0[i], s, rng_for(seed, "sgd-batch", *key, i), name=f"sgd start {i}")
+
+    lik = obj.lik
+    ev0, gr0 = lik.evals, lik.grad_evals
+    t_sgd = time.perf_counter()
+    with ThreadPoolExecutor(min(workers, len(X0))) as pool:
+        runs = list(pool.map(run, range(len(X0))))
+    out["sgd_seconds"] = time.perf_counter() - t_sgd
+    out["evaluations_before_polish"] = {
+        "objective_only": lik.evals - ev0 - (lik.grad_evals - gr0),
+        "gradient": lik.grad_evals - gr0,
+    }
+    out["sgd"] = [{k: v for k, v in r.items() if k != "best_x"} | {"best_theta": r["best_x"].tolist()}
+                  for r in runs]  # fmt: skip
+    f = np.array([r["best_value"] for r in runs])
+    if not np.any(np.isfinite(f)):
+        raise RuntimeError("sgd: no start reached a finite objective")
+    out["sgd_best_value"] = float(np.max(f))
+    X = np.array([r["best_x"] for r in runs]).reshape(len(runs), obj.dim)
+    refs: dict[int, dict] = {}
+    t_ref = time.perf_counter()
+    if s["sgd_polish"] and int(s["refine_top"]) > 0:
+        polish = _dedup(obj, X, f, float(s["dedup_tol"]), int(s["refine_top"]))
+        with ThreadPoolExecutor(min(workers, len(polish))) as pool:
+            refs = dict(zip(polish, pool.map(lambda i: lbfgsb(obj, X[i], s["refine_maxiter"]),
+                                             polish), strict=True))  # fmt: skip
+    out["refine_seconds"] = time.perf_counter() - t_ref
+    candidates = []
+    for i, r in enumerate(runs):
+        ref = refs.get(i)
+        c = _describe(obj, X[i] if ref is None else ref["x"], s["near_tol"])
+        gap = np.minimum(X[i] - obj.lower, obj.upper - X[i])
+        c.update(source=f"sgd{i}", start_value=float(r["best_value"]),
+                 sgd_min_stick_gap=float(gap.min()) if len(gap) else None,
+                 refinement=None if ref is None else {k: v for k, v in ref.items() if k != "x"})
+        candidates.append(c)
+    return candidates
+
+
 def optimise(lik, seed: int = 0, key=("reference",), **overrides) -> dict:
-    """Point estimate of ``lik`` (MLE or physical MAP): PSO + L-BFGS-B, or multistart.
+    """Point estimate of ``lik`` (MLE or physical MAP): PSO + L-BFGS-B, multistart or SGD.
 
     Returns a JSON-serialisable dict: ``objective`` (name), ``value``, ``best`` (stick
     coordinates, decoded probabilities, log likelihood and log prior separately,
     boundary proximity), ``candidates`` (every refined / baseline solution with pre- and
     post-refinement values and L-BFGS-B status), ``pso`` (per restart: best per
-    iteration, evaluations, stopping reason, seconds), ``evaluations`` (objective-only
+    iteration, evaluations, stopping reason, seconds), ``sgd`` (method=sgd, per start:
+    best value per step, start / final value, evaluations, stopping reason; plus
+    ``sgd_best_value`` and ``evaluations_before_polish``), ``evaluations`` (objective-only
     and gradient likelihood calls), ``seconds``, ``settings``, ``seed`` and, with
     ``validate``, ``validation`` (see :func:`validate`).
     """
@@ -599,6 +852,8 @@ def optimise(lik, seed: int = 0, key=("reference",), **overrides) -> dict:
                      refinement=None if ref is None else
                      {k2: v for k2, v in ref.items() if k2 not in ("x",)})  # fmt: skip
             candidates.append(c)
+    elif s["method"] == "sgd":
+        candidates = _sgd_candidates(obj, s, seed, key, workers, out)
     else:
         rng = rng_for(seed, "multistart", *key)
         X0 = _initial(obj, rng, int(s["starts"]), s["init"])

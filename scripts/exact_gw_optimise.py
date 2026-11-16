@@ -11,6 +11,9 @@ same config, or the ``reference.npz`` of a finished run (``--run-dir``)::
         inference.method.optimise.objective=map '+law.concentration={A: {death: 2}}'
     uv run python scripts/exact_gw_optimise.py --run-dir RUN --out RUN/opt \
         inference.method.optimise.method=multistart
+    uv run python scripts/exact_gw_optimise.py --out opt/adam law=two_type \
+        inference.method.optimise.method=sgd inference.method.optimise.sgd_lr=0.02 \
+        inference.method.optimise.sgd_polish=true inference.method.threads=2
 
 Run from the repository root.
 """

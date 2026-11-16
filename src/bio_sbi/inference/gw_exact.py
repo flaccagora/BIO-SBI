@@ -318,8 +318,8 @@ class HorizonData:
 
     @property
     def clones(self) -> int:
-        """Number of clones in the cohort."""
-        return int(self.weight.sum())
+        """Number of clones in the cohort (rounded: minibatch weights are rescaled)."""
+        return int(round(float(self.weight.sum())))
 
 
 def histogram(counts: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
