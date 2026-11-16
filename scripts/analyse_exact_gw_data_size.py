@@ -253,8 +253,8 @@ def main() -> None:
           f"{len(reruns)} (run, prior) pairs need a rerun (k > {K_MAX})")  # fmt: skip
     med = nstar.groupby(["parameter", "gt"])["nstar"].median().unstack("gt")
     print("\nn* (median over seeds; inf = not converged by the largest n):\n", med)
-    print("\nflat contraction (mean over seeds):\n",
-          fl.groupby(["gt", "n"])["contraction"].min().unstack("n").round(2))
+    print("\nflat contraction, worst parameter (mean over seeds):\n",
+          fl.groupby(["gt", "seed", "n"])["contraction"].min().groupby(["gt", "n"]).mean().unstack("n").round(2))
     print("\ninformation gain, nats (mean over seeds):\n",
           info.groupby(["gt", "n"]).mean().round(1))
 
