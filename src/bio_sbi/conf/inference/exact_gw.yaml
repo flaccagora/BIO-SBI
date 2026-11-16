@@ -30,6 +30,35 @@ method:
     min_size: 32
     damping: 1.0e+4            # evaluation radius: round-off amplification <= damping; aliasing <~3e-3
     max_points: 4.0e+6         # Lx * Ly cap per horizon (memory) for the reference data
+  optimise:                    # point estimate (gw_optimise.py) -> optimisation.json, never draws;
+    enabled: false             #   true: also run after NUTS (or scripts/exact_gw_optimise.py alone)
+    objective: mle             # mle | map (Dirichlet log prior on the normalised free probabilities)
+    method: pso                # pso (+ L-BFGS-B refinement of refine_top) | multistart (L-BFGS-B)
+    boundary_eps: 0.0          # stick box [eps, 1-eps]; map with any alpha < 1 needs eps > 0
+    init: prior                # prior | uniform starting particles / starts
+    restarts: 2                # independent swarms (seeded from seed)
+    swarm: 24
+    max_iter: 100
+    max_evals: null            # per swarm (objective-only evaluations); null = swarm*(max_iter+1)
+    inertia: 0.7298            # constriction coefficients (Clerc-Kennedy)
+    inertia_end: null          # linear inertia schedule (null = constant)
+    cognitive: 1.49618
+    social: 1.49618
+    velocity_max: 0.25         # fraction of the box width per coordinate
+    boundary: reflect          # reflect (mirror + reverse velocity) | clamp (absorbing)
+    patience: 20               # stop if the best improved < tol nats over patience iterations
+    tol: 1.0e-4
+    xtol: 1.0e-6               # ... or the swarm collapsed
+    refine_top: 4              # distinct PSO candidates refined (0 = PSO alone)
+    refine_maxiter: 500
+    starts: 8                  # method=multistart
+    dedup_tol: 1.0e-2          # max |dp| below which candidates are duplicates
+    workers: null              # threads for evaluations (null = threads)
+    log_every: 10
+    validate: true             # larger grids, floors, eps, constraints (validation section)
+    near_tol: 1.0e-6
+    validation_grids: [2, 4]
+    validation_max_points: 4.0e+6
   sbc:                         # MCMC settings of each SBC case (cheaper than the reference fit;
     chains: 2                  #   threads // chains cases run at a time)
     warmup: 100

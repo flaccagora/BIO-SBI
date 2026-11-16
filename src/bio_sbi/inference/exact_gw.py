@@ -28,11 +28,12 @@ re-running MCMC on each calibration dataset (:meth:`ExactGW.calibrate`).
 
 from __future__ import annotations
 
+import copy
 import logging
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 import numpy as np
@@ -122,6 +123,7 @@ class ExactLikelihood:
         )
         grid = dict(grid or {})
         max_points = float(grid.pop("max_points", 4e6))
+        self.grid_settings = dict(grid)  # grid_spec options (re-gridding: with_settings)
         self.data: list[HorizonData] = []
         for c in cohorts:
             a, b, w = histogram(c.counts)
@@ -152,6 +154,30 @@ class ExactLikelihood:
         self.n_outcomes_max = law.offspring.shape[1]
         self._lock = threading.Lock()
         self.evals, self.eval_seconds = 0, 0.0
+        self.grad_evals = 0  # evaluations with gradient (``evals`` counts all)
+
+    def with_settings(self, grid: dict | None = None, floor: float | None = None,
+                      min_detection: float | None = None) -> ExactLikelihood:  # fmt: skip
+        """Copy of this likelihood with other grid options / floors (fresh counters).
+
+        ``grid`` updates the :func:`~bio_sbi.inference.gw_exact.grid_spec` options this
+        likelihood was built with (no ``max_points`` check); used by numerical checks.
+        """
+        new = copy.copy(self)
+        if grid is not None:
+            new.grid_settings = {**self.grid_settings, **grid}
+            new.grid_settings.pop("max_points", None)
+            new.data = [
+                replace(h, grid=grid_spec(int(h.a.max()), int(h.b.max()), **new.grid_settings))
+                for h in self.data
+            ]
+        if floor is not None:
+            new.floor = float(floor)
+        if min_detection is not None:
+            new.min_detection = float(min_detection)
+        new._lock = threading.Lock()
+        new.evals, new.eval_seconds, new.grad_evals = 0, 0.0, 0
+        return new
 
     # ---------------------------------------------------------------- parameters
     @property
@@ -159,10 +185,16 @@ class ExactLikelihood:
         """FFT grid of every horizon."""
         return [h.grid for h in self.data]
 
+    def probabilities(self, theta: np.ndarray) -> np.ndarray:
+        """Outcome-probability matrix ``P (2, O)`` at ``theta`` (no derivatives)."""
+        theta = np.asarray(theta, dtype=float)
+        P, _, _ = self.sim.law.unpack(self.space, self.space.decode(theta))
+        return P
+
     def jacobian(self, theta: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """``P (2, O)``, ``dP (d, O)`` (row derivative per coordinate) and its row index."""
         theta = np.asarray(theta, dtype=float)
-        P, _, _ = self.sim.law.unpack(self.space, self.space.decode(theta))
+        P = self.probabilities(theta)
         dP = np.zeros((self.dim, self.n_outcomes_max))
         rows = np.zeros(self.dim, dtype=np.int64)
         start = 0
@@ -183,14 +215,21 @@ class ExactLikelihood:
         return P, dP, rows
 
     def log_likelihood(self, theta: np.ndarray, grad: bool = True) -> tuple[float, np.ndarray]:
-        """Log-likelihood and its gradient with respect to ``theta``."""
+        """Log-likelihood and its gradient with respect to ``theta``.
+
+        ``grad=False`` skips the Jacobian and the derivative recursion (objective only;
+        the returned gradient is empty). The value is the same computation either way.
+        """
         t0 = time.perf_counter()
-        P, dP, rows = self.jacobian(theta)
-        if not grad:
-            dP, rows = dP[:0], rows[:0]
+        if grad:
+            P, dP, rows = self.jacobian(theta)
+        else:
+            P = self.probabilities(theta)
+            dP, rows = np.zeros((0, self.n_outcomes_max)), np.zeros(0, dtype=np.int64)
         ll, g = _log_likelihood(self.model, P, dP, rows, self.data, self.floor, self.min_detection)
         with self._lock:
             self.evals += 1
+            self.grad_evals += bool(grad)
             self.eval_seconds += time.perf_counter() - t0
         return ll, g
 
@@ -254,6 +293,9 @@ class ExactPosterior(FittedPosterior):
 
     draws: np.ndarray | None = None
     diagnostics: dict = field(default_factory=dict)
+    #: Point estimate (``inference.method.optimise.enabled``; ``optimisation.json``).
+    #: Kept apart from ``draws``: swarm particles / optima are not posterior samples.
+    optimisation: dict | None = None
 
     def sample(self, x: np.ndarray, n: int, seed: int = 0) -> np.ndarray:
         """Return ``n`` stored draws (random subset; all if fewer), ignoring ``x``."""
@@ -302,6 +344,10 @@ class ExactGW(InferenceMethod):
         floor: Probability floor of the likelihood.
         min_detection: Floor of the detection probability in the conditioning.
         sbc: Overrides of ``chains``/``warmup``/``draws``/``init_starts`` for each SBC case.
+        optimise: Point-estimation settings (:mod:`~bio_sbi.inference.gw_optimise`: MLE or
+            physical-probability MAP by PSO + L-BFGS-B). With ``enabled: true``,
+            :meth:`fit_data` also computes the point estimate after (and independently
+            of) NUTS; the pipeline writes it to ``optimisation.json``. Off by default.
         log_every: Log chain progress every this many iterations (0 = silent).
         device, seed, rounds, **_: Accepted for interface compatibility (``rounds`` must
             be 1; neural-network settings are ignored).
@@ -326,6 +372,7 @@ class ExactGW(InferenceMethod):
         floor: float = 1e-15,
         min_detection: float = 1e-6,
         sbc: dict | None = None,
+        optimise: dict | None = None,
         log_every: int = 50,
         device: str = "cpu",
         seed: int = 0,
@@ -347,6 +394,7 @@ class ExactGW(InferenceMethod):
         self.floor = float(floor)
         self.min_detection = float(min_detection)
         self.sbc = dict(sbc or {})
+        self.optimise = dict(optimise or {})
         self.log_every = int(log_every)
 
     # The sbi training hooks do not apply.
@@ -504,6 +552,19 @@ class ExactGW(InferenceMethod):
         }
         return theta.reshape(-1, theta.shape[-1]), diag
 
+    def point_estimate(self, lik: ExactLikelihood, key=("reference",), **overrides) -> dict:
+        """MLE / physical MAP of ``lik`` (``optimise`` settings updated by ``overrides``).
+
+        Workers default to ``threads``. See :func:`~bio_sbi.inference.gw_optimise.optimise`.
+        """
+        from .gw_optimise import optimise
+
+        opts = {**self.optimise, **overrides}
+        opts.pop("enabled", None)
+        if opts.get("workers") is None:
+            opts["workers"] = self.threads
+        return optimise(lik, seed=self.seed, key=key, **opts)
+
     # ---------------------------------------------------------------- pipeline API
     def fit_data(self, simulator, observation, cohorts, x_dim: int) -> ExactPosterior:
         """Sample the exact posterior of the reference dataset ``cohorts``."""
@@ -528,9 +589,15 @@ class ExactGW(InferenceMethod):
             "training_seconds": diag["seconds"], "epochs": 0,
             "best_validation_loss": float("nan"),
         }]  # fmt: skip
+        optimisation = None
+        if self.optimise.get("enabled"):
+            optimisation = self.point_estimate(lik)
+            LOG.info("exact_gw point estimate (%s): %.4f", optimisation["objective"],
+                     optimisation["value"])  # fmt: skip
         return ExactPosterior(
             posterior=None, feature_mask=np.ones(int(x_dim), dtype=bool), method=self.name,
             amortized=False, history=history, draws=draws, diagnostics=diag,
+            optimisation=optimisation,
         )  # fmt: skip
 
     def calibrate(self, simulator, observation, theta: np.ndarray, datasets: list,
