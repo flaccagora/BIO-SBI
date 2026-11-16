@@ -131,13 +131,16 @@ def reference_parameters(
     ``truth.source=reference`` merges ``data.law.reference``, ``data.simulator.reference``
     (entries for types the law lacks are ignored) and ``truth.values``, later winning;
     fixed values of the data law fill in automatically. ``truth.source=prior`` draws
-    one sample from the data model's prior, seeded by :func:`data_seed`; ``attempt > 0``
-    gives the next independent draw (used when a draw cannot produce a reference
-    dataset, see :func:`run_experiment`).
+    one sample from the data model's prior, seeded by ``truth.seed`` if set (optional
+    key: the same truth with different datasets ``data_seed``), else by
+    :func:`data_seed`; ``attempt > 0`` gives the next independent draw (used when a
+    draw cannot produce a reference dataset or fails ``truth.mean_cells``, see
+    :func:`run_experiment`).
     """
     if cfg.truth.source == "prior":
         keys = ("truth",) if attempt == 0 else ("truth", attempt)  # attempt 0: as before
-        seed_torch(seed_for(data_seed(cfg), *keys))
+        root = cfg.truth.get("seed")
+        seed_torch(seed_for(data_seed(cfg) if root is None else int(root), *keys))
         return simulator.decode(simulator.prior().sample((1,)).numpy()[0])
     if cfg.truth.source != "reference":
         raise ValueError("truth.source must be 'reference' or 'prior'")
@@ -152,6 +155,22 @@ def reference_parameters(
         **section(cfg.truth.get("values")),
     }
     return simulator.physical_from_mapping(values)
+
+
+def truth_plausible(cfg: DictConfig, simulator: BranchingSimulator, truth: np.ndarray) -> bool:
+    """Plausibility filter for prior-drawn truths (optional key ``truth.mean_cells``).
+
+    ``truth.mean_cells = {horizon: h, min: a, max: b}`` keeps a draw only if the expected
+    number of living cells per seeded clone at ``h`` (unconditional, all types) lies in
+    ``[a, b]`` (either bound may be null). Unset: every draw is kept. Only applies to
+    ``truth.source=prior``; rejected draws count towards ``truth.max_draws``.
+    """
+    spec = cfg.truth.get("mean_cells")
+    if spec is None or cfg.truth.source != "prior":
+        return True
+    mean = float(np.sum(simulator.expected_counts(truth, float(spec.horizon))))
+    low, high = spec.get("min"), spec.get("max")
+    return (low is None or mean >= float(low)) and (high is None or mean <= float(high))
 
 
 def _write_json(path: Path, payload) -> None:
@@ -180,6 +199,9 @@ def run_experiment(cfg: DictConfig, out: str | Path) -> dict:
     max_draws = int(cfg.truth.get("max_draws", 50)) if cfg.truth.source == "prior" else 1
     for attempt in range(max_draws):
         truth = reference_parameters(cfg, data_gen.simulator, attempt)
+        if not truth_plausible(cfg, data_gen.simulator, truth):
+            reference = None
+            continue
         detection: list[dict] = []
         reference = data_gen.dataset(truth, "reference", stats=detection)
         if reference is not None:
