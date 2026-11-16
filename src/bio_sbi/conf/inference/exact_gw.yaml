@@ -22,6 +22,14 @@ method:
   init_maxiter: 200
   init_tolerance: 20           # chains start only at optima within 20 nats of the best
   log_every: 50                # chain progress in the log every N iterations (0 = silent)
+  evidence_draws: 2000         # log evidence (normalised prior) by bridge sampling in probit
+                               #   coordinates: proposal draws = extra likelihood evaluations
+                               #   (no gradient); 0 = off. metrics.json: log_evidence(_se)
+  evidence_components: 1       # t-mixture components of the bridge proposal (BIC, <= this)
+  holdout:                     # held-out predictive check (inference/heldout.py): fit on a
+    fraction: 0.0              #   seeded per-horizon split, report the test log predictive
+    seed: 0                    #   density in metrics.json `heldout` (0 = off; same fraction /
+    draws: 400                 #   seed on the same data = same test organoids in every model)
   floor: 1.0e-15               # probability floor of the likelihood
   min_detection: 1.0e-6        # floor of P(detected) in the conditioning (see gw_exact.log_likelihood)
   grid:                        # FFT grid per horizon, from the dataset's largest counts

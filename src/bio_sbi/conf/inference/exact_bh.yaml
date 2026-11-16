@@ -77,6 +77,14 @@ method:
   max_evals: 40000             # SMC evaluation budget (tempering + final chains, not the
                                #   optimisation); at the budget the run stops and metrics say
                                #   whether the targets were met (exact_bh.reliable)
+  evidence_draws: 1024         # log evidence (normalised prior): bridge sampling on the final
+                               #   chains in the sampler coordinates (extra evaluations); the
+                               #   tempering-path (SMC) estimate is reported as a cross-check
+  evidence_components: 1
+  holdout:                     # held-out predictive check (see exact_gw.yaml); fraction 0 = off
+    fraction: 0.0
+    seed: 0
+    draws: 400
   islands: 0                   # >0: instead, independent tempered SMC runs ("islands", each
   max_islands: 8               #   ending with final_steps MH steps) pooled until the targets
   final_steps: 16              #   hold with one superchain per island (no long final chains)

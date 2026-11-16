@@ -1,0 +1,78 @@
+# @package _global_
+# X3b, GW arm: exact Galton-Watson likelihood on an hour axis (inference=exact_gw, NUTS;
+# simulator=galton_watson_hours, h hours = round_half_up(h / tau) generations, tau =
+# hours_per_generation fixed) fitted to the SAME Bellman-Harris datasets as x3b_bh_exact and
+# the NPE BH arm (results/x3b/npe_bh/<scenario>/<design>; data_seed = seed). Scenarios as in
+# x3b_bh_exact (data side only here): S1_ref 25/30 h shape 8 | S2_equal_sync 25/25 h shape 32
+# | S3_equal_var 25/25 h shape 4 | S4_desync 25/30 h shape 2.
+# tau arms 20, 24, 25, 30 h. Generations (144/240 h; 96/144/240 h):
+#   tau 20 -> 7/12 (144/20 = 7.2); 5/7/12 (96/20 = 4.8)
+#   tau 24 -> 6/10 exact; 4/6/10 exact   <- "nearest exact-generation" arm
+#   tau 25 -> 6/10 (5.76, 9.6: |h/tau - g| = 0.4 > 0.25, warning); 4/6/10 (3.84, 5.76, 9.6)
+#            = IDENTICAL generations to tau 24, hence identical likelihood and posterior: the
+#            true A lifetime cannot be represented on these endpoints (rounding)
+#   tau 30 -> 5/8 (4.8); 3/5/8 (3.2, 4.8)
+# tau by marginal likelihood: scripts/x3b_tau_select.py runs one dataset over a tau grid
+# (deduplicated by generation tuple) and picks the tau with the highest log evidence.
+# Every run reports log_evidence / log_evidence_se (bridge sampling, normalised prior) for
+# Bayes factors against x3b_bh_exact on the same counts.
+# Commands (4 threads per run = 4 NUTS chains):
+#   bio-sbi -m +experiment=x3b_gw_exact scenario=S1_ref hydra.sweep.dir=results/x3b/gw_exact/S1_ref/real_like
+#   bio-sbi -m +experiment=x3b_gw_exact scenario=S1_ref 'design.horizons=[96,144,240]' \
+#     design.clones=512 hydra.sweep.dir=results/x3b/gw_exact/S1_ref/d512        (and clones=2048: d2048)
+#   held-out arm: add inference.method.holdout.fraction=0.2,
+#     hydra.sweep.dir=results/x3b/gw_exact_holdout/<scenario>/<design>
+#   tau grid (one dataset):
+#   uv run python scripts/x3b_tau_select.py --out results/x3b/gw_tau/S1_ref/real_like/seed0 \
+#     --taus 18:32:1 --jobs 2 -- +experiment=x3b_gw_exact scenario=S1_ref seed=0
+defaults:
+  - override /simulator: galton_watson_hours
+  - override /simulator@data.simulator: bellman_harris
+  - override /law: reversible_ab
+  - override /observation: perfect
+  - override /inference: exact_gw
+  - override /design: real_like
+  - override /budget: dev
+scenario: S1_ref
+x3b:
+  scenarios:
+    S1_ref: {A: 25.0, B: 30.0, shape: 8}
+    S2_equal_sync: {A: 25.0, B: 25.0, shape: 32}
+    S3_equal_var: {A: 25.0, B: 25.0, shape: 4}
+    S4_desync: {A: 25.0, B: 30.0, shape: 2}
+  A: ${x3b.scenarios.${scenario}.A}
+  B: ${x3b.scenarios.${scenario}.B}
+  shape: ${x3b.scenarios.${scenario}.shape}
+hours_per_generation: 24   # tau (h), swept below
+simulator:
+  model:
+    hours_per_generation: ${hours_per_generation}
+data:
+  simulator:
+    reference:
+      A: {mean_lifetime: "${x3b.A}"}
+      B: {mean_lifetime: "${x3b.B}"}
+    model:
+      lifetime_shape: ${x3b.shape}
+inference:
+  sbc_cases: 0       # the BH data are not from this model; SBC of GW itself is in XG
+  method:
+    threads: 4
+budget:
+  ppc_samples: 200
+workers: 4
+torch_threads: 2
+info:
+  title: "X3b: exact GW (hours per generation tau) on BH data"
+  question: |
+    BH data (A 25 h, B 30 h, scenarios S1-S4) fitted with an exact GW likelihood with tau
+    hours per generation. Compare with the exact BH posterior on the same counts
+    (x3b_bh_exact): shared probabilities, growth rate per hour and stable B:A ratio, PPC,
+    held-out lpd and Bayes factor BH vs GW; tau chosen by evidence (x3b_tau_select.py).
+  notes: |
+    tau 25 rounds 144/240 h to 6/10 generations, exactly as tau 24 (identical runs).
+hydra:
+  sweeper:
+    params:
+      hours_per_generation: 20,24,25,30
+      seed: 0,1,2,3,4

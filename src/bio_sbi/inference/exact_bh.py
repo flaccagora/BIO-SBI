@@ -91,6 +91,8 @@ from .base import InferenceMethod
 from .bh_exact import BHModel, check_shapes, detection_and_grad, law_and_jac
 from .bh_reparam import SPECS as REPARAM_SPECS
 from .bh_reparam import Reparam
+from . import heldout
+from .evidence import bridge_sampling, prior_log_norm
 from .exact_gw import ExactPosterior, GridTooLarge
 from .gw_exact import GridSpec, grid_spec, histogram
 from .smc import psis, smc_islands, tempered_smc
@@ -404,6 +406,12 @@ class BHLikelihood:
                 total -= d.clones * math.log(max(qh, self.min_detection))
         return total
 
+    def log_likelihood_batch(self, theta: np.ndarray) -> np.ndarray:
+        """Log-likelihood at every row of ``theta`` (parallel as :meth:`log_posterior_batch`)."""
+        U = self.u_from_theta(np.atleast_2d(theta))
+        prior = log_expit(U) @ self.prior_a + log_expit(-U) @ self.prior_b
+        return self.log_posterior_batch(U) - prior
+
     @property
     def seconds_per_eval(self) -> float:
         """Mean wall time of one likelihood evaluation (all threads on one particle)."""
@@ -633,6 +641,9 @@ class ExactBH(InferenceMethod):
         local_k: int = 0,
         check_every: int = 8,
         max_evals: int = 40000,
+        evidence_draws: int = 1024,
+        evidence_components: int = 1,
+        holdout: dict | None = None,
         grid: dict | None = None,
         floor: float = 1e-15,
         min_detection: float = 1e-6,
@@ -671,7 +682,10 @@ class ExactBH(InferenceMethod):
             "final_burn": float(final_burn), "adapt_final": bool(adapt_final),
             "adapt_final_steps": int(adapt_final_steps), "local_k": int(local_k),
             "check_every": int(check_every), "max_evals": int(max_evals),
+            "evidence_draws": int(evidence_draws),
+            "evidence_components": int(evidence_components),
         }  # fmt: skip
+        self.holdout = dict(holdout or {})
         if start not in ("laplace", "prior"):
             raise ValueError(f"exact_bh: unknown start {start!r} (laplace | prior)")
         if self.settings["reparam"] not in REPARAM_SPECS:
@@ -872,6 +886,7 @@ class ExactBH(InferenceMethod):
         smc_seconds = time.perf_counter() - t2
         self.last_smc, self.last_to_u = res, to_u  # final-stage chains (inspection)
         info = res.info
+        evidence = self._evidence(lik, s, res, logpost, rng, name)
         u = res.draws if to_u is None else to_u(res.draws)
         w = np.full(len(u), 1.0 / len(u))
         theta = lik.theta_from_u(u)
@@ -911,6 +926,7 @@ class ExactBH(InferenceMethod):
                                                                            0.75, 0.95]).tolist()
                           for i in free},
             "finite_fraction": float(np.isfinite(res.log_post).mean()),
+            "evidence": evidence,
             "modes": len(ref.logpi) if ref is not None else 0,
             "reparam": reparam_info,
             "optima_log_posterior": [o["log_posterior"] for o in optima],
@@ -934,6 +950,42 @@ class ExactBH(InferenceMethod):
             "clones": [c.clones for c in lik.data],
         }  # fmt: skip
         return theta, w, diag
+
+    @staticmethod
+    def _evidence(lik: BHLikelihood, s: dict, res, logpost, rng, name: str) -> dict:
+        """Log evidence (normalised prior): bridge sampling on the final chains + SMC path.
+
+        Both in the sampler coordinates (exact Jacobians, so the integral is the same);
+        ``evidence_draws`` proposal draws = extra likelihood evaluations (0: SMC path only).
+        """
+        const = prior_log_norm(lik.prior_a, lik.prior_b)
+        info = res.info
+        if "log_evidence" in info:
+            smc_z = float(info["log_evidence"]) + const
+        else:  # islands: mean of the island estimates
+            z = np.asarray(info.get("island_log_evidence", []), float)
+            smc_z = float(logsumexp(z) - math.log(len(z))) + const if len(z) else float("nan")
+        out = {"log_evidence": float("nan"), "mc_se": float("nan"),
+               "log_evidence_smc": smc_z if info["reached_posterior"] else float("nan"),
+               "prior_log_norm": const, "method": "bridge"}  # fmt: skip
+        n = int(s.get("evidence_draws", 0))
+        if n <= 0 or not info["reached_posterior"] or not np.all(np.isfinite(res.log_post)):
+            out["method"] = "smc" if info["reached_posterior"] else "none"
+            out["log_evidence"] = out["log_evidence_smc"]
+            return out
+        t0 = time.perf_counter()
+        evals0 = lik.evals
+        b = bridge_sampling(res.chains, res.log_post, logpost, rng, n_proposal=n,
+                            components=int(s.get("evidence_components", 1)))  # fmt: skip
+        b["log_evidence"] += const
+        b["log_evidence_is"] += const
+        out.update(b)
+        out["evals"] = int(lik.evals - evals0)
+        out["seconds"] = time.perf_counter() - t0
+        LOG.info("%s: log evidence %.3f +- %.3f (bridge, %d proposal draws, ESS %.0f); SMC path "
+                 "%.3f; IS %.3f (k %.2f)", name, out["log_evidence"], out["mc_se"], n,
+                 out["ess_post"], smc_z, out["log_evidence_is"], out["is_pareto_k"])  # fmt: skip
+        return out
 
     def run(self, lik: BHLikelihood, key=("reference",), **overrides
             ) -> tuple[np.ndarray, np.ndarray, dict]:  # fmt: skip
@@ -1071,6 +1123,12 @@ class ExactBH(InferenceMethod):
     # ---------------------------------------------------------------- pipeline API
     def fit_data(self, simulator, observation, cohorts, x_dim: int) -> WeightedPosterior:
         """Sample the exact posterior of the reference dataset ``cohorts``."""
+        ho = heldout.settings(self.holdout)
+        test = None
+        if ho["fraction"] > 0:
+            cohorts, test = heldout.split_cohorts(cohorts, ho["fraction"], ho["seed"])
+            LOG.info("exact_bh holdout: fitting %s clones, testing %s",
+                     [len(c.counts) for c in cohorts], [len(c.counts) for c in test])
         lik = self.likelihood(simulator, observation, cohorts)
         LOG.info("exact_bh grid %dx%d for horizons %s", lik.grid.Lx, lik.grid.Ly, lik.horizons)
         try:
@@ -1079,6 +1137,22 @@ class ExactBH(InferenceMethod):
             diag["grid_check"] = lik.grid_check(median)
         finally:
             lik.close()
+        if test is not None:
+            t0 = time.perf_counter()
+            tlik = self.likelihood(simulator, observation, test)
+            try:
+                rng = rng_for(self.seed, "exact-bh-holdout")
+                draws = theta[rng.choice(len(theta), ho["draws"], p=w)]
+                ll = tlik.log_likelihood_batch(draws)
+            finally:
+                tlik.close()
+            diag["holdout"] = {**ho, "n_train": [len(c.counts) for c in cohorts],
+                               "n_test_per_horizon": [len(c.counts) for c in test],
+                               **heldout.lpd_summary(ll, sum(len(c.counts) for c in test)),
+                               "seconds": time.perf_counter() - t0}  # fmt: skip
+            LOG.info("exact_bh holdout: test lpd %.3f +- %.3f (%d test clones, k %.2f)",
+                     diag["holdout"]["lpd"], diag["holdout"]["lpd_se"],
+                     diag["holdout"]["n_test"], diag["holdout"]["pareto_k"])  # fmt: skip
         for g in diag["grid_check"]:
             if g["max_rel_error"] > 1e-5:
                 LOG.warning("exact_bh grid check (horizon %g): tail mass %.2g, max relative "
@@ -1119,7 +1193,7 @@ class ExactBH(InferenceMethod):
         """
         opts = {"init_candidates": 8, "opt_starts": 1, "opt_maxiter": 15, "particles": 100,
                 "max_iterations": 3, "chains": 32, "steps": 6, "max_evals": 4000,
-                "target_ess": 100, **self.sbc}  # fmt: skip
+                "target_ess": 100, "evidence_draws": 0, **self.sbc}  # fmt: skip
         max_points = float(opts.pop("max_points", 1e5))
         info = {"invalid_cases": 0, "excluded_grid": 0, "seconds": [], "ess": [],
                 "pareto_k": [], "settings": {**opts, "max_points": max_points}}  # fmt: skip

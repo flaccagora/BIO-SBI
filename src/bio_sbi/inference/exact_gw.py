@@ -40,7 +40,9 @@ from scipy.optimize import minimize
 from scipy.special import expit, log_expit
 
 from ..rng import rng_for
+from . import heldout
 from .base import FittedPosterior, InferenceMethod
+from .evidence import bridge_sampling, prior_log_norm, probit_view
 from .gw_exact import GridSpec, GWModel, HorizonData, grid_spec, histogram, law_and_jac
 from .gw_exact import log_likelihood as _log_likelihood
 from .nuts import ess, run_chain, split_rhat
@@ -208,6 +210,19 @@ class ExactLikelihood:
         grad = g * theta * (1 - theta) + self.prior_a * (1 - theta) - self.prior_b * theta
         return lp, grad
 
+    def log_posterior_value(self, u: np.ndarray) -> float:
+        """Log-posterior density of ``u`` without the gradient (cheaper)."""
+        u = np.asarray(u, dtype=float)
+        ll, _ = self.log_likelihood(expit(u), grad=False)
+        if not np.isfinite(ll):
+            return -np.inf
+        return ll + float(self.prior_a @ log_expit(u) + self.prior_b @ log_expit(-u))
+
+    @property
+    def log_prior_norm(self) -> float:
+        """``-sum log B(a, b)``: the prior constant :meth:`log_posterior_u` omits."""
+        return prior_log_norm(self.prior_a, self.prior_b)
+
     @property
     def seconds_per_eval(self) -> float:
         """Mean wall time of one likelihood (+ gradient) evaluation so far."""
@@ -327,6 +342,9 @@ class ExactGW(InferenceMethod):
         min_detection: float = 1e-6,
         sbc: dict | None = None,
         log_every: int = 50,
+        evidence_draws: int = 2000,
+        evidence_components: int = 1,
+        holdout: dict | None = None,
         device: str = "cpu",
         seed: int = 0,
         rounds: int = 1,
@@ -348,6 +366,9 @@ class ExactGW(InferenceMethod):
         self.min_detection = float(min_detection)
         self.sbc = dict(sbc or {})
         self.log_every = int(log_every)
+        self.evidence_draws = int(evidence_draws)
+        self.evidence_components = int(evidence_components)
+        self.holdout = dict(holdout or {})
 
     # The sbi training hooks do not apply.
     def make_trainer(self, prior, tracker):
@@ -419,8 +440,41 @@ class ExactGW(InferenceMethod):
         w = np.maximum(w, 1.0 / max_var)
         return (V / w) @ V.T
 
+    def evidence(self, lik: ExactLikelihood, u: np.ndarray, logp: np.ndarray, key,
+                 n: int | None = None) -> dict:  # fmt: skip
+        """Log evidence (normalised prior) by bridge sampling in probit coordinates.
+
+        ``u (chains, draws, d)`` NUTS draws and their log posteriors ``logp``; ``n``
+        proposal draws (default ``evidence_draws``) cost one likelihood evaluation each
+        (no gradient), run in ``threads`` threads.
+        """
+        n = self.evidence_draws if n is None else int(n)
+        if n <= 0:
+            return {"log_evidence": float("nan"), "mc_se": float("nan"), "method": "none"}
+        t0 = time.perf_counter()
+
+        def target_u(U):
+            U = np.atleast_2d(U)
+            with ThreadPoolExecutor(self.threads) as pool:
+                return np.array(list(pool.map(lik.log_posterior_value, U)))
+
+        V, lv, target_v = probit_view(u, logp, target_u)
+        rng = rng_for(self.seed, "exact-gw-evidence", *key)
+        out = bridge_sampling(V, lv, target_v, rng, n_proposal=n,
+                              components=self.evidence_components)  # fmt: skip
+        const = lik.log_prior_norm
+        out["log_evidence"] += const
+        out["log_evidence_is"] += const
+        out.update(method="bridge", coords="probit", prior_log_norm=const,
+                   seconds=time.perf_counter() - t0)  # fmt: skip
+        LOG.info("%s: log evidence %.3f +- %.3f (bridge, %d proposal draws, ESS %.0f; IS %.3f, "
+                 "k %.2f)", "/".join(map(str, key)), out["log_evidence"], out["mc_se"], n,
+                 out["ess_post"], out["log_evidence_is"], out["is_pareto_k"])  # fmt: skip
+        return out
+
     def run(self, lik: ExactLikelihood, key=("reference",), chains=None, warmup=None,
-            draws=None, init_starts=None, max_tree_depth=None) -> tuple[np.ndarray, dict]:  # fmt: skip
+            draws=None, init_starts=None, max_tree_depth=None, evidence: bool = False
+            ) -> tuple[np.ndarray, dict]:  # fmt: skip
         """Sample the posterior of ``lik``; returns ``(theta draws, diagnostics)``."""
         depth = int(max_tree_depth or self.max_tree_depth)
         chains = int(chains or self.chains)
@@ -502,15 +556,38 @@ class ExactGW(InferenceMethod):
                 for h in lik.data
             ],  # fmt: skip
         }
+        if evidence:
+            logp = np.stack([r.logp for r in res])
+            diag["evidence"] = self.evidence(lik, u, logp, key)
         return theta.reshape(-1, theta.shape[-1]), diag
 
     # ---------------------------------------------------------------- pipeline API
     def fit_data(self, simulator, observation, cohorts, x_dim: int) -> ExactPosterior:
         """Sample the exact posterior of the reference dataset ``cohorts``."""
+        ho = heldout.settings(self.holdout)
+        test = None
+        if ho["fraction"] > 0:
+            cohorts, test = heldout.split_cohorts(cohorts, ho["fraction"], ho["seed"])
+            LOG.info("exact_gw holdout: fitting %s clones, testing %s",
+                     [len(c.counts) for c in cohorts], [len(c.counts) for c in test])
         lik = self.likelihood(simulator, observation, cohorts)
         LOG.info("exact_gw grids: %s", [(g.Lx, g.Ly) for g in lik.grids])
-        draws, diag = self.run(lik)
+        draws, diag = self.run(lik, evidence=True)
         diag["grid_check"] = lik.grid_check(np.median(draws, axis=0))
+        if test is not None:
+            t0 = time.perf_counter()
+            tlik = self.likelihood(simulator, observation, test)
+            sub = heldout.thin(draws, ho["draws"], int(rng_for(self.seed, "exact-gw-holdout")
+                                                       .integers(2**31)))  # fmt: skip
+            with ThreadPoolExecutor(self.threads) as pool:
+                ll = np.array(list(pool.map(lambda t: tlik.log_likelihood(t, grad=False)[0], sub)))
+            diag["holdout"] = {**ho, "n_train": [len(c.counts) for c in cohorts],
+                               "n_test_per_horizon": [len(c.counts) for c in test],
+                               **heldout.lpd_summary(ll, sum(len(c.counts) for c in test)),
+                               "seconds": time.perf_counter() - t0}  # fmt: skip
+            LOG.info("exact_gw holdout: test lpd %.3f +- %.3f (%d test clones, k %.2f)",
+                     diag["holdout"]["lpd"], diag["holdout"]["lpd_se"],
+                     diag["holdout"]["n_test"], diag["holdout"]["pareto_k"])  # fmt: skip
         for g in diag["grid_check"]:
             if g["max_rel_error"] > 1e-5:  # tail mass beyond L is damped, not an error
                 LOG.warning("exact_gw grid check (generation %d): tail mass %.2g, max relative "

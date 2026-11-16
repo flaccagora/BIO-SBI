@@ -1,0 +1,89 @@
+# @package _global_
+# X3b, well-specified BH reference arm: exact BH likelihood (inference=exact_bh, tempered SMC
+# + adaptive Metropolis chains to ESS 400 / tail ESS 200 / nested R-hat 1.01, ridge
+# reparametrisation stable+probit) on Bellman-Harris data, reversible_ab reference
+# probabilities, single A founder. Scenario (data AND inference lifetime shape; data
+# lifetime means) via `scenario`:
+#   S1_ref 25/30 h shape 8 | S2_equal_sync 25/25 h shape 32 | S3_equal_var 25/25 h shape 4 |
+#   S4_desync 25/30 h shape 2.
+# Datasets are identical to the NPE BH arm (results/x3b/npe_bh/<scenario>/<design>, run with
+# base overrides ++data.simulator.reference.{A,B}.mean_lifetime, data/simulator lifetime_shape,
+# seed = data_seed) and to the GW arm (x3b_gw_exact) for the same scenario, design and seed
+# (check: bio_sbi.datacard.job_record digests, scripts/analyse_x3b.py --check-datasets).
+# Every run also reports the log evidence (bridge sampling, normalised prior: metrics.json
+# log_evidence / log_evidence_se; exact_bh.evidence.log_evidence_smc = tempering-path
+# cross-check) for Bayes factors against the GW arm on the same counts.
+# Commands (8 threads per run; one command per lane, runs of a command are sequential):
+#   real-like, seeds 0-4, one scenario per command:
+#   bio-sbi -m +experiment=x3b_bh_exact scenario=S1_ref seed=0,1,2,3,4 \
+#     hydra.sweep.dir=results/x3b/bh_exact/S1_ref/real_like
+#   (S2_equal_sync, S3_equal_var, S4_desync likewise)
+#   {96,144,240} h x 512, S1 only, seeds 0-2:
+#   bio-sbi -m +experiment=x3b_bh_exact scenario=S1_ref 'design.horizons=[96,144,240]' \
+#     design.clones=512 seed=0,1,2 hydra.sweep.dir=results/x3b/bh_exact/S1_ref/d512
+#   held-out arm (fit on 80 % of each horizon's organoids, test lpd on the other 20 %; same
+#   split as the GW held-out runs): add inference.method.holdout.fraction=0.2 and
+#   hydra.sweep.dir=results/x3b/bh_exact_holdout/<scenario>/<design>
+# Cost per evaluation (seed 0, 8 threads, wall): S1 0.08 s, S2 (shape 32, dt 1) ~0.7 s,
+# S3 0.05 s, S4 0.10-0.12 s, S1 x 512 0.10 s; a converged run needs ~3e4 evaluations.
+defaults:
+  - override /simulator: bellman_harris
+  - override /simulator@data.simulator: bellman_harris
+  - override /law: reversible_ab
+  - override /observation: perfect
+  - override /inference: exact_bh
+  - override /design: real_like
+  - override /budget: dev
+scenario: S1_ref
+x3b:
+  scenarios:
+    S1_ref: {A: 25.0, B: 30.0, shape: 8, dt: 3.0}
+    S2_equal_sync: {A: 25.0, B: 25.0, shape: 32, dt: 1.0}
+    S3_equal_var: {A: 25.0, B: 25.0, shape: 4, dt: 3.0}
+    S4_desync: {A: 25.0, B: 30.0, shape: 2, dt: 3.0}
+  A: ${x3b.scenarios.${scenario}.A}
+  B: ${x3b.scenarios.${scenario}.B}
+  shape: ${x3b.scenarios.${scenario}.shape}
+  dt: ${x3b.scenarios.${scenario}.dt}
+simulator:
+  reference:
+    A: {mean_lifetime: "${x3b.A}"}
+    B: {mean_lifetime: "${x3b.B}"}
+  model:
+    lifetime_shape: ${x3b.shape}
+data:
+  simulator:
+    reference:
+      A: {mean_lifetime: "${x3b.A}"}
+      B: {mean_lifetime: "${x3b.B}"}
+    model:
+      lifetime_shape: ${x3b.shape}
+inference:
+  sbc_cases: 0       # one full sampler run per case: off
+  method:
+    threads: 8
+    # Runge-Kutta step per scenario: DOP853 is unstable when dt x shape / lifetime > ~3-4
+    # (shape 32 at dt 3: log-likelihood off by 7500 nats at the truth; dt 1.5 fails at
+    # 10.5 h lifetimes, dt 1.0 is stable down to the 10 h prior bound and equals dt 0.25
+    # to 1e-4 nats); shapes 2-8: dt 3 h (equal to dt 0.25 h to < 1e-6 nats at the truth)
+    dt: ${x3b.dt}
+    reparam: stable+probit
+    max_evals: 100000
+budget:
+  ppc_samples: 200
+workers: 4
+torch_threads: 2
+info:
+  title: "X3b: exact BH (well specified) on BH data"
+  question: |
+    Reference posterior for X3b: exact BH likelihood (same lifetime shape as the data) on
+    BH data with A 25 h / B 30 h (scenarios S1-S4). Compare with exact GW on the same
+    counts (x3b_gw_exact): bias / coverage of the shared probabilities, derived growth
+    rate and stable B:A ratio, PPC, held-out lpd and Bayes factor BH vs GW.
+  notes: |
+    Check exact_bh.reliable (ESS >= 400, tail ESS >= 200, nested R-hat <= 1.01). Evidence:
+    metrics.json log_evidence +- log_evidence_se (bridge sampling; normalised prior).
+hydra:
+  sweeper:
+    params:
+      seed: 0,1,2,3,4

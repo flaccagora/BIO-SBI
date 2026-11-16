@@ -336,6 +336,14 @@ def run_experiment(cfg: DictConfig, out: str | Path) -> dict:
     }
     if exact:
         metrics[comp.method.name] = fitted.diagnostics
+        # model evidence (normalised prior; Bayes factors between models fitted to the same
+        # counts) and the held-out test log predictive density, when computed
+        ev = fitted.diagnostics.get("evidence") or {}
+        if ev:
+            metrics["log_evidence"] = ev.get("log_evidence")
+            metrics["log_evidence_se"] = ev.get("mc_se")
+        if fitted.diagnostics.get("holdout"):
+            metrics["heldout"] = fitted.diagnostics["holdout"]
 
     # 4. Posterior predictive check: does the fitted inference model reproduce x_obs?
     n_ppc = int(cfg.budget.get("ppc_samples", 0))

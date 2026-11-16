@@ -515,6 +515,43 @@ Presets: `exact_bh_real_like` (two_type + reversible_ab, seeds 0-4; same dataset
 `results/x3/bh_control`, `results/x5/b_vague`), `exact_bh_ridge` (A.div_AA / lifetime
 ridge at real-like and 96/144/240 h x 512, same datasets as `results/e4/bh_512_20k`).
 
+#### Model evidence, held-out lpd and derived quantities (exact methods)
+
+* **Log evidence** `log Z = log ∫ p(counts | θ) p(θ) dθ` with the *normalised* prior,
+  in `metrics.json` as `log_evidence` ± `log_evidence_se` (details under
+  `exact_gw.evidence` / `exact_bh.evidence`); differences between models fitted to the same
+  counts are log Bayes factors (e.g. BH vs GW in X3b). Estimator
+  (`src/bio_sbi/inference/evidence.py`): **bridge sampling** (Meng & Wong, iterative
+  optimal bridge) between the posterior draws and a t proposal (df 30) fitted to them,
+  `inference.method.evidence_draws` proposal draws = extra likelihood evaluations (exact_gw
+  2000, no gradient, in probit stick coordinates; exact_bh 1024, in the SMC sampler
+  coordinates, e.g. `stable+probit`); MC error from the relative MSE of
+  Frühwirth-Schnatter (2004) with the multi-chain ESS of the posterior-side bridge
+  function. The samplers' log posteriors omit the Beta normalising constants of the
+  stick-breaking prior; `prior_log_norm = -Σ log B(a, b)` is added (the log-uniform
+  lifetime prior is Beta(1, 1) on the unit-scaled coordinate: 0). exact_bh also reports
+  the tempered-SMC path estimate `log_evidence_smc`: the geometric path from a
+  *normalised* start `q` (Laplace t mixture or prior) estimates `∫ post / ∫ q = Z`, so a
+  Laplace start needs no correction (only the prior constant). Validation (tests/
+  `test_evidence.py`): conjugate Gaussian (closed form), exact GW with two free sticks
+  and a non-uniform Dirichlet (2-D Gauss-Legendre quadrature with an independent Beta
+  density), exact BH with a stick and a lifetime free (2-D quadrature): on the BH toy
+  8 sampler seeds gave bridge estimates with sd 0.017 (reported se 0.013-0.017) around
+  the quadrature value; the SMC path estimate is ~8x noisier (sd ~0.13).
+* **Held-out predictive check** (`inference.method.holdout = {fraction, seed, draws}`,
+  `src/bio_sbi/inference/heldout.py`; default off): the organoids of each horizon are split
+  by a seeded permutation (same `fraction` and `seed` on the same data = same test
+  organoids in every model), the posterior is sampled on the training part and
+  `metrics.json` `heldout.lpd` = log-mean-exp over `draws` posterior draws of the exact
+  joint log-likelihood of the test organoids (± delta-method MC se, PSIS k of the draws'
+  test log-likelihoods). Everything else in such a run (recovery, PPC, evidence) refers
+  to the training part.
+* **Derived quantities** (`src/bio_sbi/derived.py`): per posterior draw, A self-renewal
+  (`A.div_AA`), the Malthusian growth rate per hour (BH: root of
+  `ρ(diag(L(α)) M) = 1` with the Gamma lifetime Laplace transforms; GW: `log ρ(M) / τ`) and
+  the stable ratio of living B to A cells (BH: `L_A M_AB (1 - L_B) / ((1 - L_B M_BB)(1 -
+  L_A))`; GW: `M_AB / (ρ - M_BB)`): quantities a GW and a BH fit can be compared on.
+
 ### Budgets
 
 | Budget | Simulations | Max epochs | SBC cases |
