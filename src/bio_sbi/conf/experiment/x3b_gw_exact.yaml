@@ -36,6 +36,7 @@ defaults:
 scenario: S1_ref
 x3b:
   scenarios:
+    S0_ctrl: {A: 24.0, B: 24.0, shape: 32}   # clean control: tau 24 h is the true generation
     S1_ref: {A: 25.0, B: 30.0, shape: 8}
     S2_equal_sync: {A: 25.0, B: 25.0, shape: 32}
     S3_equal_var: {A: 25.0, B: 25.0, shape: 4}
