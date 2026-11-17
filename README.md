@@ -388,6 +388,52 @@ trees); see `TODO.md` (section XG). Multimodal posteriors show up as R-hat >> 1
 Presets: `exact_gw_e0_4096`, `exact_gw_e0`, `exact_gw_real_like`, `exact_gw_early`
 (reference datasets identical to the NPE runs they compare with).
 
+**Cheaper runs: warm start and adaptive run length** (both opt-in; with the defaults the
+draws are bit-identical to the plain sampler). Settings in `conf/inference/exact_gw.yaml`:
+
+* `inference.method.warm_start=<previous run dir | posterior.pt | posterior_samples.csv.gz>`
+  starts from the posterior of the same model on a dataset this one extends (e.g. the XG2
+  datasets, nested in `n`). The chains start at well-separated previous draws (k-means in
+  whitened logit space, so separate modes of the previous posterior get their own chains);
+  the initial inverse mass matrix is the previous *within-chain* covariance (not inflated
+  by mode separation) times `n_prev / n` (posterior sd ~ `n^-1/2`; `n` = total clones,
+  `n_prev` from the previous run's diagnostics; `warm_start_options.scale` / `.n_prev`
+  override); the initial step size is the previous median. No L-BFGS initialisation, and a
+  short warmup (`warm_start_options.warmup`, default 150 = 25 step-size iterations, one
+  mass-matrix window shrunk towards the scaled covariance with weight `mass_prior`, 50
+  terminal step-size iterations). `warm_start_options.check_starts > 0` also runs that many
+  L-BFGS starts and warns if an optimum lies above every draw (a mode the previous run did
+  not have). Details in `metrics.json` `exact_gw.warm_start`.
+* `inference.method.stop.enabled=true` draws `stop.block` iterations per chain at a time
+  (chains in lockstep) and stops when, for every stick coordinate and free physical
+  probability, the rank-normalised split R-hat (bulk and folded, also on the log density)
+  `<= stop.rhat`, bulk ESS `>= stop.ess`, tail ESS `>= stop.tail_ess` and the chain means
+  (rank-normalised) agree within `stop.max_mean_spread` posterior sd - chains in different
+  modes fail the last two even when every chain is internally well mixed - or at
+  `stop.max_draws` per chain (`exact_gw.stop.reason = max_draws` and the failed criteria;
+  warning in the log). `exact_gw.stop.trajectory` holds R-hat / ESS / spread per check.
+  Reference fit only (SBC cases keep their fixed settings).
+
+Every run now also records `warmup_gradient_evals` / `sampling_gradient_evals`, rank
+R-hat, bulk / tail ESS, the chain-mean spread and `idle_fraction` (share of the chain
+threads' time spent waiting for the slowest chain). Benchmark on the XG2 datasets:
+`scripts/exact_gw_sampler_bench/` (`run.py` launches baseline / warm / warm+stop chains
+over `n`, `analyse.py` prints the tables).
+Measured (XG2 `T1_ref` and `T5_C7`, seed 0, n = 128 -> 1024, adjoint kernel, 4 runs of 4
+threads at a time; `results/exact_gw/sampler_bench/bench_analysis.txt`): warm start cuts
+warmup gradient evaluations ~3x (150-220k -> 37-77k per run) and total evaluations over
+n = 256-1024 to 0.57x (`T1_ref`) / 0.75x (`T5_C7`) of the cold baseline, posteriors within
+MC error of the baseline (max |dmean| <= 2.1 MCSE). A warm run without the stopping rule
+can come out worse mixed (`T1_ref` n = 256: min ESS 63, tail 14), so use the two together.
+The stopping rule reaches ESS 400 / tail 200 / R-hat 1.01 at 470-825 evaluations per unit
+of min bulk ESS (cold baseline 640-2180, and the baseline usually misses those targets),
+but costs more evaluations than 4 x 500 draws when the targets are hard (`T5_C7` n = 256
+ran to `max_draws` on `A.to_B`'s tail ESS). At `T1_ref` n = 1024 a warm-started chain
+landed in the second B-row branch ("B divides", `B.to_A` ~0.34) that every cold baseline
+chain missed (baseline R-hat 1.02 looks converged; XG2's run had R-hat 1.31); the stopping
+rule refused to stop (R-hat 1.40, chain-mean spread 1.5). The idle-thread fraction did
+not drop (lockstep blocks: 15 %, cold free-running chains: 15 %, warm 12 %).
+
 **Point estimates (MLE / physical MAP)** - `src/bio_sbi/inference/gw_optimise.py`,
 settings `inference.method.optimise.*` (off by default; NUTS unchanged):
 

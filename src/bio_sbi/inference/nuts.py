@@ -41,6 +41,8 @@ class ChainResult:
     seconds: float
     accept_stat: float
     warmup_divergences: int = 0
+    warmup_gradient_evals: int = 0  # including the initial step-size search
+    warmup_seconds: float = 0.0
     extra: dict = field(default_factory=dict)
 
 
@@ -174,6 +176,193 @@ def _windows(warmup: int) -> list[int]:
     return ends
 
 
+class NutsChain:
+    """One NUTS chain whose warmup and draws can be run in pieces (blocks).
+
+    ``run_chain`` is ``NutsChain(...)``, ``adapt(warmup)``, ``draw(draws)``, ``result()``;
+    drawing in several ``draw`` calls consumes the random stream exactly as one call, so
+    block-wise sampling (e.g. stopping on an ESS / R-hat target) reproduces the draws of
+    a one-shot run of the same length.
+
+    ``seconds`` counts the time spent inside the constructor, :meth:`adapt` and
+    :meth:`draw` (busy time; waiting between blocks is not included).
+    """
+
+    def __init__(
+        self,
+        logp_and_grad: LogDensity,
+        q0: np.ndarray,
+        rng: np.random.Generator,
+        max_depth: int = 8,
+        target_accept: float = 0.8,
+        dense: bool = True,
+        inv_mass: np.ndarray | None = None,
+        step_size: float | None = None,
+        name: str = "chain",
+        log_every: int = 0,
+    ) -> None:
+        t0 = time.perf_counter()
+        self.d = d = len(q0)
+        self.s = _Sampler(logp_and_grad, np.eye(d) if inv_mass is None else inv_mass,
+                          max_depth, rng)  # fmt: skip
+        self.target_accept, self.dense = float(target_accept), bool(dense)
+        self.name, self.log_every = name, int(log_every)
+        self.q = np.asarray(q0, dtype=float)
+        self.lp, self.g = self.s.grad(self.q)
+        if not np.isfinite(self.lp):
+            raise ValueError("Initial point has zero posterior density")
+        self.eps = step_size or _find_step_size(self.s, self.q, self.lp, self.g)
+        self.warmup_divergences = 0
+        self.warmup_evals = 0
+        self.warmup_seconds = 0.0
+        self.draws: list[np.ndarray] = []
+        self.logps: list[float] = []
+        self.depths: list[int] = []
+        self.accs: list[float] = []
+        self.divergences = 0
+        self.hits = 0
+        self.seconds = time.perf_counter() - t0
+        self.extra: dict = {}
+
+    def adapt(
+        self,
+        warmup: int,
+        window_ends: list[int] | None = None,
+        collect_from: int | None = None,
+        mass_prior: np.ndarray | None = None,
+        mass_prior_weight: float = 0.0,
+    ) -> None:
+        """Warmup: dual-averaging step size and windowed (dense) mass-matrix adaptation.
+
+        Default schedule: Stan's windows :func:`_windows`. ``window_ends`` (iterations at
+        which the mass matrix is re-estimated) and ``collect_from`` (first iteration whose
+        state enters a window) override it. With ``mass_prior_weight = k > 0`` a window
+        estimate from ``n`` states is shrunk towards ``mass_prior`` (``(n cov + k M0) /
+        (n + k)``) instead of towards ``1e-3 I``.
+        """
+        t0 = time.perf_counter()
+        s, d, dense = self.s, self.d, self.dense
+        q, lp, g, eps = self.q, self.lp, self.g, self.eps
+        target_accept = self.target_accept
+        # dual averaging state
+        mu, log_eps_bar, h_bar, gamma, t0_da, kappa = math.log(10 * eps), 0.0, 0.0, 0.05, 10, 0.75
+        if window_ends is None:
+            ends = set(_windows(warmup))
+            window_start = sorted(ends)[0] if ends else warmup
+        else:
+            ends = {int(e) for e in window_ends if 0 < int(e) <= warmup}
+            window_start = int(collect_from) if collect_from is not None else 0
+        if collect_from is not None and window_ends is None:
+            window_start = int(collect_from)
+        window = []
+        warm_div, da = 0, 0
+        for it in range(warmup):
+            q, lp, g, acc, depth, div = s.transition(q, lp, g, eps)
+            warm_div += div
+            if self.log_every and (it + 1) % self.log_every == 0:
+                LOG.info(
+                    "%s warmup %d/%d: step %.3g depth %d logp %.1f evals %d (%.0fs)",
+                    self.name,
+                    it + 1,
+                    warmup,
+                    eps,
+                    depth,
+                    lp,
+                    s.evals,
+                    self.seconds + time.perf_counter() - t0,
+                )
+            da += 1
+            m = da
+            h_bar = (1 - 1 / (m + t0_da)) * h_bar + (target_accept - acc) / (m + t0_da)
+            log_eps = mu - math.sqrt(m) / gamma * h_bar
+            w = m ** (-kappa)
+            log_eps_bar = w * log_eps + (1 - w) * log_eps_bar
+            eps = math.exp(log_eps)
+            if ends and window_start <= it:
+                window.append(q.copy())
+            if it + 1 in ends and len(window) >= 3:
+                x = np.asarray(window)
+                n = len(x)
+                k = float(mass_prior_weight) if mass_prior is not None else 0.0
+                if dense:
+                    cov = np.cov(x, rowvar=False).reshape(d, d)
+                    if k > 0:
+                        cov = (n * cov + k * np.asarray(mass_prior).reshape(d, d)) / (n + k)
+                    else:
+                        cov = (n / (n + 5.0)) * cov + 1e-3 * (5.0 / (n + 5.0)) * np.eye(d)
+                else:
+                    if k > 0:
+                        m0 = np.asarray(mass_prior)
+                        m0 = np.diag(m0) if m0.ndim == 2 else m0
+                        cov = (n * x.var(0) + k * m0) / (n + k)
+                    else:
+                        cov = (n / (n + 5.0)) * x.var(0) + 1e-3 * (5.0 / (n + 5.0))
+                s.set_mass(cov)
+                window = []
+                eps = _find_step_size(s, q, lp, g, eps)
+                mu, log_eps_bar, h_bar, da = math.log(10 * eps), 0.0, 0.0, 0  # restart
+        if warmup > 0:
+            eps = math.exp(log_eps_bar) if log_eps_bar != 0.0 else eps
+        self.q, self.lp, self.g, self.eps = q, lp, g, eps
+        self.warmup_divergences += int(warm_div)
+        self.warmup_evals = int(s.evals)
+        dt = time.perf_counter() - t0
+        self.warmup_seconds = self.seconds + dt  # includes the initial step-size search
+        self.seconds += dt
+
+    def draw(self, n: int, total: int | None = None) -> None:
+        """Append ``n`` NUTS transitions at the adapted step size and mass matrix."""
+        t0 = time.perf_counter()
+        s = self.s
+        q, lp, g, eps = self.q, self.lp, self.g, self.eps
+        for _ in range(int(n)):
+            q, lp, g, acc, depth, div = s.transition(q, lp, g, eps)
+            self.draws.append(q)
+            self.logps.append(lp)
+            self.depths.append(depth)
+            self.divergences += div
+            self.hits += depth >= s.max_depth
+            self.accs.append(acc)
+            i = len(self.draws)
+            if self.log_every and i % self.log_every == 0:
+                LOG.info(
+                    "%s draw %d/%s: step %.3g depth %d logp %.1f evals %d (%.0fs)",
+                    self.name,
+                    i,
+                    total if total is not None else "?",
+                    eps,
+                    depth,
+                    lp,
+                    s.evals,
+                    self.seconds + time.perf_counter() - t0,
+                )
+        self.q, self.lp, self.g = q, lp, g
+        self.seconds += time.perf_counter() - t0
+
+    @property
+    def n_draws(self) -> int:
+        """Draws so far."""
+        return len(self.draws)
+
+    def draws_array(self) -> np.ndarray:
+        """``(draws, d)`` array of the draws so far."""
+        return np.asarray(self.draws, dtype=float).reshape(len(self.draws), self.d)
+
+    def result(self) -> ChainResult:
+        """Draws and diagnostics so far."""
+        s, depths, accs = self.s, self.depths, self.accs
+        return ChainResult(
+            draws=self.draws_array(), logp=np.asarray(self.logps, dtype=float),
+            step_size=self.eps, inv_mass=s.inv_mass, divergences=int(self.divergences),
+            mean_tree_depth=float(np.mean(depths)) if depths else float("nan"),
+            max_tree_depth_hits=int(self.hits), gradient_evals=int(s.evals),
+            seconds=self.seconds, accept_stat=float(np.mean(accs)) if accs else float("nan"),
+            warmup_divergences=int(self.warmup_divergences),
+            warmup_gradient_evals=int(self.warmup_evals), warmup_seconds=self.warmup_seconds,
+            extra=dict(self.extra),
+        )  # fmt: skip
+
+
 def run_chain(
     logp_and_grad: LogDensity,
     q0: np.ndarray,
@@ -193,86 +382,12 @@ def run_chain(
     ``log_every > 0`` logs progress (iteration, step size, tree depth, log density) at
     INFO level every that many iterations.
     """
-    t0 = time.perf_counter()
-    d = len(q0)
-    s = _Sampler(logp_and_grad, np.eye(d) if inv_mass is None else inv_mass, max_depth, rng)
-    q = np.asarray(q0, dtype=float)
-    lp, g = s.grad(q)
-    if not np.isfinite(lp):
-        raise ValueError("Initial point has zero posterior density")
-    eps = step_size or _find_step_size(s, q, lp, g)
-    # dual averaging state
-    mu, log_eps_bar, h_bar, gamma, t0_da, kappa = math.log(10 * eps), 0.0, 0.0, 0.05, 10, 0.75
-    ends, window = set(_windows(warmup)), []
-    window_start = sorted(_windows(warmup))[0] if ends else warmup
-    warm_div, da = 0, 0
-    for it in range(warmup):
-        q, lp, g, acc, depth, div = s.transition(q, lp, g, eps)
-        warm_div += div
-        if log_every and (it + 1) % log_every == 0:
-            LOG.info(
-                "%s warmup %d/%d: step %.3g depth %d logp %.1f evals %d (%.0fs)",
-                name,
-                it + 1,
-                warmup,
-                eps,
-                depth,
-                lp,
-                s.evals,
-                time.perf_counter() - t0,
-            )
-        da += 1
-        m = da
-        h_bar = (1 - 1 / (m + t0_da)) * h_bar + (target_accept - acc) / (m + t0_da)
-        log_eps = mu - math.sqrt(m) / gamma * h_bar
-        w = m ** (-kappa)
-        log_eps_bar = w * log_eps + (1 - w) * log_eps_bar
-        eps = math.exp(log_eps)
-        if ends and window_start <= it:
-            window.append(q.copy())
-        if it + 1 in ends and len(window) >= 3:
-            x = np.asarray(window)
-            n = len(x)
-            if dense:
-                cov = np.cov(x, rowvar=False).reshape(d, d)
-                cov = (n / (n + 5.0)) * cov + 1e-3 * (5.0 / (n + 5.0)) * np.eye(d)
-            else:
-                cov = (n / (n + 5.0)) * x.var(0) + 1e-3 * (5.0 / (n + 5.0))
-            s.set_mass(cov)
-            window = []
-            eps = _find_step_size(s, q, lp, g, eps)
-            mu, log_eps_bar, h_bar, da = math.log(10 * eps), 0.0, 0.0, 0  # restart
-    if warmup > 0:
-        eps = math.exp(log_eps_bar) if log_eps_bar != 0.0 else eps
-    out = np.empty((draws, d))
-    out_lp = np.empty(draws)
-    depths, divs, hits, accs = [], 0, 0, []
-    for i in range(draws):
-        q, lp, g, acc, depth, div = s.transition(q, lp, g, eps)
-        out[i], out_lp[i] = q, lp
-        depths.append(depth)
-        divs += div
-        hits += depth >= s.max_depth
-        accs.append(acc)
-        if log_every and (i + 1) % log_every == 0:
-            LOG.info(
-                "%s draw %d/%d: step %.3g depth %d logp %.1f evals %d (%.0fs)",
-                name,
-                i + 1,
-                draws,
-                eps,
-                depth,
-                lp,
-                s.evals,
-                time.perf_counter() - t0,
-            )
-    return ChainResult(
-        draws=out, logp=out_lp, step_size=eps, inv_mass=s.inv_mass, divergences=int(divs),
-        mean_tree_depth=float(np.mean(depths)) if depths else float("nan"),
-        max_tree_depth_hits=int(hits), gradient_evals=int(s.evals),
-        seconds=time.perf_counter() - t0, accept_stat=float(np.mean(accs)) if accs else float("nan"),
-        warmup_divergences=int(warm_div),
-    )  # fmt: skip
+    chain = NutsChain(logp_and_grad, q0, rng, max_depth=max_depth, target_accept=target_accept,
+                      dense=dense, inv_mass=inv_mass, step_size=step_size, name=name,
+                      log_every=log_every)  # fmt: skip
+    chain.adapt(warmup)
+    chain.draw(draws, total=draws)
+    return chain.result()
 
 
 # ---------------------------------------------------------------------- diagnostics
