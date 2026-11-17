@@ -257,6 +257,45 @@ def main() -> None:
           fl.groupby(["gt", "seed", "n"])["contraction"].min().groupby(["gt", "n"]).mean().unstack("n").round(2))
     print("\ninformation gain, nats (mean over seeds):\n",
           info.groupby(["gt", "n"]).mean().round(1))
+    mle_summary(flat_runs, out)
+
+
+def mle_summary(flat_runs: list[dict], out: Path) -> None:
+    """MLE (scripts/exact_gw_mle.py, ``mle.json``) vs posterior mean, if available."""
+    rows = []
+    for r in flat_runs:
+        path = Path(r["path"]) / "mle.json"
+        if not path.exists():
+            continue
+        m = json.loads(path.read_text())
+        for p in m["parameters"]:
+            t = m["truth"][p]
+            rows.append({
+                "gt": r["gt"], "seed": r["seed"], "n": r["n"], "parameter": p, "truth": t,
+                "mle": m["mle"][p], "posterior_mean": m["posterior_mean"][p],
+                "abs_err_mle": abs(m["mle"][p] - t),
+                "abs_err_post": abs(m["posterior_mean"][p] - t),
+                "ll_gap_truth": m["ll_mle"] - m["ll_truth"],
+                "ll_gap_post_mean": m["ll_mle"] - m["ll_posterior_mean"],
+                "missed_optimum": m["missed_optimum"],
+                "starts_at_best": m["starts_within_0.01_of_best"],
+            })  # fmt: skip
+    if not rows:
+        return
+    mle = pd.DataFrame(rows)
+    mle.to_csv(out / "xg2_mle.csv", index=False)
+    print(f"\n== MLE vs posterior mean ({mle.groupby(['gt', 'seed', 'n']).ngroups} runs with "
+          "mle.json; mean |error| over seeds)")  # fmt: skip
+    b = mle[mle.parameter == "B.to_A"]
+    tab = b.groupby(["gt", "n"])[["abs_err_mle", "abs_err_post"]].mean().unstack("n").round(3)
+    print("B.to_A:\n", tab)
+    allp = mle.groupby(["gt", "n"])[["abs_err_mle", "abs_err_post"]].mean().unstack("n").round(3)
+    print("all free parameters:\n", allp)
+    runs = mle.groupby(["gt", "seed", "n"]).first()
+    print("log-likelihood gap MLE - truth (nats; 95% LR region for 10 free ~ 9.2), median:\n",
+          runs.groupby(["gt", "n"])["ll_gap_truth"].median().unstack("n").round(1))
+    print(f"runs where an optimisation started at the truth beat the multistart MLE: "
+          f"{int(runs.missed_optimum.sum())}")  # fmt: skip
 
 
 if __name__ == "__main__":
