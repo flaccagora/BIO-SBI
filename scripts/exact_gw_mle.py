@@ -15,7 +15,7 @@ For every run folder (``metrics.json`` + ``.hydra/``) under the given roots:
 
 Usage:
   uv run python scripts/exact_gw_mle.py results/exact_gw/data_size [--workers 16]
-      [--prior-starts 8] [--force]
+      [--prior-starts 24] [--force]
 Each worker uses one thread (set OMP/NUMBA/MKL threads to 1, done here). A run with an
 up-to-date ``mle.json`` is skipped unless ``--force``.
 """
@@ -128,6 +128,8 @@ def fit_run(run: str, prior_starts: int) -> dict:
         "ll_truth": ll(enc(truth)),
         "ll_posterior_mean": ll(enc(post.mean(0))),
         "best_start": best_name,
+        "prior_starts": int(prior_starts),
+        "n_starts": len(starts),
         "distinct_optima_ll": distinct[:8],
         "starts_within_0.01_of_best": int(sum(r["ll"] > best["ll"] - 0.01 for r in results.values())),
         "truth_start_ll": from_truth["ll"],
@@ -156,7 +158,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("roots", nargs="+", type=Path)
     ap.add_argument("--workers", type=int, default=4)
-    ap.add_argument("--prior-starts", type=int, default=8)
+    ap.add_argument("--prior-starts", type=int, default=24)
     ap.add_argument("--force", action="store_true")
     args = ap.parse_args()
     runs = []
