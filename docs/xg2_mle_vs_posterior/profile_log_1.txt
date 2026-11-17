@@ -1,0 +1,5 @@
+('T1_ref', 0, 128): draws ll done 45s, max -3240.84 vs mle -3240.18
+  pass 2 improved c=0.3: +0.96
+  pass 2 improved c=0.35: +0.13
+('T1_ref', 0, 128): profile done 217s
+('T1_ref', 0, 128): no-division fit ll -3240.25 (full -3240.18), B.to_A 0.788; 229s

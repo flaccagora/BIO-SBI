@@ -1,0 +1,21 @@
+('T2_toA05', 0, 128): draws ll done 32s, max -3108.26 vs mle -3107.83
+('T2_toA05', 0, 128): profile done 116s
+('T2_toA05', 0, 128): no-division fit ll -3108.63 (full -3107.83), B.to_A 0.484; 124s
+('P1', 0, 128): draws ll done 18s, max -2689.76 vs mle -2689.12
+('P1', 0, 128): profile done 63s
+('P1', 0, 128): no-division fit ll -2696.92 (full -2689.12), B.to_A 0.313; 67s
+('T1_ref', 0, 1024): draws ll done 42s, max -26189.91 vs mle -26189.15
+('T1_ref', 0, 1024): profile done 209s
+('T1_ref', 0, 1024): no-division fit ll -26191.14 (full -26189.15), B.to_A 0.800; 219s
+('T3_Bdiv', 0, 1024): draws ll done 48s, max -27191.84 vs mle -27190.63
+('T3_Bdiv', 0, 1024): profile done 291s
+('T3_Bdiv', 0, 1024): no-division fit ll -27221.07 (full -27190.63), B.to_A 0.648; 307s
+('T1_ref', 1, 256): draws ll done 43s, max -6592.87 vs mle -6591.61
+('T1_ref', 1, 256): profile done 203s
+('T1_ref', 1, 256): no-division fit ll -6591.61 (full -6591.61), B.to_A 0.817; 210s
+('T2_toA05', 0, 1024): draws ll done 26s, max -24928.58 vs mle -24928.06
+('T2_toA05', 0, 1024): profile done 109s
+('T2_toA05', 0, 1024): no-division fit ll -24928.46 (full -24928.06), B.to_A 0.529; 117s
+('P4', 0, 128): draws ll done 28s, max -3061.20 vs mle -3059.76
+('P4', 0, 128): profile done 115s
+('P4', 0, 128): no-division fit ll -3065.59 (full -3059.76), B.to_A 0.195; 123s

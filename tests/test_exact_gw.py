@@ -122,13 +122,14 @@ def test_capture_and_confusion_by_pgf_substitution(distinct_gw, rng):
     assert q == pytest.approx(sim.detection_probability(phys, n, obs.capture), rel=1e-12)
 
 
+@pytest.mark.parametrize("kernel", ["loop", "adjoint"])
 @pytest.mark.parametrize("law_name", ["two_type", "reversible_ab"])
-def test_gradient_matches_finite_differences(law_name, rng):
+def test_gradient_matches_finite_differences(law_name, kernel, rng):
     sim = GaltonWatson(load_law(law_name))
     truth = sim.physical_from_mapping(load_law(law_name)["reference"])
     obs = ObservationModel(sim.types)
     cohorts = [Cohort(h, sim.simulate_detected(truth, h, 64, np.ones(2), rng)) for h in (3, 6)]
-    lik = ExactLikelihood(sim, obs, cohorts)
+    lik = ExactLikelihood(sim, obs, cohorts, kernel=kernel)
     # interior point near the truth (far points floor some cells, where FD is meaningless)
     mixed = 0.8 * truth + 0.2 * sim.decode(np.full(sim.theta_dim, 0.5))
     theta = sim.encode(mixed).astype(float)
@@ -238,3 +239,132 @@ def test_almost_undetectable_parameters_are_not_spuriously_likely(rng):
     near = sim.encode(0.9 * truth + 0.1 * sim.decode(np.full(sim.theta_dim, 0.5)))
     ll_far = lik.log_likelihood(far, False)[0]
     assert ll_far < lik.log_likelihood(near.astype(float), False)[0] and ll_far < 0
+    adj = lik.with_settings()
+    adj.kernel = "adjoint"
+    assert adj.log_likelihood(far, False)[0] == pytest.approx(ll_far, rel=1e-12)
+    assert np.all(np.isfinite(adj.log_likelihood(far)[1]))
+
+
+# ---------------------------------------------------------------- kernel=adjoint
+OBSERVATIONS = {
+    "perfect": {},
+    "confusion": {"capture": [0.7, 0.9], "confusion": [[0.9, 0.1], [0.2, 0.8]]},
+    "all": {"selection": "all", "capture": [0.8, 0.8]},
+}
+
+
+@pytest.mark.parametrize(
+    "law_name,obs_name",
+    [("two_type", "perfect"), ("reversible_ab", "perfect"), ("reversible_ab", "confusion"),
+     ("two_type", "all"), ("minimal_ab", "perfect"), ("hierarchy_ab", "confusion")],
+)  # fmt: skip
+def test_adjoint_kernel_matches_loop(law_name, obs_name, rng):
+    from scipy.special import expit, logit
+
+    spec = load_law(law_name)
+    sim = GaltonWatson(spec)
+    truth = sim.physical_from_mapping(spec["reference"])
+    obs = ObservationModel(sim.types, **OBSERVATIONS[obs_name])
+    cohorts = []
+    for h in (3, 5, 7):
+        counts = obs.measure(sim.simulate(truth, h, 400, rng), rng)
+        if obs.selection == "detected":
+            counts = counts[counts.sum(1) > 0]
+        cohorts.append(Cohort(h, counts[:100]))
+    loop = ExactLikelihood(sim, obs, cohorts)
+    adj = ExactLikelihood(sim, obs, cohorts, kernel="adjoint")
+    # well-conditioned points (logit-normal around the truth): every observed cell well
+    # above the FFT round-off, where both gradients are accurate
+    th = sim.encode(truth).astype(float)
+    for theta in expit(logit(th)[None] + rng.normal(0, 0.15, size=(8, len(th)))):
+        v0, g0 = loop.log_likelihood(theta)
+        v1, g1 = adj.log_likelihood(theta)
+        assert v1 == pytest.approx(v0, rel=1e-12, abs=1e-12)
+        assert adj.log_likelihood(theta, False)[0] == v1  # objective-only: same value
+        np.testing.assert_allclose(g1, g0, rtol=1e-9, atol=1e-9 * np.abs(g0).max())
+    u = logit(np.clip(theta, 1e-6, 1 - 1e-6))
+    np.testing.assert_allclose(adj.log_posterior_u(u)[1], loop.log_posterior_u(u)[1],
+                               rtol=1e-9, atol=1e-9 * np.abs(g0).max())  # fmt: skip
+
+
+def test_adjoint_kernel_finite_differences_and_shared_monomials(rng):
+    """Synthetic law with two outcomes sharing daughters, founder sizes 1-3, damping."""
+    from bio_sbi.inference.gw_exact import (
+        HorizonData,
+        _detection_nb,
+        histogram,
+        law_poly,
+        monomials,
+        poly_coefficients,
+    )
+    from bio_sbi.inference.gw_exact import log_likelihood as gw_loglik
+
+    off = np.array([[[0, 0], [1, 0], [0, 1], [2, 0], [1, 1], [1, 0]],
+                    [[0, 0], [0, 1], [1, 0], [0, 2], [1, 1], [0, 0]]])  # fmt: skip
+    model = GWModel(off, np.array([6, 5]), np.array([0.8, 0.9]),
+                    np.array([[0.95, 0.05], [0.1, 0.9]]), np.array([0.7, 0.3]),
+                    np.array([1, 2, 3]), np.array([0.5, 0.3, 0.2]))  # fmt: skip
+    mono = monomials(model)
+    assert len(mono[0]) == 6 and mono[2][0, 5] == mono[2][0, 1]
+
+    def probs(x):
+        P = np.zeros((2, 6))
+        P[0] = np.exp(x[:6]) / np.exp(x[:6]).sum()
+        P[1, :5] = np.exp(x[6:]) / np.exp(x[6:]).sum()
+        return P
+
+    # directions: d P / d x_i of the softmax rows (row 0: 6 coordinates, row 1: 5)
+    x0 = rng.normal(0, 0.3, 11)
+    P = probs(x0)
+    dP = np.zeros((11, 6))
+    rows = np.array([0] * 6 + [1] * 5)
+    for i in range(6):
+        dP[i] = P[0] * ((np.arange(6) == i) - P[0, i])
+    for i in range(5):
+        dP[6 + i, :5] = P[1, :5] * ((np.arange(5) == i) - P[1, i])
+    gens, grid = 5, grid_spec(40, 40)
+    C, _ = poly_coefficients(mono[2], len(mono[0]), P, dP, rows)
+    p_loop, _ = law_and_jac(model, P, dP[:0], rows[:0], gens, grid)
+    p_poly, traj = law_poly(model, C, mono, gens, grid)
+    assert traj.size == 0
+    # same law up to round-off amplified by the damping (<= 1e4)
+    np.testing.assert_allclose(p_poly, p_loop, rtol=1e-10, atol=1e-11)
+    # detection probability: Numba port of detection_and_grad
+    q0, dq0 = detection_and_grad(model, P, dP, rows, gens)
+    q1, dq1 = _detection_nb(model.offspring, model.n_out, model.capture, P, dP, rows, gens,
+                            model.founder, model.sizes, model.size_probs)  # fmt: skip
+    assert q1 == pytest.approx(q0, rel=1e-13)
+    np.testing.assert_allclose(dq1, dq0, rtol=1e-12, atol=1e-15)
+    # data drawn from the law itself (cells comfortably above round-off)
+    cond = np.clip(p_loop[:30, :30], 0, None)
+    cond[0, 0] = 0
+    cells = rng.choice(cond.size, size=300, p=(cond / cond.sum()).ravel())
+    data = [HorizonData(gens, *histogram(np.c_[np.unravel_index(cells, cond.shape)]), grid)]
+    v0, g0 = gw_loglik(model, P, dP, rows, data)
+    v1, g1 = gw_loglik(model, P, dP, rows, data, kernel="adjoint")
+    assert v1 == pytest.approx(v0, rel=1e-12)
+    np.testing.assert_allclose(g1, g0, rtol=1e-9, atol=1e-9 * np.abs(g0).max())
+    eps = 1e-6
+    for i in range(11):
+        e = np.zeros(11)
+        e[i] = eps
+        hi = gw_loglik(model, probs(x0 + e), dP[:0], rows[:0], data, kernel="adjoint")[0]
+        lo = gw_loglik(model, probs(x0 - e), dP[:0], rows[:0], data, kernel="adjoint")[0]
+        assert g1[i] == pytest.approx((hi - lo) / (2 * eps), rel=1e-5,
+                                      abs=1e-6 * np.abs(g1).max())  # fmt: skip
+    with pytest.raises(ValueError, match="kernel"):
+        gw_loglik(model, P, dP, rows, data, kernel="batched")
+
+
+def test_kernel_option_reaches_the_likelihood():
+    from bio_sbi.inference import ExactGW
+
+    assert ExactGW().kernel == "loop"
+    sim = GaltonWatson(load_law("reversible_ab"))
+    truth = sim.physical_from_mapping(load_law("reversible_ab")["reference"])
+    rng = np.random.default_rng(0)
+    cohorts = [Cohort(4, sim.simulate_detected(truth, 4, 32, np.ones(2), rng))]
+    lik = ExactGW(kernel="adjoint").likelihood(sim, ObservationModel(sim.types), cohorts)
+    assert lik.kernel == "adjoint" and lik.with_settings(floor=1e-14).kernel == "adjoint"
+    with pytest.raises(ValueError, match="kernel"):
+        ExactLikelihood(sim, ObservationModel(sim.types), cohorts, kernel="gpu")

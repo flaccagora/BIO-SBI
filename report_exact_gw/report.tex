@@ -1,0 +1,357 @@
+\documentclass[10pt,a4paper]{article}
+% ---------------------------------------------------------------- packages
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage[a4paper,margin=2.1cm,top=2.0cm,bottom=2.2cm]{geometry}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{amsmath,amssymb}
+\usepackage[most]{tcolorbox}
+\usepackage{caption}
+\usepackage{titlesec}
+\usepackage{float}
+\usepackage{needspace}
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\newcolumntype{P}[1]{>{\raggedright\arraybackslash}p{#1}}
+\usepackage[hidelinks]{hyperref}
+\usepackage{xurl}
+
+\setlist{nosep,leftmargin=1.3em,topsep=2pt}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{3pt}
+\captionsetup{font=small,labelfont=bf,skip=4pt}
+\renewcommand{\arraystretch}{1.12}
+\titleformat{\section}{\large\bfseries\sffamily}{\thesection}{0.6em}{}
+\titleformat{\subsection}{\normalsize\bfseries\sffamily}{\thesubsection}{0.6em}{}
+\titlespacing*{\section}{0pt}{10pt}{4pt}
+\titlespacing*{\subsection}{0pt}{8pt}{3pt}
+\raggedbottom
+
+\definecolor{cblue}{HTML}{2A78D6}
+\definecolor{corange}{HTML}{EB6834}
+\definecolor{caqua}{HTML}{1BAF7A}
+\definecolor{inkgray}{HTML}{52514E}
+\definecolor{gridgray}{HTML}{E1E0D9}
+\definecolor{pendbg}{HTML}{FFF4E5}
+
+\DeclareUrlCommand\code{\urlstyle{tt}}  % breakable at / _ .
+\DeclareUrlCommand\res{\urlstyle{tt}}
+\newcommand{\BA}{B$\to$A}
+\newcommand{\blk}[1]{\par\Needspace*{5\baselineskip}\smallskip{\sffamily\bfseries\color{inkgray}#1}\par}
+\newtcolorbox{keybox}{colback=gridgray!35,colframe=gridgray!90!black,boxrule=0.5pt,arc=2pt,
+  left=5pt,right=5pt,top=3pt,bottom=3pt,fontupper=\small}
+\newtcolorbox{caveat}{colback=pendbg,colframe=corange,boxrule=0.6pt,arc=2pt,
+  left=5pt,right=5pt,top=3pt,bottom=3pt,fontupper=\small}
+\graphicspath{{figures/}}
+\makeatletter\newcommand{\tabin}[1]{\@@input #1 }\makeatother  % expandable \input for table rows
+\newcommand{\fig}[3]{\begin{figure}[H]\centering\includegraphics[width=#2\linewidth]{#1}\caption{#3}\label{fig:#1}\end{figure}}
+\hypersetup{pdftitle={BIO-SBI: exact likelihood for Galton-Watson and the XG2 experiment},pdfauthor={BIO-SBI}}
+
+\begin{document}
+
+% ====================================================================== title
+\begin{titlepage}
+\centering
+\vspace*{3cm}
+{\sffamily\Huge\bfseries BIO-SBI\par}
+\vspace{0.5cm}
+{\sffamily\LARGE Exact likelihood for the two-type\\ Galton--Watson model\par}
+\vspace{0.4cm}
+{\sffamily\Large\color{inkgray} Method, point estimates, and how much data the full transition model needs (XG2)\par}
+\vspace{1.5cm}
+\begin{tabular}{@{}ll@{}}
+Status of results & 17 November 2026 (XG2 complete: 108 runs; MLE for every run) \\
+Repository & \code{BIO-SBI}, branch \code{worktree-exact-gw-data-size} \\
+Results & \res{results/exact_gw/data_size/} (XG2), \res{results/exact_gw/} (XG) \\
+Companions & \code{report_sequential/report.pdf} (all experiments; \S ``Exact likelihood (XG)'') \\
+Data & synthetic only \\
+\end{tabular}
+\vfill
+\begin{minipage}{0.84\linewidth}\small
+\textbf{How to read this report.} The summary (p.~\pageref{sec:summary}) is self-contained. Section~\ref{sec:model} fixes the model and notation, Section~\ref{sec:method} describes the exact likelihood, its sampler and point estimators, Section~\ref{sec:xg} recalls the earlier exact-GW results, Sections~\ref{sec:xg2design}--\ref{sec:why} present the XG2 experiment and why its posteriors behave as they do, Section~\ref{sec:conclusions} gives conclusions and follow-ups. Parameters: A = LGR5$^+$ (stem-like), B = KRT20$^+$ (differentiated); A$\to$AB etc.\ are outcome probabilities per cell and generation.
+\end{minipage}
+\end{titlepage}
+
+% ====================================================================== summary
+\section*{Summary}\label{sec:summary}
+\begin{keybox}
+\textbf{Question.} With the exact likelihood (no simulations, no summaries) and \emph{all} transitions free, how many clones per endpoint (generations 4/6/8/10 jointly) does the two-type Galton--Watson model need before its posterior converges --- contracts, covers the truth, scales like $n^{-1/2}$ and stops depending on the prior --- and how much does that depend on the ground truth and on the dataset? (XG2: 9 truths $\times$ 3 datasets $\times$ $n \in \{128, 256, 512, 1024\}$, 108 NUTS posteriors, plus the maximum-likelihood estimate of every run.)
+\end{keybox}
+
+\textbf{Findings.}
+\begin{enumerate}
+\item \textbf{The sampler is not the bottleneck.} 99 of 108 posteriors mixed (split $\hat R \le 1.05$; min ESS per run median 276, 5--95\% range 127--490); the Monte Carlo error of the posterior means is $\approx$\,0.05 posterior sd. The other 9 are bimodal or slow along one ridge (5 with $\hat R > 1.1$). A new reverse-mode (\emph{adjoint}) likelihood kernel makes every evaluation 4--5$\times$ cheaper with identical values; one NUTS run went from 2205\,s to 414\,s.
+\item \textbf{A's row converges fast, B's row does not.} For the curated truths every A parameter is narrowed about tenfold relative to the prior by $n$ = 512--1024 (Fig.~\ref{fig:contraction}). B's switch back to A (\BA) is the bottleneck: where the true \BA{} is large (0.5--0.8) the posterior mean is pulled down by 1--2 posterior sd and approaches the truth only slowly (T1: 0.36 / 0.45 / 0.68 / 0.69 at $n$ = 128 / 256 / 512 / 1024, truth 0.80). Where \BA{} is small (prior draws P1--P4, T5) it is recovered at every $n$.
+\item \textbf{Convergence depends strongly on the ground truth.} Large clones help most: T5 (about 200 cells per clone at generation 10) has every parameter contracted by $\ge$\,0.82 and \BA{} within 0.03 already at $n$ = 128. Interior truths drawn from the prior are recovered on average but individual division types can stay barely identified (P3: mixed divisions A$\to$AB vs B$\to$AB trade off with correlation $-0.98$).
+\item \textbf{The prior still matters at 1024 clones per endpoint.} Under other symmetric Dirichlet priors the posterior mean of \BA{} still moves by 0.2 (P1, P4) to 1.2 (T1) posterior sd; under a concentrated wrong prior by 0.3--0.9 sd. In this sense no truth has fully converged by $n = 1024$ (4096 clones in total).
+\item \textbf{MLE vs posterior mean.} The MLE of \BA{} is much closer to the truth than the posterior mean where \BA{} is large (T1, T2, T4: error 0.01--0.06 vs 0.07--0.44); the posterior mean is better for the prior-drawn truths at small $n$. Neither dominates. The truth lies inside the 95\% likelihood region in 107 of 108 runs (1.4--10.7 nats below the maximum, median 4.4).
+\item \textbf{Why} (Section~\ref{sec:why}). The likelihood is flat --- often two-branched --- along ``B switches back to A'' versus ``B is lost'' (divides or dies); the flat Dirichlet prior gives \BA{} a Beta(1,\,5) marginal with mean 1/6, and on a flat ridge that volume pulls the posterior mean down. This holds whether or not the truth sits on the boundary (T3, all entries interior, is as biased as T1). The 95\% \emph{profile-likelihood} interval covered the truth in 8/8 profiled runs, the posterior 95\% interval in 5/8. A likelihood-ratio test of ``B never divides'' picked the right sub-model in 37/37 runs, already at $n$ = 128, and cut the \BA{} error to 0.02--0.06 (posterior mean: 0.28--0.37).
+\end{enumerate}
+
+\textbf{Recommendations.}
+\begin{itemize}
+\item \textbf{Report likelihood-based intervals next to posterior intervals} for B's row; where they disagree the prior drives the result. Use the profile likelihood (not the marginal mode) for \BA.
+\item \textbf{Decide whether B divides before estimating \BA}: model comparison (two\_type vs B divisions = 0) works from 128 clones per endpoint; otherwise B's row needs $\gg$\,1024 clones per endpoint (earlier: 4096 on three endpoints gave 0.78 $\pm$ 0.02).
+\item \textbf{Report identifiable combinations} (growth rate, stable type fraction, division mass per row, \BA) rather than individual division types.
+\item \textbf{For the sampler}: use \code{kernel=adjoint}; warm starts across nested $n$ and ESS-based stopping are being benchmarked (Section~\ref{sec:followups}); for bimodal posteriors use tempering/SMC or more chains.
+\end{itemize}
+
+% ====================================================================== model
+\section{Model and notation}\label{sec:model}
+Two cell types, A and B. In each generation every living cell has exactly one event, with type-specific probabilities over six outcomes:
+\begin{center}\small
+\begin{tabular}{@{}lll@{}}\toprule
+A cell & B cell & meaning \\\midrule
+A death & B death & cell lost \\
+A persist & B persist & cell stays, no division \\
+A$\to$B & \BA & cell switches type \\
+A$\to$AA, A$\to$AB, A$\to$BB & B$\to$AA, B$\to$AB, B$\to$BB & division with the given daughters \\\bottomrule
+\end{tabular}
+\end{center}
+\textbf{Full transition model} (\code{law=two_type}): all 12 entries free, 5 free probabilities per row, 10 in total; each clone starts from one A cell. \textbf{Data}: for each endpoint (generation 4, 6, 8, 10) the A and B counts of $n$ clones, conditioned on detection (a clone with no cell is not observed). \textbf{Prior}: uniform Dirichlet on each row (``flat''), so every outcome has a Beta(1,\,5) marginal with mean 1/6. \textbf{Coordinates}: stick breaking (exact Dirichlet reparametrisation); NUTS runs in logit-sticks.
+
+% ====================================================================== method
+\section{The exact likelihood and inference on it}\label{sec:method}
+\subsection{Likelihood}
+\begin{itemize}
+\item \textbf{Clone law.} With $f_A, f_B$ the offspring probability generating functions (pgfs) of one generation, the pgf of a clone after $g$ generations is the $g$-fold iterate $F_g = f(F_{g-1})$. It is evaluated on an $L_x \times L_y$ grid of damped roots of unity and inverted by a 2-D FFT, giving $p(a, b \mid \theta, g)$ for every observed count pair. The grid is sized from the data ($L = $ next fast length of $1.25\times$ the largest count $+16$; largest grid here $\approx 270 \times 420$ at generation 10); the damping radius bounds round-off amplification by $10^4$.
+\item \textbf{Likelihood.} Product over clones and endpoints of $p(a,b\mid\theta,g) / P(\text{detected}\mid\theta,g)$, with probability floor $10^{-15}$; clones are grouped into a histogram so the cost hardly depends on $n$.
+\item \textbf{Gradients.} Original kernel (\code{kernel=loop}, default): forward mode, one tangent per free parameter carried through the recursion. New kernel (\code{kernel=adjoint}, opt-in): vectorised recursion (bit-identical values, 3.4$\times$ faster) and \emph{reverse-mode} gradient --- one backward pass through the stored recursion gives all 10 derivatives, so the cost no longer grows with the number of parameters.
+\item \textbf{Validation.} Law at the posterior median vs an undamped grid twice as large: relative error $\le 1.1\times 10^{-6}$ on observed cells in every run. \code{adjoint} vs \code{loop}: identical log likelihoods at all 305 test points (5 designs) and on XG2 datasets; gradients agree to $\le 2\times10^{-8}$ relative near the data (both kernels are dominated by FFT round-off far from it).
+\end{itemize}
+
+\begin{center}\footnotesize
+\begin{tabular}{@{}lrrrr@{}}\toprule
+two\_type, 10 parameters, 1 thread & \multicolumn{2}{c}{log likelihood (ms)} & \multicolumn{2}{c}{log likelihood + gradient (ms)} \\
+design & loop & adjoint & loop & adjoint \\\midrule
+generations 4,6,8,10 $\times$ 128 & 13.3 & 3.2 & 33.7 & 7.6 \\
+generations 4,6,8,10 $\times$ 1024 & 14.6 & 3.7 & 38.3 & 9.3 \\
+generations 4,6,10 $\times$ 1024 & 11.3 & 2.9 & 41.6 & 9.0 \\
+XG2 T5 (large clones), 1024 & --- & --- & 145 & 27 \\\bottomrule
+\end{tabular}
+
+End-to-end NUTS (2 chains $\times$ 600 iterations, same data and seed): 2205\,s (\code{loop}) vs 414\,s (\code{adjoint}). Machine loaded; ratios stable, absolute times $\pm 20\%$. Scripts and outputs: \code{scripts/gw_speedup/}.
+\end{center}
+
+A GPU version (RTX A1000, float64 at 1/32 rate) was prototyped: at 16--256 chains in lockstep it reaches only 2.5--3$\times$ the new CPU kernel on 2 threads --- not pursued.
+
+\subsection{Posterior sampling}
+NUTS with Stan-style warmup and a dense mass matrix, 4 chains $\times$ (500 warmup + 500 draws), started at the best of 16 L-BFGS optima of the log posterior, one chain per thread (\code{inference=exact_gw}). Diagnostics: rank-normalised split $\hat R$, bulk ESS, divergences, per-chain means (to spot chains in different modes). Posteriors under other priors are obtained by Pareto-smoothed importance sampling (PSIS) of the flat-prior draws (weights $\prod p_i^{\alpha_i - 1}$), reliable when the Pareto $k \le 0.7$.
+
+\subsection{Point estimates}
+The MLE maximises the log likelihood alone (no prior), by multistart L-BFGS-B in stick coordinates (bounds $[10^{-9}, 1-10^{-9}]$), started from the 4 NUTS chain means, the posterior mean and 24 prior draws (29 starts; the truth is never a start, it is used only to check for a missed optimum). A physical-probability MAP (Dirichlet prior on the normalised free probabilities, no Jacobian) is also available. Global optimisers were benchmarked on six small designs $\times$ 5 seeds (``hit'' = within 0.01 nats of the best value any method found):
+\begin{center}\footnotesize
+\begin{tabular}{@{}lrrr@{}}\toprule
+method & hits & worst gap (nats) & median time \\\midrule
+multistart L-BFGS-B & 27/30 & 0.16 & 0.8\,s \\
+particle swarm (PSO) + L-BFGS-B refinement & 25/30 & 1.39 & 4.4\,s \\
+Adam (logit coordinates) + L-BFGS-B polish & 29/30 & 0.14 & 5.4\,s \\
+PSO alone / Adam alone & 7/30 / 12/30 & 7.3 / 7.4 & 4.1 / 5.1\,s \\\bottomrule
+\end{tabular}
+
+Minibatching clones does not help: each step recomputes the full clone law, so step cost is independent of the batch size. Details: \code{scripts/pso_benchmark/results.md}.
+\end{center}
+Multistart L-BFGS-B is the default. All methods share one weakness: in stick coordinates the multistart is biased toward the ``B switches back'' basin, and a better optimum on the low-\BA{} branch can be missed (2 of 37 runs checked by pinning \BA, Section~\ref{sec:why}).
+
+% ====================================================================== XG
+\section{Earlier exact-GW results (XG)}\label{sec:xg}
+On the reference truth (\BA{} = 0.8, B divisions 0), on datasets identical to earlier NPE runs (5 seeds each; full account in the sequential report):
+\begin{center}\footnotesize\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}llrrrr@{}}\toprule
+GW design, B divisions & method & \BA{} (0.8) & post.\ sd & covered & B-division mass (0) \\\midrule
+generations \{4,6,10\} $\times$ 4096, free & \textbf{exact} & \textbf{0.78} & 0.020 & 4/5 & \textbf{0.04} \\
+ & NPE 20k / 5k & 0.34 / 0.27 & 0.12 / 0.14 & 0/5 & 0.49 / 0.56 \\
+\{4,8,12\} $\times$ 32, free & exact & 0.27 & 0.17 & 0/5 & 0.52 \\
+real-like \{6,10\} $\times$ 165/101, free & exact & 0.25 & 0.16 & 0/5 & 0.56 \\
+real-like, fixed to 0 & exact & 0.77 & 0.08 & 5/5 & --- \\
+early \{2,3\} $\times$ 133, free & exact & 0.56 & 0.15 & 1/5 & 0.18 \\\bottomrule
+\end{tabular}
+\end{center}
+B's row is identified at 4096 clones on three endpoints (the earlier NPE failure there was NPE's), but prior-dominated at realistic sizes; with B divisions fixed it is recovered. XG2 maps the range in between.
+
+% ====================================================================== XG2 design
+\section{XG2: design}\label{sec:xg2design}
+\begin{center}\footnotesize\setlength{\tabcolsep}{3pt}
+\begin{tabularx}{\linewidth}{@{}lP{4.4cm}P{4.6cm}rY@{}}\toprule
+truth & A row (death, persist, $\to$B, $\to$AA, $\to$AB, $\to$BB) & B row (death, persist, $\to$A, $\to$AA, $\to$AB, $\to$BB) & cells$^a$ & note \\\midrule
+T1 reference & .03 .03 .05 .55 .05 .29 & .10 .10 .80 0 0 0 & 96 & reference biology; B never divides \\
+T2 & as T1 & .25 .25 .50 0 0 0 & 56 & weaker switch back \\
+T4 slow A & .06 .06 .06 .40 .10 .32 & as T1 & 45 & less A self-renewal \\
+T3 B divides & as T1 & .10 .08 .60 .02 .05 .15 & 118 & B divides (mass 0.22); interior \\
+T5 (C7) & .05 .10 .10 .50 .15 .10 & .08 .05 .10 .05 .05 .67 & 196 & large clones; B self-renews \\
+P1 & .098 .061 .301 .115 .341 .084 & .191 .145 .111 .262 .266 .024 & 31 & flat-prior draw \\
+P2 & .289 .131 .008 .305 .035 .231 & .032 .134 .123 .350 .004 .358 & 39 & flat-prior draw \\
+P3 & .035 .138 .101 .117 .212 .396 & .082 .035 .272 .195 .334 .083 & 120 & flat-prior draw \\
+P4 & .219 .045 .058 .368 .282 .028 & .058 .130 .112 .175 .506 .018 & 61 & flat-prior draw \\\bottomrule
+\end{tabularx}
+
+$^a$ expected living cells per seeded clone at generation 10. P1--P4: draws from the flat prior with 30--300 expected cells at generation 10 (\code{truth.mean_cells}), fixed by \code{truth.seed} 1001--1004 (values rounded).
+\end{center}
+\begin{itemize}
+\item \textbf{Design}: generations \{4, 6, 8, 10\} jointly, $n \in \{128, 256, 512, 1024\}$ clones per endpoint. For each truth, 3 datasets (\code{seed} = \code{data_seed} = 0, 1, 2); datasets are \emph{nested} across $n$ (the 128 clones are the first 128 of the 1024), so each (truth, dataset) is one convergence curve.
+\item \textbf{Inference}: flat prior, NUTS as above; other priors by PSIS reweighting: symmetric Dirichlet 0.2 (sparse), 0.5 (Jeffreys), 2 (smooth), 5 (central), and a concentrated wrong prior (total concentration 20; \BA{} prior mean 0.2, B dividing).
+\item \textbf{Kernels}: 99 runs with \code{loop}, the last 9 (P3 and T5 at $n \ge 512$ and one P3 at 256) with \code{adjoint} --- identical likelihood, different sampler trajectories.
+\item \textbf{Runs}: \res{results/exact_gw/data_size/<truth>/n<n>_s<dataset>/}; index \res{runs_index.csv}; tables \res{xg2_*.csv}; analysis \code{scripts/analyse_exact_gw_data_size.py}; MLE \code{scripts/exact_gw_mle.py} (\res{mle.json} per run; the MLE is drawn in each run's \res{figures/posterior.png}).
+\end{itemize}
+
+% ====================================================================== XG2 results
+\section{XG2: results}\label{sec:xg2results}
+\subsection{Sampler and cost}
+\begin{center}\scriptsize\setlength{\tabcolsep}{2.2pt}
+\begin{tabular}{@{}llrrrrrrrrr@{}}\toprule
+truth & kernel & runs & h/run (range) & grad.\ ev. & ms/ev. & depth & max $\hat R$ & \#$\hat R{>}1.05$ & min ESS & max div. \\\midrule
+\tabin{tables/sampler.tex}
+\bottomrule
+\end{tabular}
+
+Per-run medians; ms/eval as measured on a shared, partly oversubscribed machine; \code{loop} T5 runs used 2 threads (others 4). Gradient evaluations per run depend on the posterior, not the kernel (the \code{adjoint} P3 runs are the larger $n$).
+\end{center}
+\begin{itemize}
+\item 99/108 runs mixed. Nine have $\hat R > 1.05$ (Table~\ref{tab:bad}); in the worst (T1, $n$ = 256, dataset 1, $\hat R$ = 3.75) two chains sit in a ``B switches back'' mode (\BA{} $\approx$ 0.6, B$\to$BB $\approx$ 0.03), one in a ``B divides'' mode (0.13, 0.42), one in between, with mean log posteriors within 2.5 nats: the pooled draws weight the modes by chain count, not by mass.
+\item Every run needs 200--600k gradient evaluations (tree depth 5.5--7): NUTS crawls along one or two weak directions. Cost per run is set by clone size (grid) and posterior geometry, hardly by $n$.
+\end{itemize}
+\begin{table}[H]\centering\footnotesize
+\begin{tabular}{@{}lrrrrl@{}}\toprule
+truth & $n$ & dataset & max $\hat R$ & divergences & kernel \\\midrule
+\tabin{tables/badruns.tex}
+\bottomrule
+\end{tabular}
+\caption{Runs with split $\hat R > 1.05$. Their posterior summaries are unreliable in the relative weight of modes; they are kept in the tables (excluding them changes no conclusion).}\label{tab:bad}
+\end{table}
+
+\subsection{What converges}
+\fig{contraction}{1.0}{Posterior sd relative to prior sd for every parameter (rows), truth and $n$ (columns; geometric mean over 3 datasets). Blue = narrowed, white = as wide as the prior, red = wider than the prior marginal (possible when the posterior sits in the prior's tail).}
+\begin{itemize}
+\item \textbf{A's row}: narrowed $\approx$\,3--10$\times$ already at $n$ = 128 for the curated truths, $\approx$\,10--30$\times$ at 1024.
+\item \textbf{B's row}: \BA{} is the slowest parameter for T1, T3 and T4 (wider than its prior marginal at $n \le 256$: the posterior sits away from the prior's bulk at 1/6 but has not yet concentrated) and B's division types follow. For P1--P4 individual division types stay weakly identified at every $n$ (Section~\ref{sec:p3}).
+\item \textbf{Large clones (T5)} are informative everywhere: every parameter is narrowed by $\ge 2.4\times$ in sd at $n$ = 128.
+\end{itemize}
+
+\subsection{B's switch back to A}
+\fig{btoa_vs_n}{1.0}{\BA{} per dataset against $n$: posterior mean $\pm$ sd (blue, three datasets side by side) and MLE (orange diamonds); dashed = truth. Datasets are nested across $n$.}
+\begin{center}\footnotesize\setlength{\tabcolsep}{2.6pt}
+\begin{tabular}{@{}lrrrrrrrrr@{}}\toprule
+ & & \multicolumn{2}{c}{$n$ = 128} & \multicolumn{2}{c}{256} & \multicolumn{2}{c}{512} & \multicolumn{2}{c}{1024} \\
+truth & \BA & post.\ (sd) & MLE & post.\ (sd) & MLE & post.\ (sd) & MLE & post.\ (sd) & MLE \\\midrule
+\tabin{tables/btoa.tex}
+\bottomrule
+\end{tabular}
+
+Means over the 3 datasets of the posterior mean, posterior sd and MLE of \BA.
+\end{center}
+\begin{itemize}
+\item \textbf{Large \BA{} (T1, T2, T4, T3)}: the posterior mean starts near the prior side (0.17--0.40) and climbs slowly; at 1024 it is still 0.07--0.17 below the truth (z $\approx$ $-1$ to $-2$, the same sign in every dataset).
+\item \textbf{Small \BA{} (P1--P4, T5)}: recovered at every $n$ (within $\approx$\,1 posterior sd).
+\item The MLE tracks the truth for large \BA{} from $n$ = 256 on but jumps between near-equal optima for small \BA{} (several P runs have an MLE of exactly 0).
+\end{itemize}
+
+\subsection{Calibration and contraction}
+\begin{center}\footnotesize\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}lrrrrrrrr@{}}\toprule
+ & \multicolumn{4}{c}{worst-parameter contraction} & \multicolumn{2}{c}{$n$ = 128} & \multicolumn{2}{c}{$n$ = 1024} \\
+truth & 128 & 256 & 512 & 1024 & 90\% coverage & mean $|z|$ & 90\% coverage & mean $|z|$ \\\midrule
+\tabin{tables/calibration.tex}
+\bottomrule
+\end{tabular}
+
+Contraction $= 1 - \mathrm{var}_{\rm post}/\mathrm{var}_{\rm prior}$ of the least contracted parameter (mean over datasets). Coverage and $|z|$ over parameters with truth $>0$ (an equal-tailed interval cannot contain an exact 0) and the 3 datasets.
+\end{center}
+Coverage of the 90\% intervals is 70--85\% for the curated truths (\BA{} is the parameter that misses most: 53\% overall) and 75--100\% for the prior draws and T5. Mean $|z|$ near 0.8 would be expected for a calibrated posterior.
+
+\subsection{Large-sample regime}
+\fig{sd_sqrt_n}{1.0}{Posterior sd $\times \sqrt{n}$ against $n$ (mean over datasets). In the Gaussian (Bernstein--von Mises) regime the curve is flat at the Cram\'er--Rao value.}
+A's self-renewal reaches the $n^{-1/2}$ regime by 256--512 for T1, T2, T4 and T5. \BA{} and B's division types do not for most truths: sd$\cdot\sqrt n$ still grows or jumps at 1024 (posterior still prior- or boundary-limited), except for T5 and partly T4.
+
+\subsection{Prior sensitivity}
+\fig{prior_shift}{1.0}{Largest shift of the posterior mean of \BA{} under reliable reweightings (Pareto $k \le 0.7$), in flat-posterior sd (median over datasets). Blue: maximum over the symmetric Dirichlet priors (0.2, 0.5, 2, 5); orange: concentrated wrong prior. Dashed: 0.25 sd (``prior-insensitive'').}
+\begin{center}\footnotesize
+\begin{tabular}{@{}lrrrr@{}}\toprule
+prior (reweighted from flat) & $n$ = 128 & 256 & 512 & 1024 \\\midrule
+\tabin{tables/psis.tex}
+\bottomrule
+\end{tabular}
+
+Share of runs whose PSIS reweighting is reliable (Pareto $k \le 0.7$); 203 of 540 (run, prior) pairs are not and would need a NUTS rerun.
+\end{center}
+At $n$ = 1024 the reliable reweightings still move \BA{} by 0.2--1.2 posterior sd under the symmetric priors (largest for T1, smallest for P1 and P4) and by 0.3--0.9 sd under the wrong prior; moving the concentration from 0.5 to 2 lowers the mean of \BA{} in 39/39 runs of T1--T4 (more volume at small \BA). Sparse and central priors could not be assessed by reweighting at small $n$ (reliable in 4--59\% of runs).
+
+\subsection{MLE vs posterior mean}
+\fig{mle_vs_posterior}{1.0}{Mean absolute error of the MLE (orange) and the posterior mean (blue) against $n$; solid = \BA, dotted = mean over all 12 probabilities.}
+\begin{center}\footnotesize\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}lrrrrrr@{}}\toprule
+ & \multicolumn{4}{c}{\BA: MLE / posterior mean} & \multicolumn{2}{c}{all 12: MLE / posterior mean} \\
+truth & 128 & 256 & 512 & 1024 & 128 & 1024 \\\midrule
+\tabin{tables/errors.tex}
+\bottomrule
+\end{tabular}
+
+Mean absolute error over the 3 datasets; the smaller value in bold.
+\end{center}
+The MLE wins clearly for large \BA{} (T1, T2, T4, and T3 from 512 on); the posterior mean wins for the prior draws at small $n$; the two converge as $n$ grows (T5: both $\le$ 0.015 by 256). The truth is 1.4--10.7 nats below the maximum log likelihood (median 4.4; 95\% likelihood region for 10 parameters: 9.2 nats), i.e.\ compatible with the data almost everywhere but only weakly favoured.
+
+% ====================================================================== why
+\section{Why the posterior mean of \BA{} is biased}\label{sec:why}
+A dedicated analysis (\res{docs/xg2_mle_vs_posterior/README.md}; profiles of \BA{} on 8 runs, low-branch and sub-model fits on 37 runs) tested three explanations.
+\begin{enumerate}
+\item \textbf{Flat, two-branched likelihood --- supported.} Profiling \BA{} (fixing it, maximising over the other 9 parameters), the profile drops only 1.9 nats from \BA{} = 0.9 to 0.2 for T1 at $n$ = 128 (95\% profile interval [0.01, 0.90]) and $<$\,1 nat over 0.05--0.5 for T2 at $n$ = 128. It has two branches with a jump near 0.35--0.4: ``B switches back'' and a low branch where B is lost --- by division for T1/T3, mostly by death for T2. T3 at $n$ = 1024 still has two branches 0.65 nats apart.
+\item \textbf{Peak vs average (prior volume) --- supported, mechanism more general.} Under the flat prior the joint posterior peak is the MLE (draws reach within 0.4--1.4 nats of it). Going from the MLE to the mean under the profile likelihood alone, and then to the actual posterior mean, the second step --- the volume of good-fitting nuisance parameters --- always lowers \BA{} (by 0.06--0.37 in 7/7 runs) and matches the Beta(1,\,5) marginal of a 1-in-6 outcome. It is not specific to the three division outcomes, and not to boundary truths: T3 (interior) is as biased as T1 (mean error 0.26 for both).
+\item \textbf{Boundary truths cause it --- not supported as stated.} For the prior draws the relevant boundary is \BA{} = 0, and it hurts the MLE (11 runs with MLE \BA{} $<10^{-3}$); there the posterior mean wins because those truths sit where the prior volume points.
+\end{enumerate}
+\fig{profile_T1_ref_s0_n128}{0.62}{Profile log likelihood of \BA{} (T1, $n$ = 128, dataset 0): nearly flat over 0.2--0.9 with two branches (from \texttt{docs/xg2\_mle\_vs\_posterior/}).}
+\fig{decomposition}{0.72}{Decomposition of the MLE--posterior-mean gap of \BA: MLE $\to$ mean under the profile likelihood (no volume) $\to$ actual posterior mean (from \texttt{docs/xg2\_mle\_vs\_posterior/}).}
+\textbf{Interval coverage.} The 95\% profile-likelihood interval covered the truth in 8/8 profiled runs, the 95\% posterior interval in 5/8 (missing T1 at 128 and 1024, and T2 at 1024 with upper limit 0.496 against 0.50).
+
+\textbf{Model selection fixes it where it applies.} A likelihood-ratio test of ``B never divides'' (B$\to$AA = AB = BB = 0; $\bar\chi^2_3$ at 5\%) kept the sub-model in all 19 T1/T2/T4 runs and rejected it in all 18 T3/P runs ($n$ = 128 and 256; 37/37 correct). Taking \BA{} from the sub-model when kept and from the global MLE otherwise gives errors 0.050 (T1), 0.060 (T2), 0.023 (T4) against 0.37, 0.28, 0.32 for the posterior mean. Where B really divides (T3) only more data or prior information help.
+
+\textbf{Correction to the stored MLE.} Pinning \BA{} found better optima on the low branch in 2 of 37 runs (T1 $n$ = 128 dataset 0: global MLE \BA{} = 0.21 by 0.41 nats, not 0.78; P3 $n$ = 128 dataset 0 by 0.27 nats). The MLE columns above are the multistart values; at small $n$ the MLE's advantage for T1 is partly luck of the basin.
+
+\subsection{A second weak direction: which parent made the division (P3)}\label{sec:p3}
+\fig{p3_ridge}{0.9}{P3, $n$ = 1024: posterior draws of the mixed divisions of A and B (left) and of the symmetric BB divisions (right) for the three datasets; star = truth.}
+For P3 the three datasets at $n$ = 1024 give quite different individual division probabilities (e.g.\ A$\to$AB 0.16 vs 0.34, B$\to$BB 0.10 vs 0.25), yet each run is converged ($\hat R$ 1.02, chains agree) and the identifiable combinations agree closely: growth per generation 1.603 $\pm$ 0.004 vs 1.606 $\pm$ 0.004 (truth 1.609), stable A fraction 0.493 vs 0.495 (0.493), \BA{} 0.23 vs 0.21 (0.27). The posterior correlations of A$\to$AB with B$\to$AB ($-0.98$), A$\to$AA with B$\to$AA ($-0.96$) and A$\to$BB with B$\to$BB ($-0.96$) define a ridge with posterior sd 0.19: a mixed division produces one A and one B whichever cell divided, and with a population that is half A, half B the counts barely distinguish the parent. Each dataset lands at a different point of the same line through the truth (Fig.~\ref{fig:p3_ridge}); differences are $\le 1.5$ combined posterior sd, i.e.\ dataset noise along a weak direction.
+
+% ====================================================================== conclusions
+\section{Conclusions}\label{sec:conclusions}
+\begin{enumerate}
+\item The exact GW likelihood is fast enough to map convergence systematically (108 posteriors, 0.3--4\,h each with the old kernel, 4--5$\times$ less with the adjoint kernel), and its sampler is reliable except on bimodal B-row posteriors.
+\item With all transitions free, 1024 clones per endpoint on generations 4--10 are \emph{not} enough for B's row when \BA{} is large: the posterior is biased toward ``B is lost'' by 1--2 sd and prior-sensitive. A's row and the growth/composition summaries converge from 256--512 clones per endpoint.
+\item The answer depends on the truth: large clones (T5) and truths near the prior's bulk converge fast; the reference biology (B switches back, never divides) converges slowest.
+\item The limiting factor is information along two directions --- switch back vs loss of B, and which parent made a mixed division --- combined, for the first, with the flat prior's volume. More NUTS budget cannot change it (Monte Carlo error $\approx$\,0.05 sd).
+\end{enumerate}
+
+\subsection{Follow-ups}\label{sec:followups}
+\begin{itemize}
+\item \textbf{In progress}: warm starts across nested $n$ (initial points and mass matrix from the posterior at $n/2$) and stopping on an ESS/$\hat R$ target; expected 1.5--3$\times$ fewer evaluations (warmup is $\approx$\,50\% of a run, 18--23\% of thread time is lost to the slowest chain).
+\item Reruns of the 9 bimodal runs with more chains or tempering (the BH SMC sampler).
+\item Prior sensitivity by NUTS where reweighting is unreliable (203 (run, prior) pairs; at least the wrong prior at $n \ge 512$).
+\item $n$ = 2048--4096 for T1--T4 to locate the $n$ at which B's row converges (cheap with the new kernel and warm starts).
+\item Reparametrisation along the two weak directions (as for Bellman--Harris) and a model-comparison step (``does B divide?'') in the default analysis.
+\item Separate dataset noise from sampler noise explicitly (fix \code{data_seed}, vary \code{seed}).
+\end{itemize}
+
+% ====================================================================== appendix
+\appendix
+\section{Reproducibility}\label{sec:repro}
+\begin{itemize}
+\item \textbf{Code}: branch \code{worktree-exact-gw-data-size} (XG2 preset, analysis, MLE, report), merged \code{gw-speedup} (adjoint kernel; via \code{sgd-mle} and the PSO branch) and \code{xg2-mle-vs-posterior} (identifiability analysis).
+\item \textbf{XG2}: \code{bio-sbi -m +experiment=exact_gw_data_size} (preset \code{src/bio_sbi/conf/experiment/exact_gw_data_size.yaml}; T5 added on the command line as \code{+truths.T5_C7={...}}); launchers \code{scripts/run_xg2.sh}, \code{scripts/run_xg2_adjoint.sh}; analysis \code{uv run python scripts/analyse_exact_gw_data_size.py results/exact_gw/data_size}; MLE \code{uv run python scripts/exact_gw_mle.py results/exact_gw/data_size --workers 16}.
+\item \textbf{This report}: \code{uv run python report_exact_gw/make_figures.py --results <repo>/results}, then \code{tectonic report.tex} inside \code{report_exact_gw/}.
+\item \textbf{Layout}: \res{results/exact_gw/data_size/<truth>/n<n>_s<dataset>/} (one folder per run; \res{runs_index.csv} lists kernel and original sweep folder); sweep logs in \res{_sweeps/}.
+\end{itemize}
+
+\section{Glossary}\label{sec:glossary}
+\begin{description}[style=nextline,leftmargin=1.3em]
+\item[Contraction] $1 - \mathrm{var}_{\rm post}/\mathrm{var}_{\rm prior}$ per parameter; 1 = fully determined, 0 = prior-like, $<0$ = wider than the prior marginal.
+\item[ESS, $\hat R$] effective sample size and rank-normalised split R-hat of the MCMC draws.
+\item[MLE] maximum-likelihood estimate (likelihood only, no prior).
+\item[Profile likelihood] for one parameter: the likelihood maximised over all others at each fixed value; its 95\% interval drops 1.92 nats from the maximum.
+\item[PSIS] Pareto-smoothed importance sampling; reweights posterior draws to another prior; reliable if Pareto $k \le 0.7$.
+\item[Nested datasets] at fixed truth and dataset seed, the first $n$ clones of each endpoint are the same for every $n$.
+\end{description}
+
+\end{document}
