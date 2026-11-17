@@ -39,14 +39,14 @@ import numpy as np  # noqa: E402
 LO, HI = 1e-9, 1 - 1e-9
 
 
-def _setup(run: Path):
+def _setup(run: Path, extra: tuple = ()):
     import pandas as pd
     from hydra import compose, initialize_config_module
     from omegaconf import OmegaConf
 
     from bio_sbi.pipeline import build_components, build_data_generator, reference_parameters
 
-    overrides = list(OmegaConf.load(run / ".hydra" / "overrides.yaml"))
+    overrides = list(OmegaConf.load(run / ".hydra" / "overrides.yaml")) + list(extra)
     with initialize_config_module("bio_sbi.conf", version_base=None):
         cfg = compose("config", overrides=overrides)
     comp = build_components(cfg)
