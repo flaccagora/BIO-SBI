@@ -1,0 +1,8 @@
+# Dataset noise vs sampler noise: dataset of seed 0 (data_seed=0 passed by the queue
+# command), sampler seeds 1 and 2; compare with the XG2 run n1024_s0 (same data, seed 0).
+T1_ref 1024 1
+T1_ref 1024 2
+T3_Bdiv 1024 1
+T3_Bdiv 1024 2
+P3 1024 1
+P3 1024 2
