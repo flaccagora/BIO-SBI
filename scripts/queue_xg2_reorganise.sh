@@ -7,7 +7,7 @@ ROOT=${1:-results/exact_gw/data_size}
 cd "$(dirname "$0")/.."
 echo "$(date -Is) waiting for the final MLE fits and analysis"
 until grep -q "analysis written" "$ROOT/mle_queue.log" 2>/dev/null; do sleep 60; done
-while pgrep -f "python.*(bio-sbi -m \+experiment=exact_gw_data_size|exact_gw_mle.py|analyse_exact_gw_data_size.py)" > /dev/null; do sleep 30; done
+while pgrep -f "^[^ ]*python[^ ]* [^ ]*(bio-sbi -m \+experiment=exact_gw_data_size|exact_gw_mle.py|analyse_exact_gw_data_size.py)" > /dev/null; do sleep 30; done
 echo "$(date -Is) reorganising"
 .venv/bin/python scripts/reorganise_xg2.py "$ROOT" || { echo "reorganise failed"; exit 1; }
 echo "$(date -Is) rerunning the analysis on the new layout"

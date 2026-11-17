@@ -17,7 +17,7 @@ JOBS=(  # gt n seed, largest first
   "P3 1024 0" "P3 1024 1" "P3 1024 2"
   "T5_C7 512 2" "P3 512 2" "P3 256 2"
 )
-PAT="python.*bio-sbi -m \+experiment=exact_gw_data_size"
+PAT="^[^ ]*python[^ ]* [^ ]*bio-sbi -m \+experiment=exact_gw_data_size"
 njobs() { pgrep -fc "$PAT"; }
 busy_cores() {  # summed %CPU of the sweep processes over a 10 s window, in cores
   local pids

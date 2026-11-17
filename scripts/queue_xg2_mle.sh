@@ -10,9 +10,9 @@ PRIOR_STARTS=${3:-24}
 cd "$(dirname "$0")/.."
 echo "$(date -Is) waiting for exact_gw_data_size sweeps to finish"
 # match the python sweep processes only (launcher shells can carry the same text)
-while pgrep -f "python.*bio-sbi -m \+experiment=exact_gw_data_size" > /dev/null; do sleep 120; done
+while pgrep -f "^[^ ]*python[^ ]* [^ ]*bio-sbi -m \+experiment=exact_gw_data_size" > /dev/null; do sleep 120; done
 # and any MLE batch still running on these runs (avoid fitting the same run twice)
-while pgrep -f "python.*exact_gw_mle.py" > /dev/null; do sleep 60; done
+while pgrep -f "^[^ ]*python[^ ]* [^ ]*exact_gw_mle.py" > /dev/null; do sleep 60; done
 echo "$(date -Is) sweeps finished: $(find "$ROOT" -name metrics.json | wc -l) runs with metrics.json"
 OMP_NUM_THREADS=1 NUMBA_NUM_THREADS=1 MKL_NUM_THREADS=1 \
   .venv/bin/python scripts/exact_gw_mle.py "$ROOT" --workers "$WORKERS" --prior-starts "$PRIOR_STARTS"
