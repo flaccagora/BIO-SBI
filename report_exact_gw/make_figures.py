@@ -218,6 +218,62 @@ def fig_contraction_mle(flat, index):
     print("MLE se states:", counts)
 
 
+def mse_table(flat, mle) -> pd.DataFrame:
+    """MSE over the 3 datasets per (truth, n, parameter) for posterior mean and MLE,
+    split into bias^2 and variance (population variance over datasets); plus the mean
+    posterior variance (to compare actual with reported error)."""
+    post = flat[["gt", "n", "seed", "parameter", "truth", "mean", "sd"]].merge(
+        mle[["gt", "n", "seed", "parameter", "mle"]], on=["gt", "n", "seed", "parameter"])
+    rows = []
+    for (gt, n, p), g in post.groupby(["gt", "n", "parameter"]):
+        t = g.truth.iloc[0]
+        r = {"gt": gt, "n": n, "parameter": p, "truth": t, "post_var": float((g.sd ** 2).mean())}
+        for est, col in (("post", "mean"), ("mle", "mle")):
+            x = g[col].to_numpy()
+            r[f"mse_{est}"] = float(np.mean((x - t) ** 2))
+            r[f"bias2_{est}"] = float((x.mean() - t) ** 2)
+            r[f"var_{est}"] = float(x.var())
+        rows.append(r)
+    out = pd.DataFrame(rows)
+    out.to_csv(TAB / "mse.csv", index=False)
+    return out
+
+
+def fig_rmse(flat, mle):
+    m = mse_table(flat, mle)
+    prior_sd = flat.groupby("parameter").prior_var.first().pow(0.5)
+    for est, label in (("post", "RMSE of the posterior mean / prior sd"),
+                       ("mle", "RMSE of the MLE / prior sd")):  # fmt: skip
+        mat = np.full((len(PARAMS), len(GTS) * 4), np.nan)
+        for j, (gt, n) in enumerate((gt, n) for gt in GTS for n in NS):
+            for i, p in enumerate(PARAMS):
+                v = m[(m["gt"] == gt) & (m.n == n) & (m.parameter == p)][f"mse_{est}"]
+                mat[i, j] = np.log10(np.sqrt(max(float(v.iloc[0]), 1e-12)) / prior_sd[p])
+        _sd_heatmap(mat, f"rmse_{est}", label)
+
+
+def mse_tables(flat, mle):
+    m = pd.read_csv(TAB / "mse.csv")
+    rows = []
+    for gt in GTS:
+        r = {"truth": LABEL[gt]}
+        for n in (128, 1024):
+            b = m[(m["gt"] == gt) & (m.n == n) & (m.parameter == "B.to_A")].iloc[0]
+            rp, rm = np.sqrt(b.mse_post), np.sqrt(b.mse_mle)
+            r[f"b{n}"] = (f"\\textbf{{{rm:.2f}}} / {rp:.2f}" if rm < rp
+                          else f"{rm:.2f} / \\textbf{{{rp:.2f}}}")  # fmt: skip
+            r[f"bias{n}"] = f"{100 * b.bias2_mle / max(b.mse_mle, 1e-12):.0f} / {100 * b.bias2_post / max(b.mse_post, 1e-12):.0f}"
+        for n in (128, 1024):
+            a = m[(m["gt"] == gt) & (m.n == n)]
+            rp, rm = np.sqrt(a.mse_post.mean()), np.sqrt(a.mse_mle.mean())
+            r[f"a{n}"] = (f"\\textbf{{{rm:.3f}}} / {rp:.3f}" if rm < rp
+                          else f"{rm:.3f} / \\textbf{{{rp:.3f}}}")  # fmt: skip
+            r[f"cal{n}"] = f"{np.sqrt(a.mse_post.mean() / a.post_var.mean()):.2f}"
+        rows.append(r)
+    tex_table(pd.DataFrame(rows)[["truth", "b128", "bias128", "b1024", "bias1024", "a128", "a1024",
+                                  "cal128", "cal1024"]], "mse")  # fmt: skip
+
+
 def fig_error(mle):
     fig, axes = plt.subplots(3, 3, figsize=(7.2, 5.4), sharex=True)
     for ax, gt in zip(axes.flat, GTS, strict=True):
@@ -415,7 +471,7 @@ def main() -> None:
     XG2 = ap.parse_args().results / "exact_gw" / "data_size"
     runs, flat, mle, index, meta = load()
     for f in (lambda: fig_btoa(flat, mle), lambda: fig_contraction(flat), lambda: fig_contraction_mle(flat, index),
-              lambda: fig_error(mle), lambda: fig_bvm(flat), lambda: fig_prior(runs),
+              lambda: fig_error(mle), lambda: fig_rmse(flat, mle), lambda: mse_tables(flat, mle), lambda: fig_bvm(flat), lambda: fig_prior(runs),
               fig_p3_ridge, copy_note_figures, lambda: tables(runs, flat, mle, meta)):  # fmt: skip
         f()
 
