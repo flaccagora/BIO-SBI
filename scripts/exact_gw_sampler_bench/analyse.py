@@ -22,6 +22,7 @@ ARMS = ["baseline", "warm", "stop"]
 
 
 def load(run: Path) -> dict | None:
+    """Metrics, exact_gw diagnostics and free-parameter draws of a run (None if absent)."""
     m = run / "metrics.json"
     if not m.exists():
         return None
@@ -29,10 +30,11 @@ def load(run: Path) -> dict | None:
     e = metrics["exact_gw"]
     post = pd.read_csv(run / "posterior_samples.csv.gz")
     free = list(e["chain_means"])
-    return {"metrics": metrics, "e": e, "post": post[free], "free": free}
+    return {"metrics": metrics, "e": e, "post": post[free], "free": free, "dir": run}
 
 
 def ess_of(e: dict, name: str) -> float:
+    """Bulk ESS of ``name`` (older runs: the plain ESS)."""
     for key in ("ess_bulk", "ess"):  # XG2 runs have the older ESS only
         if key in e and name in e[key]:
             return float(e[key][name])
@@ -40,7 +42,7 @@ def ess_of(e: dict, name: str) -> float:
 
 
 def agreement(a: dict, b: dict) -> dict:
-    """max / median |mean_a - mean_b| / MCSE over the free parameters, max sd ratio."""
+    """Max / median |mean_a - mean_b| / MCSE over the free parameters, max sd ratio."""
     z, ratio = [], []
     for name in a["free"]:
         xa, xb = a["post"][name].to_numpy(), b["post"][name].to_numpy()
@@ -58,6 +60,7 @@ def agreement(a: dict, b: dict) -> dict:
 
 
 def row(gt: str, arm: str, n: int, r: dict) -> dict:
+    """One table row of a run."""
     e = r["e"]
     sec = float(e["seconds"])
     stop = e.get("stop", {})
@@ -88,6 +91,7 @@ def row(gt: str, arm: str, n: int, r: dict) -> dict:
 
 
 def main() -> None:
+    """Print and save the tables."""
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("root", type=Path)
     p.add_argument("--xg2", type=Path, default=None, help="XG2 root (<gt>/n<n>_s<seed>/)")
@@ -111,7 +115,7 @@ def main() -> None:
             if a.xg2 is not None:
                 x = load(a.xg2 / gt / f"n{n}_s{a.seed}")
                 if x is not None:
-                    d0 = np.load(gt_dir / arm / f"n{n}_s{a.seed}" / "reference.npz")
+                    d0 = np.load(r["dir"] / "reference.npz")
                     d1 = np.load(a.xg2 / gt / f"n{n}_s{a.seed}" / "reference.npz")
                     same_data = all(np.array_equal(d0[k], d1[k]) for k in d1.files)
                     agree.append({"gt": gt, "arm": arm, "n": n, "vs": "xg2",

@@ -33,6 +33,7 @@ SIZES = [128, 256, 512, 1024]
 
 
 def jobs_for(gt: str, out: Path, seed: int, stop_opts: list[str]) -> list[dict]:
+    """Jobs (output directory, overrides, dependency) of one truth."""
     base = ["+experiment=exact_gw_data_size", "inference.method.kernel=adjoint", f"gt={gt}",
             f"seed={seed}"]  # fmt: skip
     if gt in EXTRA:
@@ -60,6 +61,7 @@ def jobs_for(gt: str, out: Path, seed: int, stop_opts: list[str]) -> list[dict]:
 
 
 def main() -> None:
+    """Run the jobs as their dependencies finish, ``--parallel`` at a time."""
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--out", type=Path, required=True)
     p.add_argument("--truths", nargs="+", default=["T1_ref", "T5_C7"])

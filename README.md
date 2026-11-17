@@ -419,6 +419,20 @@ R-hat, bulk / tail ESS, the chain-mean spread and `idle_fraction` (share of the 
 threads' time spent waiting for the slowest chain). Benchmark on the XG2 datasets:
 `scripts/exact_gw_sampler_bench/` (`run.py` launches baseline / warm / warm+stop chains
 over `n`, `analyse.py` prints the tables).
+Measured (XG2 `T1_ref` and `T5_C7`, seed 0, n = 128 -> 1024, adjoint kernel, 4 runs of 4
+threads at a time; `results/exact_gw/sampler_bench/bench_analysis.txt`): warm start cuts
+warmup gradient evaluations ~3x (150-220k -> 37-77k per run) and total evaluations over
+n = 256-1024 to 0.57x (`T1_ref`) / 0.75x (`T5_C7`) of the cold baseline, posteriors within
+MC error of the baseline (max |dmean| <= 2.1 MCSE). A warm run without the stopping rule
+can come out worse mixed (`T1_ref` n = 256: min ESS 63, tail 14), so use the two together.
+The stopping rule reaches ESS 400 / tail 200 / R-hat 1.01 at 470-825 evaluations per unit
+of min bulk ESS (cold baseline 640-2180, and the baseline usually misses those targets),
+but costs more evaluations than 4 x 500 draws when the targets are hard (`T5_C7` n = 256
+ran to `max_draws` on `A.to_B`'s tail ESS). At `T1_ref` n = 1024 a warm-started chain
+landed in the second B-row branch ("B divides", `B.to_A` ~0.34) that every cold baseline
+chain missed (baseline R-hat 1.02 looks converged; XG2's run had R-hat 1.31); the stopping
+rule refused to stop (R-hat 1.40, chain-mean spread 1.5). The idle-thread fraction did
+not drop (lockstep blocks: 15 %, cold free-running chains: 15 %, warm 12 %).
 
 **Point estimates (MLE / physical MAP)** - `src/bio_sbi/inference/gw_optimise.py`,
 settings `inference.method.optimise.*` (off by default; NUTS unchanged):
