@@ -90,7 +90,7 @@ Data & synthetic only \\
 \item \textbf{A's row converges fast, B's row does not.} For the curated truths every A parameter is narrowed about tenfold relative to the prior by $n$ = 512--1024 (Fig.~\ref{fig:contraction}). B's switch back to A (\BA) is the bottleneck: where the true \BA{} is large (0.5--0.8) the posterior mean is pulled down by 1--2 posterior sd and approaches the truth only slowly (T1: 0.36 / 0.45 / 0.68 / 0.69 at $n$ = 128 / 256 / 512 / 1024, truth 0.80). Where \BA{} is small (prior draws P1--P4, T5) it is recovered at every $n$.
 \item \textbf{Convergence depends strongly on the ground truth.} Large clones help most: T5 (about 200 cells per clone at generation 10) has every parameter contracted by $\ge$\,0.82 and \BA{} within 0.03 already at $n$ = 128. Interior truths drawn from the prior are recovered on average but individual division types can stay barely identified (P3: mixed divisions A$\to$AB vs B$\to$AB trade off with correlation $-0.98$).
 \item \textbf{The prior still matters at 1024 clones per endpoint.} Under other symmetric Dirichlet priors the posterior mean of \BA{} still moves by 0.2 (P1, P4) to 1.2 (T1) posterior sd; under a concentrated wrong prior by 0.3--0.9 sd. In this sense no truth has fully converged by $n = 1024$ (4096 clones in total).
-\item \textbf{MLE vs posterior mean.} The MLE of \BA{} is much closer to the truth than the posterior mean where \BA{} is large (T1, T2, T4: error 0.01--0.06 vs 0.07--0.44); the posterior mean is better for the prior-drawn truths at small $n$. Neither dominates. The truth lies inside the 95\% likelihood region in 107 of 108 runs (1.4--10.7 nats below the maximum, median 4.4).
+\item \textbf{MLE vs posterior mean.} The MLE of \BA{} is much closer to the truth than the posterior mean where \BA{} is large (T1, T2, T4: error 0.01--0.06 vs 0.07--0.44); the posterior mean is better for the prior-drawn truths at small $n$. Neither dominates. The mean squared errors (\S\ref{sec:mse}) show the posterior mean's error for B's row is mostly bias, which its width does not reflect: for T1--T4 its RMSE exceeds its sd by 1.5--2.0$\times$ at $n$ = 128 and 1.3--1.6$\times$ at 1024 (T5 and prior draws: 0.7--1.4$\times$). The truth lies inside the 95\% likelihood region in 107 of 108 runs (1.4--10.7 nats below the maximum, median 4.4).
 \item \textbf{Why} (Section~\ref{sec:why}). The likelihood is flat --- often two-branched --- along ``B switches back to A'' versus ``B is lost'' (divides or dies); the flat Dirichlet prior gives \BA{} a Beta(1,\,5) marginal with mean 1/6, and on a flat ridge that volume pulls the posterior mean down. This holds whether or not the truth sits on the boundary (T3, all entries interior, is as biased as T1). The 95\% \emph{profile-likelihood} interval covered the truth in 8/8 profiled runs, the posterior 95\% interval in 5/8. A likelihood-ratio test of ``B never divides'' picked the right sub-model in 37/37 runs, already at $n$ = 128, and cut the \BA{} error to 0.02--0.06 (posterior mean: 0.28--0.37).
 \end{enumerate}
 
@@ -302,6 +302,28 @@ truth & 128 & 256 & 512 & 1024 & 128 & 1024 \\\midrule
 Mean absolute error over the 3 datasets; the smaller value in bold.
 \end{center}
 The MLE wins clearly for large \BA{} (T1, T2, T4, and T3 from 512 on); the posterior mean wins for the prior draws at small $n$; the two converge as $n$ grows (T5: both $\le$ 0.015 by 256). The truth is 1.4--10.7 nats below the maximum log likelihood (median 4.4; 95\% likelihood region for 10 parameters: 9.2 nats), i.e.\ compatible with the data almost everywhere but only weakly favoured.
+
+\subsection{Mean squared error: actual vs reported error}\label{sec:mse}
+The mean squared error over the 3 datasets of each cell, $\mathrm{MSE} = \overline{(\hat\theta - \theta^\star)^2} = \text{bias}^2 + \text{variance}$, measures the \emph{actual} error of an estimator. Shown as RMSE in prior-sd units on the scale of Figs.~\ref{fig:contraction} and \ref{fig:contraction_mle}, it can be read against the \emph{reported} uncertainty: posterior sd for the posterior mean, standard error for the MLE.
+\fig{rmse_post}{1.0}{RMSE of the posterior mean over the 3 datasets, relative to the prior sd (same layout and scale as Fig.~\ref{fig:contraction}). Values: \texttt{tables/mse.csv}.}
+\fig{rmse_mle}{1.0}{RMSE of the MLE over the 3 datasets, relative to the prior sd.}
+\begin{center}\footnotesize\setlength{\tabcolsep}{2.1pt}
+\begin{tabular}{@{}lllllllrr@{}}\toprule
+ & \multicolumn{4}{c}{\BA} & \multicolumn{2}{c}{all 12: RMSE} & \multicolumn{2}{c}{RMSE / post.\ sd} \\
+ & RMSE, $n$ = 128 & bias$^2$ \% & RMSE, 1024 & bias$^2$ \% & 128 & 1024 & 128 & 1024 \\
+truth & MLE / post. & MLE / post. & MLE / post. & MLE / post. & MLE / post. & MLE / post. & post. & post. \\\midrule
+\tabin{tables/mse.tex}
+\bottomrule
+\end{tabular}
+
+RMSE over the 3 datasets (smaller value in bold); bias$^2$ \%: share of the MSE due to the bias of the mean over datasets. All 12: $\sqrt{\text{mean MSE}}$ over the 12 probabilities. RMSE / post.\ sd: $\sqrt{\text{mean MSE} / \text{mean posterior variance}}$ over the 12 probabilities; 1 = the posterior sd matches the actual error, $>1$ = overconfident. With 3 datasets per cell the MSE and especially its bias/variance split are rough.
+\end{center}
+\begin{itemize}
+\item \textbf{The posterior mean's error for B's row is mostly bias.} For \BA{} of T1, T2, T4 and T3, bias$^2$ is 62--99\% of the MSE (94--99\% at $n$ = 128); RMSE 0.33--0.45 at $n$ = 128 and 0.07--0.19 at 1024. The MLE's RMSE there is 0.06--0.31 at 128 and 0.03--0.06 at 1024.
+\item \textbf{For the prior draws the MLE has the larger error at small $n$}, mostly variance (jumps between near-equal optima, estimates at 0): RMSE over all 12 probabilities 0.12--0.16 vs 0.06--0.11 for the posterior mean at $n$ = 128. At 1024 it is mixed: still larger for P1 and P3 (0.12, 0.10 vs 0.07), slightly smaller for P2 and P4 (0.03, 0.06 vs 0.05, 0.06).
+\item \textbf{The posterior is overconfident for the curated truths}: its RMSE exceeds its sd by a factor 1.5--2.0 at $n$ = 128 and 1.3--1.6 at 1024 --- the bias is not reflected in the posterior width. For T5 and the prior draws the ratio is 0.7--1.4: the reported uncertainty matches the actual error.
+\item \textbf{Both estimators converge for T5} (all 12: RMSE 0.017--0.019 at 1024), as expected for large clones and an interior truth.
+\end{itemize}
 
 % ====================================================================== why
 \section{Why the posterior mean of \BA{} is biased}\label{sec:why}
