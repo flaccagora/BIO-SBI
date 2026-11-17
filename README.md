@@ -388,6 +388,38 @@ trees); see `TODO.md` (section XG). Multimodal posteriors show up as R-hat >> 1
 Presets: `exact_gw_e0_4096`, `exact_gw_e0`, `exact_gw_real_like`, `exact_gw_early`
 (reference datasets identical to the NPE runs they compare with).
 
+**Cheaper runs: warm start and adaptive run length** (both opt-in; with the defaults the
+draws are bit-identical to the plain sampler). Settings in `conf/inference/exact_gw.yaml`:
+
+* `inference.method.warm_start=<previous run dir | posterior.pt | posterior_samples.csv.gz>`
+  starts from the posterior of the same model on a dataset this one extends (e.g. the XG2
+  datasets, nested in `n`). The chains start at well-separated previous draws (k-means in
+  whitened logit space, so separate modes of the previous posterior get their own chains);
+  the initial inverse mass matrix is the previous *within-chain* covariance (not inflated
+  by mode separation) times `n_prev / n` (posterior sd ~ `n^-1/2`; `n` = total clones,
+  `n_prev` from the previous run's diagnostics; `warm_start_options.scale` / `.n_prev`
+  override); the initial step size is the previous median. No L-BFGS initialisation, and a
+  short warmup (`warm_start_options.warmup`, default 150 = 25 step-size iterations, one
+  mass-matrix window shrunk towards the scaled covariance with weight `mass_prior`, 50
+  terminal step-size iterations). `warm_start_options.check_starts > 0` also runs that many
+  L-BFGS starts and warns if an optimum lies above every draw (a mode the previous run did
+  not have). Details in `metrics.json` `exact_gw.warm_start`.
+* `inference.method.stop.enabled=true` draws `stop.block` iterations per chain at a time
+  (chains in lockstep) and stops when, for every stick coordinate and free physical
+  probability, the rank-normalised split R-hat (bulk and folded, also on the log density)
+  `<= stop.rhat`, bulk ESS `>= stop.ess`, tail ESS `>= stop.tail_ess` and the chain means
+  (rank-normalised) agree within `stop.max_mean_spread` posterior sd - chains in different
+  modes fail the last two even when every chain is internally well mixed - or at
+  `stop.max_draws` per chain (`exact_gw.stop.reason = max_draws` and the failed criteria;
+  warning in the log). `exact_gw.stop.trajectory` holds R-hat / ESS / spread per check.
+  Reference fit only (SBC cases keep their fixed settings).
+
+Every run now also records `warmup_gradient_evals` / `sampling_gradient_evals`, rank
+R-hat, bulk / tail ESS, the chain-mean spread and `idle_fraction` (share of the chain
+threads' time spent waiting for the slowest chain). Benchmark on the XG2 datasets:
+`scripts/exact_gw_sampler_bench/` (`run.py` launches baseline / warm / warm+stop chains
+over `n`, `analyse.py` prints the tables).
+
 **Point estimates (MLE / physical MAP)** - `src/bio_sbi/inference/gw_optimise.py`,
 settings `inference.method.optimise.*` (off by default; NUTS unchanged):
 

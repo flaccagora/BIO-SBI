@@ -26,6 +26,45 @@ method:
   min_detection: 1.0e-6        # floor of P(detected) in the conditioning (see gw_exact.log_likelihood)
   kernel: loop                 # loop (forward-mode gradient) | adjoint (reverse mode, same values,
                                #   gradients equal up to round-off; ~3.5-5x faster; draws differ at round-off)
+  # ---- warm start (opt-in): initialise from a previous exact_gw posterior of the same model
+  # on a dataset this one extends (e.g. nested n -> 2n). Path = previous run directory
+  # (posterior.pt, else posterior_samples.csv.gz + metrics.json) or one of those files.
+  # Chains start at well-separated previous draws (k-means in whitened logit space: separate
+  # modes get their own chains); initial inverse mass matrix = previous within-chain
+  # covariance x n_prev / n (sd ~ n^-1/2); previous median step size; short warmup with one
+  # mass-matrix window shrunk towards that covariance. No L-BFGS initialisation. SBC cases
+  # are never warm-started. Diagnostics in metrics.json exact_gw.warm_start.
+  #   inference.method.warm_start=results/.../n128_s0
+  warm_start: null
+  warm_start_options:
+    scale: null                # covariance multiplier; null = n_prev / n (total clones)
+    n_prev: null               # previous total clones; null = from its diagnostics (grids)
+    warmup: 150                # warmup iterations per chain (replaces warmup above)
+    init_buffer: 25            # step size only, then one mass-matrix window up to
+    term_buffer: 50            #   warmup - term_buffer, then step size only
+    mass_prior: 50             # pseudo-draws of the scaled previous covariance in the window
+    select: kmeans             # kmeans (spread over the previous posterior) | chains (one per previous chain)
+    step_size: previous        # previous (median adapted step) | heuristic
+    check_starts: 0            # >0: also run this many L-BFGS starts; warn if an optimum lies
+    check_tolerance: 2.0       #   > tolerance nats above every draw (mode the previous run lacked)
+  # ---- adaptive run length (opt-in): draw `block` iterations per chain at a time (chains in
+  # lockstep) and stop when, on every stick coordinate and free physical probability, the
+  # rank-normalised split R-hat (bulk + folded; also on the log density) <= rhat, bulk ESS
+  # >= ess, tail ESS >= tail_ess and the chain means (rank-normalised) agree within
+  # max_mean_spread posterior sd (chains in different modes) - or at max_draws per chain
+  # (exact_gw.stop.reason = max_draws, with the failed criteria). `draws` is then unused.
+  # Trajectory of the diagnostics in metrics.json exact_gw.stop. Reference fit only.
+  stop:
+    enabled: false
+    ess: 400
+    tail_ess: 200
+    rhat: 1.01
+    max_mean_spread: 0.5
+    block: 50                  # draws per chain between checks
+    min_draws: 100             # per chain, before the first check
+    max_draws: 1000            # per chain
+    confirm: 1                 # consecutive passing checks
+    monitor_logp: true
   grid:                        # FFT grid per horizon, from the dataset's largest counts
     factor: 1.25               # L = next_fast_len(max(min_size, factor * max_count + margin))
     margin: 16
