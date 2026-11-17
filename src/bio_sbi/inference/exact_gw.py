@@ -46,8 +46,9 @@ from ..rng import rng_for
 from .base import FittedPosterior, InferenceMethod
 from .gw_exact import GridSpec, GWModel, HorizonData, grid_spec, histogram, law_and_jac
 from .gw_exact import log_likelihood as _log_likelihood
+from .gw_reparam import StickCoordinates, parse_spec
 from .nuts import NutsChain, ess, split_rhat
-from .smc import _rank_normal
+from .smc import _rank_normal, tempered_smc
 from .smc import ess_bulk as rank_ess_bulk
 from .smc import ess_tail as rank_ess_tail
 from .smc import rhat as rank_rhat
@@ -245,6 +246,19 @@ class ExactLikelihood:
         else:
             P = self.probabilities(theta)
             dP, rows = np.zeros((0, self.n_outcomes_max)), np.zeros(0, dtype=np.int64)
+        return self.log_likelihood_P(P, dP, rows, grad, weights, t0)
+
+    def log_likelihood_P(self, P: np.ndarray, dP: np.ndarray, rows: np.ndarray,
+                         grad: bool = True, weights: list[np.ndarray] | None = None,
+                         t0: float | None = None) -> tuple[float, np.ndarray]:  # fmt: skip
+        """Log-likelihood at the outcome matrix ``P (2, O)`` and its gradient along ``dP``.
+
+        ``dP (D, O)``: derivative of ``P`` along direction ``t``, which changes row
+        ``rows[t]`` only - any parametrisation of the rows (e.g.
+        :mod:`~bio_sbi.inference.gw_reparam`). ``grad=False``: pass empty ``dP`` /
+        ``rows``. Counts towards ``evals`` like :meth:`log_likelihood`.
+        """
+        t0 = time.perf_counter() if t0 is None else t0
         data = self.data
         if weights is not None:
             data = [replace(h, weight=np.asarray(w, dtype=float))
@@ -333,6 +347,41 @@ STOP_DEFAULTS: dict = {
     "max_draws": 1000,  # per chain: stop here even if the targets are not met
     "confirm": 1,  # consecutive passing checks required
     "monitor_logp": True,  # include the log density in the R-hat / spread checks
+}
+
+
+#: Defaults of ``inference.method.smc`` (see :class:`ExactGW`).
+SMC_DEFAULTS: dict = {
+    "enabled": False,
+    "mode": "start",  # start (SMC population -> NUTS chains) | final (SMC chains = draws)
+    "chains": 64,  # MH chains; population = chains x steps (smc.tempered_smc)
+    "steps": 8,
+    "ess_fraction": 0.5,  # next temperature keeps this Kish ESS fraction
+    "rw_acceptance": 0.3,
+    "imh_prob": 0.5,
+    "imh_components": 2,  # BIC-selected t mixture (separate branches)
+    "df": 5.0,
+    "de_prob": 0.0,
+    "rw_scale_sd": 0.0,
+    "max_evals": 60000,  # likelihood evaluations (no gradient) incl. the final stage
+    # mode=start: MH steps at beta = 1 before the hand-over, NUTS schedule
+    "final_steps": 16,
+    "select": "resample",  # resample (chain starts in proportion to mass) | kmeans (spread)
+    "warmup": 200,  # NUTS warmup per chain (replaces ``warmup``)
+    "init_buffer": 25,
+    "term_buffer": 50,
+    "mass_prior": 50.0,  # pseudo-draws of the population covariance in the mass window
+    # mode=final: stopping rule of the final chains (as exact_bh)
+    "target_ess": 400.0,
+    "max_rhat": 1.01,  # nested R-hat
+    "tail_fraction": 0.5,
+    "superchains": 4,
+    "min_final_steps": 16,
+    "max_final_steps": 3000,
+    "final_burn": 0.25,
+    "check_every": 8,
+    "local_k": 0,
+    "keep_population": True,  # store the beta = 1 population in the diagnostics
 }
 
 
@@ -511,6 +560,8 @@ class ExactPosterior(FittedPosterior):
     #: Point estimate (``inference.method.optimise.enabled``; ``optimisation.json``).
     #: Kept apart from ``draws``: swarm particles / optima are not posterior samples.
     optimisation: dict | None = None
+    #: ``beta = 1`` SMC population (``theta``) when ``inference.method.smc`` is enabled.
+    smc_population: np.ndarray | None = None
 
     def sample(self, x: np.ndarray, n: int, seed: int = 0) -> np.ndarray:
         """Return ``n`` stored draws (random subset; all if fewer), ignoring ``x``."""
@@ -583,6 +634,20 @@ class ExactGW(InferenceMethod):
             physical probabilities; R-hat also on the log density) and the spread of the
             chain means meet the targets, or at ``max_draws`` per chain (reported in
             ``stop.reason``). ``draws`` is then unused.
+        reparam: NUTS coordinates (:mod:`~bio_sbi.inference.gw_reparam`): ``none``
+            (default, ``u = logit(theta)``), ``probit`` (``stick = Phi(v)``), ``brow`` (B's
+            row broken as to_A, persist, death, divisions) or ``brow+probit``. Exact
+            reparametrisations: same prior and posterior; draws are returned in ``theta``.
+        stick_order: ``{row: [entries]}`` stick-order overrides (with any ``reparam``).
+        smc: Tempered SMC from the prior (:data:`SMC_DEFAULTS`, ``enabled: false`` by
+            default; reference fit only, not with ``warm_start``). ``mode: start``: the
+            ``beta = 1`` population (likelihood-only evaluations) replaces the L-BFGS
+            initialisation: NUTS chains start at population members (``select:
+            resample`` = in proportion to posterior mass, ``kmeans`` = spread), with the
+            population covariance as initial / prior inverse mass matrix and a short
+            warmup. ``mode: final``: the SMC final-stage chains (adaptive RW + independence
+            MH run to nested R-hat / ESS targets, as ``exact_bh``) are the draws, no NUTS.
+            The population and the estimated evidence are in ``diagnostics["smc"]``.
         device, seed, rounds, **_: Accepted for interface compatibility (``rounds`` must
             be 1; neural-network settings are ignored).
     """
@@ -612,6 +677,9 @@ class ExactGW(InferenceMethod):
         warm_start: str | None = None,
         warm_start_options: dict | None = None,
         stop: dict | None = None,
+        reparam: str = "none",
+        stick_order: dict | None = None,
+        smc: dict | None = None,
         device: str = "cpu",
         seed: int = 0,
         rounds: int = 1,
@@ -639,8 +707,17 @@ class ExactGW(InferenceMethod):
         self.warm_start_options = _options(warm_start_options, WARM_START_DEFAULTS,
                                            "warm_start_options")  # fmt: skip
         self.stop = _options(stop, STOP_DEFAULTS, "stop")
+        self.last_smc = None
         if self.warm_start_options["select"] not in ("kmeans", "chains"):
             raise ValueError("warm_start_options.select must be kmeans or chains")
+        parse_spec(reparam)  # raises on unknown specs
+        self.reparam = str(reparam or "none")
+        self.stick_order = {str(k): list(v) for k, v in (stick_order or {}).items()}
+        self.smc = _options(smc, SMC_DEFAULTS, "smc")
+        if self.smc["mode"] not in ("start", "final"):
+            raise ValueError("inference.method.smc.mode must be start or final")
+        if self.smc["select"] not in ("resample", "kmeans"):
+            raise ValueError("inference.method.smc.select must be resample or kmeans")
 
     # The sbi training hooks do not apply.
     def make_trainer(self, prior, tracker):
@@ -661,23 +738,33 @@ class ExactGW(InferenceMethod):
             simulator, observation, cohorts, grid, self.floor, self.min_detection, self.kernel
         )
 
-    def _initial_points(self, lik: ExactLikelihood, n_starts: int, n_keep: int, key):
+    def coordinates(self, lik: ExactLikelihood) -> StickCoordinates:
+        """NUTS coordinates of ``lik`` (``reparam`` / ``stick_order``)."""
+        return StickCoordinates(lik, self.reparam, self.stick_order)
+
+    def _initial_points(self, lik: ExactLikelihood, n_starts: int, n_keep: int, key,
+                        coords: StickCoordinates | None = None):  # fmt: skip
         # prior draws of the sticks (the same Betas as ParameterSpace.prior), drawn with
         # NumPy so concurrent SBC cases do not share torch's global RNG
+        coords = coords or self.coordinates(lik)
         rng = rng_for(self.seed, "exact-init", *key)
         theta = rng.beta(lik.prior_a, lik.prior_b, size=(n_starts, lik.dim))
         theta = np.clip(theta, 1e-6, 1 - 1e-6)
-        u0 = np.clip(np.log(theta) - np.log1p(-theta), -8, 8)
+        if coords.identity:
+            u0 = np.clip(np.log(theta) - np.log1p(-theta), -8, 8)
+        else:  # the same prior draws, sticks (new order) within [expit(-8), expit(8)]
+            u0 = coords.from_theta(theta, stick_clip=float(expit(-8)))
+        bound = U_BOUND if coords.identity else coords.bound
 
         def neg(u):
-            lp, g = lik.log_posterior_u(u)
+            lp, g = coords.log_posterior(u)
             if not np.isfinite(lp):
                 return 1e300, np.zeros_like(u)
             return -lp, -g
 
         def optimise(u):
             res = minimize(neg, u, jac=True, method="L-BFGS-B",
-                           bounds=[(-U_BOUND, U_BOUND)] * len(u),
+                           bounds=[(-bound, bound)] * len(u),
                            options={"maxiter": self.init_maxiter})  # fmt: skip
             return res.x, -float(res.fun)
 
@@ -693,18 +780,20 @@ class ExactGW(InferenceMethod):
 
     @staticmethod
     def laplace_covariance(lik: ExactLikelihood, u: np.ndarray, h: float = 1e-4,
-                           max_var: float = 4.0) -> np.ndarray:  # fmt: skip
+                           max_var: float = 4.0, logp=None) -> np.ndarray:  # fmt: skip
         """Inverse Hessian of ``-log posterior(u)`` (finite differences of the gradient).
 
         Eigenvalues are floored at ``1 / max_var`` so flat or non-convex directions get
-        a prior-scale variance instead of an infinite one.
+        a prior-scale variance instead of an infinite one. ``logp``: log density and
+        gradient to use (default ``lik.log_posterior_u``).
         """
+        logp = logp or lik.log_posterior_u
         d = len(u)
         H = np.zeros((d, d))
         for i in range(d):
             e = np.zeros(d)
             e[i] = h
-            H[i] = -(lik.log_posterior_u(u + e)[1] - lik.log_posterior_u(u - e)[1]) / (2 * h)
+            H[i] = -(logp(u + e)[1] - logp(u - e)[1]) / (2 * h)
         H = 0.5 * (H + H.T)
         if not np.all(np.isfinite(H)):
             return np.eye(d)
@@ -712,10 +801,17 @@ class ExactGW(InferenceMethod):
         w = np.maximum(w, 1.0 / max_var)
         return (V / w) @ V.T
 
-    def _warm_plan(self, lik: ExactLikelihood, prev: PreviousPosterior, chains: int, key):
-        """Chain starts, inverse mass matrix, step size and warmup schedule from ``prev``."""
-        o = self.warm_start_options
-        u = _to_u(prev.theta)
+    def _warm_plan(self, lik: ExactLikelihood, prev: PreviousPosterior, chains: int, key,
+                   coords: StickCoordinates | None = None, options: dict | None = None):  # fmt: skip
+        """Chain starts, inverse mass matrix, step size and warmup schedule from ``prev``.
+
+        ``options`` replaces :attr:`warm_start_options` (SMC start: ``select: resample``
+        takes the starts at systematic strata of a random order of ``prev``, i.e. in
+        proportion to mass).
+        """
+        o = options or self.warm_start_options
+        coords = coords or self.coordinates(lik)
+        u = coords.from_theta(prev.theta)
         d = lik.dim
         if u.shape[1] != d:
             raise ValueError(f"warm start: previous draws have {u.shape[1]} coordinates, not {d}")
@@ -736,12 +832,16 @@ class ExactGW(InferenceMethod):
             ids = np.unique(prev.chain)
             cands = [rng.permutation(np.flatnonzero(prev.chain == ids[c % len(ids)]))
                      for c in range(chains)]  # fmt: skip
+        elif o["select"] == "resample":  # systematic: start c in the c-th stratum
+            order = rng.permutation(len(u))
+            pos = ((np.arange(chains) + rng.uniform()) / chains * len(u)).astype(int)
+            cands = [np.roll(order, -p) for p in pos]
         else:
             cands = spread_starts(u, chains, rng)
         starts, picked = [], []
         for c in range(chains):
             for i in cands[c % len(cands)][:200]:
-                if np.isfinite(lik.log_posterior_u(u[i])[0]):
+                if np.isfinite(coords.log_posterior(u[i])[0]):
                     starts.append(u[i].copy())
                     picked.append(int(i))
                     break
@@ -762,7 +862,9 @@ class ExactGW(InferenceMethod):
         info = {
             "source": prev.source, "previous_draws": len(u),
             "previous_chains_known": prev.chain is not None, "n_prev": n_prev, "n": n_new,
-            "scale": scale, "select": "chains" if use_chains else "kmeans",
+            "scale": scale,
+            "select": "chains" if use_chains else ("resample" if o["select"] == "resample"
+                                                   else "kmeans"),
             "start_indices": picked,
             "start_previous_chain": ([int(prev.chain[i]) for i in picked]
                                      if prev.chain is not None else None),
@@ -776,12 +878,16 @@ class ExactGW(InferenceMethod):
     def run(self, lik: ExactLikelihood, key=("reference",), chains=None, warmup=None,
             draws=None, init_starts=None, max_tree_depth=None,
             warm: PreviousPosterior | None = None,
-            stop: dict | None = None) -> tuple[np.ndarray, dict]:  # fmt: skip
+            stop: dict | None = None, smc: dict | None = None,
+            coords: StickCoordinates | None = None) -> tuple[np.ndarray, dict]:  # fmt: skip
         """Sample the posterior of ``lik``; returns ``(theta draws, diagnostics)``.
 
         ``warm`` (a previous posterior) replaces the L-BFGS initialisation and the warmup
         schedule (see ``warm_start``); ``stop`` (options as :data:`STOP_DEFAULTS`, used if
         ``enabled``) replaces the fixed ``draws``. Both off reproduce the plain run.
+        ``smc`` (options as :data:`SMC_DEFAULTS`, used if ``enabled`` and not ``warm``):
+        tempered SMC start or sampler. ``coords``: NUTS coordinates (default
+        :meth:`coordinates`, i.e. ``reparam``).
         """
         depth = int(max_tree_depth or self.max_tree_depth)
         chains = int(chains or self.chains)
@@ -789,43 +895,65 @@ class ExactGW(InferenceMethod):
         draws = int(draws or self.draws)
         starts = max(int(init_starts or self.init_starts), chains)
         stop = stop if stop and stop.get("enabled") else None
+        smc = smc if smc and smc.get("enabled") and warm is None else None
+        coords = coords or self.coordinates(lik)
         name = "/".join(map(str, key))
         t0 = time.perf_counter()
-        warm_info, check = None, None
-        if warm is None:
-            inits, optima = self._initial_points(lik, starts, chains, key)
+        warm_info, check, smc_info = None, None, None
+        self.last_smc = None
+        if smc is not None:
+            smc_res, smc_info = self._run_smc(lik, coords, smc, key, name)
+            if smc["mode"] == "final":
+                return self._smc_draws(lik, coords, smc_res, smc_info, t0)
+            pop = PreviousPosterior(coords.theta(smc_res.draws), None, None, None, "smc")
+            plan = {**WARM_START_DEFAULTS, "scale": 1.0, "step_size": "heuristic",
+                    **{k: smc[k] for k in ("warmup", "init_buffer", "term_buffer",
+                                           "mass_prior", "select")}}  # fmt: skip
+            w_starts, w_cov, w_step, warmup, adapt, warm_info = self._warm_plan(
+                lik, pop, chains, key, coords, plan
+            )
+            optima = []
+            t_init = time.perf_counter() - t0
+            LOG.info("%s: SMC start (%d likelihood evaluations, %.0fs), NUTS chains from "
+                     "population members %s, warmup %d", name, smc_info["evals"], t_init,
+                     warm_info["start_indices"], warmup)  # fmt: skip
+        elif warm is None:
+            inits, optima = self._initial_points(lik, starts, chains, key, coords)
             t_init = time.perf_counter() - t0
             LOG.info("%s: initial optimisation %.1fs, best log posteriors %s", name, t_init,
                      np.round(sorted(optima, reverse=True)[:chains], 1))  # fmt: skip
             adapt: dict = {}
         else:
             w_starts, w_cov, w_step, warmup, adapt, warm_info = self._warm_plan(
-                lik, warm, chains, key
+                lik, warm, chains, key, coords
             )
             optima = []
             n_check = int(self.warm_start_options["check_starts"])
             if n_check > 0:
-                _, check = self._initial_points(lik, n_check, 1, key)
+                _, check = self._initial_points(lik, n_check, 1, key, coords)
             t_init = time.perf_counter() - t0
             LOG.info("%s: warm start from %s (scale %.3g, step %s, warmup %d), starts from "
                      "previous draws %s", name, warm_info["source"], warm_info["scale"],
                      w_step, warmup, warm_info["start_indices"])  # fmt: skip
 
+        planned = warm is not None or smc is not None
+        logp = coords.log_posterior
+
         def start(c):
             rng = rng_for(self.seed, "exact-nuts", *key, c)
-            if warm is None:
+            if not planned:
                 # Start from a draw of the Laplace approximation at this chain's optimum,
                 # with its covariance as initial inverse mass matrix (the posterior can be
                 # very narrow and correlated: an identity mass matrix needs tiny steps).
-                cov = self.laplace_covariance(lik, inits[c])
+                cov = self.laplace_covariance(lik, inits[c], logp=logp)
                 q0 = inits[c] + np.linalg.cholesky(cov) @ rng.standard_normal(len(cov))
-                if not np.isfinite(lik.log_posterior_u(q0)[0]):
+                if not np.isfinite(logp(q0)[0]):
                     q0 = inits[c]
                 step = None
             else:
                 q0, cov, step = w_starts[c], w_cov, w_step
             chain = NutsChain(
-                lik.log_posterior_u, q0, rng, max_depth=depth,
+                logp, q0, rng, max_depth=depth,
                 target_accept=self.target_accept, dense=self.dense_mass,
                 inv_mass=cov if self.dense_mass else np.diag(cov), step_size=step,
                 name=f"{name} chain {c}", log_every=self.log_every,
@@ -846,19 +974,19 @@ class ExactGW(InferenceMethod):
                 objs = list(pool.map(full, range(chains)))
             else:
                 objs = list(pool.map(start, range(chains)))
-                stop_info = self._draw_until(objs, pool, workers, lik, stop, name)
+                stop_info = self._draw_until(objs, pool, workers, lik, stop, name, coords)
         chain_wall = time.perf_counter() - t_chains
         res = [o.result() for o in objs]
         draws = len(res[0].draws)
         u = np.stack([r.draws for r in res])  # (chains, draws, d)
-        theta = expit(u)
+        theta = coords.theta(u)
         physical = lik.space.decode(theta)
         free = [i for i, n in enumerate(lik.space.names) if n in set(lik.space.free_names)]
         rhat = {n: split_rhat(theta[..., i]) for i, n in enumerate(lik.space.theta_names)}
         rhat.update({lik.space.names[i]: split_rhat(physical[..., i]) for i in free})
         n_ess = {n: ess(theta[..., i]) for i, n in enumerate(lik.space.theta_names)}
         n_ess.update({lik.space.names[i]: ess(physical[..., i]) for i in free})
-        final = self._convergence(lik, res, free, monitor_logp=True)
+        final = self._convergence(lik, res, free, monitor_logp=True, coords=coords)
         busy = float(sum(r.seconds for r in res))
         warm_evals = int(sum(r.warmup_gradient_evals for r in res))
         total_evals = int(sum(r.gradient_evals for r in res))
@@ -933,13 +1061,99 @@ class ExactGW(InferenceMethod):
             diag["warm_start"] = warm_info
         if stop_info is not None:
             diag["stop"] = stop_info
+        if not coords.identity:
+            diag["reparam"] = coords.info()
+        if smc_info is not None:
+            diag["smc"] = smc_info
+            diag["smc_start"] = warm_info
+            diag["likelihood_evals_smc"] = smc_info["evals"]
+            diag.pop("warm_start", None)
+        return theta.reshape(-1, theta.shape[-1]), diag
+
+    # ---------------------------------------------------------------- SMC
+    def _run_smc(self, lik: ExactLikelihood, coords: StickCoordinates, o: dict, key,
+                 name: str):  # fmt: skip
+        """Tempered SMC from the prior in the NUTS coordinates (likelihood-only evaluations).
+
+        Returns ``(SMCResult, info)``; :attr:`last_smc` keeps the result.
+        """
+        rng = rng_for(self.seed, "exact-smc", *key)
+        final = o["mode"] == "final"
+        common = {k: o[k] for k in ("chains", "steps", "ess_fraction", "rw_acceptance",
+                                    "imh_prob", "imh_components", "df", "de_prob",
+                                    "rw_scale_sd", "local_k")}  # fmt: skip
+        common["max_evals"] = int(o["max_evals"])
+        if final:
+            common.update({k: o[k] for k in ("target_ess", "max_rhat", "tail_fraction",
+                                             "superchains", "min_final_steps",
+                                             "max_final_steps", "final_burn",
+                                             "check_every")})  # fmt: skip
+        else:  # population at beta = 1 after final_steps MH steps; no stopping rule
+            n = max(int(o["final_steps"]), 1)
+            common.update({"target_ess": 0.0, "max_rhat": float("inf"), "tail_fraction": 0.0,
+                           "min_final_steps": n, "max_final_steps": n, "check_every": n,
+                           "final_burn": 0.0, "superchains": int(o["superchains"])})  # fmt: skip
+        with ThreadPoolExecutor(self.threads) as pool:
+
+            def logpost(V):
+                return np.fromiter(pool.map(coords.log_posterior_value, np.asarray(V)),
+                                   float, len(V))  # fmt: skip
+
+            res = tempered_smc(
+                logpost, coords.sample_prior, lambda V: coords.log_prior(V, normalised=True),
+                rng, monitor=coords.theta, name=f"{name} smc", **common,
+            )  # fmt: skip
+        self.last_smc = res
+        info = {k: v for k, v in res.info.items() if k not in ("rhat", "ess_bulk", "ess_tail",
+                                                                 "nested_rhat")}  # fmt: skip
+        info["mode"] = o["mode"]
+        LOG.info("%s: SMC %s after %d stages, %d likelihood evaluations, %.0fs, log evidence "
+                 "%.2f", name, info["status"], info["stages"], info["evals"], info["seconds"],
+                 info["log_evidence"])  # fmt: skip
+        if not res.info["reached_posterior"]:
+            raise RuntimeError(
+                f"{name}: SMC did not reach the posterior within "
+                f"smc.max_evals={o['max_evals']} (beta {res.info['beta']:.3g})"
+            )
+        return res, info
+
+    def _smc_draws(self, lik: ExactLikelihood, coords: StickCoordinates, res, info: dict,
+                   t0: float) -> tuple[np.ndarray, dict]:  # fmt: skip
+        """Draws and diagnostics of ``smc.mode=final`` (final-stage chains, equal weights)."""
+        u = res.chains  # (chains, length, d)
+        theta = coords.theta(u)
+        physical = lik.space.decode(theta)
+        free = [i for i, n in enumerate(lik.space.names) if n in set(lik.space.free_names)]
+        x, names, ess_names = self._monitored(lik, u, res.log_post, free, coords)
+        final = convergence_check(x, names, ess_names)
+        diag = {
+            "sampler": "smc", "chains": int(u.shape[0]), "warmup": 0,
+            "draws_per_chain": int(u.shape[1]),
+            "max_rhat": final["max_rhat"], "min_ess": final["min_ess_bulk"],
+            "max_rank_rhat": final["max_rhat"], "min_ess_bulk": final["min_ess_bulk"],
+            "min_ess_tail": final["min_ess_tail"], "max_mean_spread": final["max_mean_spread"],
+            "rank_rhat": final["rhat"], "ess_bulk": final["ess_bulk"],
+            "ess_tail": final["ess_tail"],
+            "max_nested_rhat": res.info.get("max_nested_rhat"),
+            "chain_means": {lik.space.names[i]: physical[..., i].mean(1).round(4).tolist()
+                            for i in free},
+            "divergences": 0, "gradient_evals": 0,
+            "likelihood_evals": lik.evals, "likelihood_evals_smc": info["evals"],
+            "seconds": time.perf_counter() - t0, "seconds_per_eval": lik.seconds_per_eval,
+            "smc": info,
+            "grids": [{"generations": h.generations, "Lx": h.grid.Lx, "Ly": h.grid.Ly,
+                       "clones": h.clones, "cells": len(h.a)} for h in lik.data],
+        }  # fmt: skip
+        if not coords.identity:
+            diag["reparam"] = coords.info()
         return theta.reshape(-1, theta.shape[-1]), diag
 
     @staticmethod
     def _monitored(lik: ExactLikelihood, u: np.ndarray, logp: np.ndarray | None,
-                   free: list[int]) -> tuple[np.ndarray, list[str], set]:  # fmt: skip
+                   free: list[int], coords: StickCoordinates | None = None
+                   ) -> tuple[np.ndarray, list[str], set]:  # fmt: skip
         """``(chains, n, q)`` sticks, free physical probabilities (and log density)."""
-        theta = expit(u)
+        theta = expit(u) if coords is None else coords.theta(u)
         physical = lik.space.decode(theta)[..., free]
         names = list(lik.space.theta_names) + [lik.space.names[i] for i in free]
         ess_names = set(names)
@@ -949,7 +1163,7 @@ class ExactGW(InferenceMethod):
             names.append("lp__")
         return np.concatenate(parts, axis=-1), names, ess_names
 
-    def _convergence(self, lik, res, free, monitor_logp=True) -> dict:
+    def _convergence(self, lik, res, free, monitor_logp=True, coords=None) -> dict:
         u = np.stack([r.draws for r in res])
         if u.shape[1] < 4:
             nan = float("nan")
@@ -957,11 +1171,11 @@ class ExactGW(InferenceMethod):
                     "max_rhat": nan, "min_ess_bulk": nan, "min_ess_tail": nan,
                     "max_mean_spread": nan}  # fmt: skip
         logp = np.stack([r.logp for r in res]) if monitor_logp else None
-        x, names, ess_names = self._monitored(lik, u, logp, free)
+        x, names, ess_names = self._monitored(lik, u, logp, free, coords)
         return convergence_check(x, names, ess_names)
 
     def _draw_until(self, objs: list[NutsChain], pool, workers: int, lik: ExactLikelihood,
-                    stop: dict, name: str) -> dict:  # fmt: skip
+                    stop: dict, name: str, coords=None) -> dict:  # fmt: skip
         """Draw ``block`` iterations per chain at a time until the targets are met."""
         block = max(int(stop["block"]), 1)
         min_d, max_d = int(stop["min_draws"]), max(int(stop["max_draws"]), 1)
@@ -985,7 +1199,7 @@ class ExactGW(InferenceMethod):
                      "block_seconds": per}  # fmt: skip
             if n_now >= min_d:
                 c = self._convergence(lik, [o.result() for o in objs], free,
-                                      bool(stop["monitor_logp"]))  # fmt: skip
+                                      bool(stop["monitor_logp"]), coords)  # fmt: skip
                 failed = []
                 if not c["max_rhat"] <= float(stop["rhat"]):
                     failed.append("rhat")
@@ -1044,7 +1258,7 @@ class ExactGW(InferenceMethod):
         warm = None
         if self.warm_start is not None:
             warm = load_previous_posterior(self.warm_start, lik.space)
-        draws, diag = self.run(lik, warm=warm, stop=self.stop)
+        draws, diag = self.run(lik, warm=warm, stop=self.stop, smc=self.smc)
         diag["grid_check"] = lik.grid_check(np.median(draws, axis=0))
         for g in diag["grid_check"]:
             if g["max_rel_error"] > 1e-5:  # tail mass beyond L is damped, not an error
@@ -1068,10 +1282,13 @@ class ExactGW(InferenceMethod):
             optimisation = self.point_estimate(lik)
             LOG.info("exact_gw point estimate (%s): %.4f", optimisation["objective"],
                      optimisation["value"])  # fmt: skip
+        smc_population = None
+        if diag.get("smc") is not None and self.smc["keep_population"] and self.last_smc:
+            smc_population = self.coordinates(lik).theta(self.last_smc.draws)
         return ExactPosterior(
             posterior=None, feature_mask=np.ones(int(x_dim), dtype=bool), method=self.name,
             amortized=False, history=history, draws=draws, diagnostics=diag,
-            optimisation=optimisation,
+            optimisation=optimisation, smc_population=smc_population,
         )  # fmt: skip
 
     def calibrate(self, simulator, observation, theta: np.ndarray, datasets: list,
