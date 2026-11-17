@@ -83,6 +83,7 @@ def main() -> None:
     if method.last_smc is not None:
         coords = method.coordinates(lik)
         extra["smc_population"] = coords.theta(method.last_smc.draws)
+        extra["smc_population_physical"] = lik.space.decode(extra["smc_population"])
         extra["smc_population_log_post"] = method.last_smc.log_post.reshape(-1)
     np.savez_compressed(out / "draws.npz", theta=theta, physical=lik.space.decode(theta),
                         names=np.array(lik.space.names), truth=truth, **extra)  # fmt: skip

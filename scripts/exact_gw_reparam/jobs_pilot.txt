@@ -1,0 +1,4 @@
+T1_n1024_s0 smcfinal
+T1_n1024_s0 baseline
+T1_n1024_s0 brow+probit
+T1_n1024_s0 smc
