@@ -78,7 +78,10 @@ def main() -> None:
         lr = 2 * (ll_max - float(z["nodiv_ll"]))
         rows.append({
             "run": f.stem, "truth": truth[ia], "mle": z["mle_phys"][ia],
-            "profile_argmax": grid[np.argmax(prof)], "post_mean": x.mean(),
+            "profile_argmax": grid[np.argmax(prof)],
+            "global_mle": grid[np.argmax(prof)] if prof.max() > float(z["ll_mle"]) + 0.01
+            else z["mle_phys"][ia],
+            "post_mean": x.mean(),
             "post_median": np.median(x),
             "mean_profile_only": weighted_mean(grid, dprof),
             "mean_profile_x_beta15": weighted_mean(grid, dprof + 4 * np.log1p(-grid)),
@@ -154,6 +157,28 @@ def main() -> None:
 
     df = pd.DataFrame(rows)
     df.to_csv(OUT / "profiles.csv", index=False)
+
+    # one dot plot: where each summary of B.to_A lands, per profiled run
+    fig, ax = plt.subplots(figsize=(8, 0.45 * len(df) + 1.2))
+    marks = [("truth", "truth", "k", "|"), ("global_mle", "MLE (global)", C[1], "D"),
+             ("mean_profile_only", "mean under exp(profile)  [no volume]", C[2], "s"),
+             ("post_mean", "posterior mean (flat prior)", C[0], "o"),
+             ("mean_profile_x_beta15", "mean under exp(profile) x Beta(1,5)", C[4], "v")]
+    for j, r in df.reset_index(drop=True).iterrows():
+        ax.hlines(j, r.pi95_lo, r.pi95_hi, color="0.75", lw=6, zorder=0,
+                  label="95% profile interval" if j == 0 else None)
+        for col, lab, colr, m in marks:
+            ax.plot(r[col], j, m, color=colr, ms=11 if m == "|" else 7, mew=2,
+                    label=lab if j == 0 else None)
+    ax.set_yticks(range(len(df)), df.run)
+    ax.set_xlabel("B.to_A")
+    ax.set_xlim(0, 1)
+    ax.invert_yaxis()
+    ax.legend(fontsize=7, loc="upper left", bbox_to_anchor=(1.0, 1.0))
+    ax.set_title("ridge (MLE -> profile mean) vs volume (profile mean -> posterior mean)")
+    fig.tight_layout()
+    fig.savefig(fig_dir / "decomposition.png", dpi=110)
+    plt.close(fig)
     pd.DataFrame(curves).to_csv(OUT / "profile_curves.csv", index=False)
     pd.set_option("display.width", 250)
     pd.set_option("display.max_columns", 40)
