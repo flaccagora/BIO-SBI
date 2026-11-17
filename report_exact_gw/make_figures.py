@@ -139,15 +139,17 @@ def fig_btoa(flat, mle):
     save(fig, "btoa_vs_n")
 
 
-def fig_contraction(flat):
-    # posterior sd / prior sd on a log scale (geometric mean over datasets)
-    f = flat.assign(lr=np.log10(flat.sd / np.sqrt(flat.prior_var)))
-    c = f.groupby(["gt", "n", "parameter"])["lr"].mean().unstack("parameter")
-    mat = np.vstack([c.loc[(gt, n), PARAMS].to_numpy() for gt in GTS for n in NS]).T
+def _sd_heatmap(mat, name, label, dots=None, grey=None):
+    """Heatmap of log10(sd / prior sd): rows = PARAMS, columns = truth x n."""
+    cmap = DIV.reversed().copy()
+    cmap.set_bad("#bdbcb6")
     fig, ax = plt.subplots(figsize=(7.2, 3.0))
-    im = ax.imshow(np.clip(mat, -1.5, 0.5), cmap=DIV.reversed(),
-                   norm=TwoSlopeNorm(vmin=-1.5, vcenter=0, vmax=0.5),
+    shown = np.ma.masked_invalid(np.clip(mat, -1.5, 0.5))
+    im = ax.imshow(shown, cmap=cmap, norm=TwoSlopeNorm(vmin=-1.5, vcenter=0, vmax=0.5),
                    aspect="auto", interpolation="nearest")  # fmt: skip
+    if dots is not None:
+        yy, xx = np.nonzero(dots)
+        ax.plot(xx, yy, "o", ms=1.6, color=INK, lw=0)
     ax.set_yticks(range(len(PARAMS)), [pname(p) for p in PARAMS])
     ax.set_xticks(range(len(GTS) * 4), [str(n) for _ in GTS for n in NS], fontsize=5.5,
                   rotation=90)  # fmt: skip
@@ -158,16 +160,62 @@ def fig_contraction(flat):
             ax.axvline(4 * k - 0.5, color=SURFACE, lw=2)
     ax.axhline(5.5, color=SURFACE, lw=2)
     ax.grid(False)
-    for s in ax.spines.values():
-        s.set_visible(False)
+    for sp in ax.spines.values():
+        sp.set_visible(False)
     cb = fig.colorbar(im, ax=ax, fraction=0.025, pad=0.01)
-    cb.set_label("posterior sd / prior sd", fontsize=6.5)
+    cb.set_label(label, fontsize=6.5)
     ticks = [-1.5, -1, -0.5, 0, 0.5]
     cb.set_ticks(ticks, labels=[f"{10 ** t:.2g}" for t in ticks])
     cb.outline.set_visible(False)
     ax.set_xlabel("clones per endpoint (n), grouped by truth")
     fig.tight_layout()
-    save(fig, "contraction")
+    save(fig, name)
+
+
+def fig_contraction(flat):
+    # posterior sd / prior sd on a log scale (geometric mean over datasets)
+    f = flat.assign(lr=np.log10(flat.sd / np.sqrt(flat.prior_var)))
+    c = f.groupby(["gt", "n", "parameter"])["lr"].mean().unstack("parameter")
+    mat = np.vstack([c.loc[(gt, n), PARAMS].to_numpy() for gt in GTS for n in NS]).T
+    _sd_heatmap(mat, "contraction", "posterior sd / prior sd")
+
+
+def fig_contraction_mle(flat, index):
+    """Same layout for the MLE: Wald standard error (observed Fisher information) / prior sd.
+
+    Per cell: geometric mean over the datasets with a finite standard error. Grey = the MLE
+    is 0 in every dataset (no standard error on the boundary); darkest red = no curvature
+    (infinite standard error) wherever the MLE is nonzero; dot = standard error undefined
+    (MLE 0 or no curvature) in some but not all datasets.
+    """
+    prior_sd = flat.groupby("parameter").prior_var.first().pow(0.5)
+    rows = []
+    for r in index.itertuples():
+        m = json.loads((XG2 / r.new / "mle.json").read_text())
+        se, zero = m.get("se"), set(m.get("se_info", {}).get("at_zero", []))
+        if se is None:
+            raise SystemExit("mle.json without se: run scripts/exact_gw_mle_se.py first")
+        for p in PARAMS:
+            v = se.get(p)
+            state = "zero" if p in zero else ("inf" if v is None else "ok")
+            rows.append({"gt": r.gt, "n": r.n, "seed": r.seed, "parameter": p, "state": state,
+                         "lr": np.log10(v / prior_sd[p]) if state == "ok" else np.nan})  # fmt: skip
+    df = pd.DataFrame(rows)
+    df.to_csv(TAB / "mle_se.csv", index=False)
+    mat = np.full((len(PARAMS), len(GTS) * 4), np.nan)
+    dots = np.zeros_like(mat, dtype=bool)
+    for j, (gt, n) in enumerate((gt, n) for gt in GTS for n in NS):
+        for i, p in enumerate(PARAMS):
+            g = df[(df["gt"] == gt) & (df.n == n) & (df.parameter == p)]
+            ok = g[g.state == "ok"]
+            if len(ok):
+                mat[i, j] = ok.lr.mean()
+            elif (g.state == "inf").any():
+                mat[i, j] = 0.5  # no curvature in every dataset with a nonzero MLE
+            dots[i, j] = 0 < (g.state != "ok").sum() < len(g)
+    _sd_heatmap(mat, "contraction_mle", "MLE standard error / prior sd", dots=dots)
+    counts = df.groupby("state").size().to_dict()
+    print("MLE se states:", counts)
 
 
 def fig_error(mle):
@@ -366,7 +414,7 @@ def main() -> None:
                     help="results root holding exact_gw/data_size (default: <repo>/results)")
     XG2 = ap.parse_args().results / "exact_gw" / "data_size"
     runs, flat, mle, index, meta = load()
-    for f in (lambda: fig_btoa(flat, mle), lambda: fig_contraction(flat),
+    for f in (lambda: fig_btoa(flat, mle), lambda: fig_contraction(flat), lambda: fig_contraction_mle(flat, index),
               lambda: fig_error(mle), lambda: fig_bvm(flat), lambda: fig_prior(runs),
               fig_p3_ridge, copy_note_figures, lambda: tables(runs, flat, mle, meta)):  # fmt: skip
         f()
