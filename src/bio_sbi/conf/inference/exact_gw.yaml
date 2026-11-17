@@ -24,6 +24,8 @@ method:
   log_every: 50                # chain progress in the log every N iterations (0 = silent)
   floor: 1.0e-15               # probability floor of the likelihood
   min_detection: 1.0e-6        # floor of P(detected) in the conditioning (see gw_exact.log_likelihood)
+  kernel: loop                 # loop (forward-mode gradient) | adjoint (reverse mode, same values,
+                               #   gradients equal up to round-off; ~3.5-5x faster; draws differ at round-off)
   grid:                        # FFT grid per horizon, from the dataset's largest counts
     factor: 1.25               # L = next_fast_len(max(min_size, factor * max_count + margin))
     margin: 16

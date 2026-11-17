@@ -1,0 +1,26 @@
+design | B | GPU total ms/eval | of which CPU-side ms/eval | GPU-core ms/eval | evals/s | CPU adjoint 2 thr ms/eval | CPU loop 2 thr ms/eval | speed-up vs adjoint | vs loop
+# two_type (4, 6, 8, 10) x 128: grids [(32, 32), (49, 36), (120, 72), (200, 112)]; validation vs CPU loop on 16 points: value rel diff max 5.9e-14, grad rel diff max 6.6e-11
+two_type (4, 6, 8, 10)x128 | 1 | 3.918 | 0.632 | 3.247 | 255 | 4.22 | 18.13 | 1.08x | 4.63x
+two_type (4, 6, 8, 10)x128 | 4 | 2.207 | 0.530 | 1.663 | 453 | 4.22 | 18.13 | 1.91x | 8.22x
+two_type (4, 6, 8, 10)x128 | 16 | 1.686 | 0.497 | 1.185 | 593 | 4.22 | 18.13 | 2.50x | 10.76x
+two_type (4, 6, 8, 10)x128 | 64 | 1.578 | 0.484 | 1.092 | 634 | 4.22 | 18.13 | 2.67x | 11.49x
+two_type (4, 6, 8, 10)x128 | 256 | 1.516 | 0.465 | 1.050 | 660 | 4.22 | 18.13 | 2.78x | 11.96x
+# two_type (4, 6, 8, 10) x 1024: grids [(35, 32), (60, 44), (125, 72), (275, 150)]; validation vs CPU loop on 16 points: value rel diff max 1.2e-12, grad rel diff max 4.6e-10
+two_type (4, 6, 8, 10)x1024 | 1 | 4.984 | 0.646 | 4.295 | 201 | 6.27 | 25.53 | 1.26x | 5.12x
+two_type (4, 6, 8, 10)x1024 | 4 | 2.772 | 0.539 | 2.219 | 361 | 6.27 | 25.53 | 2.26x | 9.21x
+two_type (4, 6, 8, 10)x1024 | 16 | 2.329 | 0.498 | 1.827 | 429 | 6.27 | 25.53 | 2.69x | 10.96x
+two_type (4, 6, 8, 10)x1024 | 64 | 2.214 | 0.473 | 1.739 | 452 | 6.27 | 25.53 | 2.83x | 11.53x
+two_type (4, 6, 8, 10)x1024 | 256 | 2.179 | 0.474 | 1.705 | 459 | 6.27 | 25.53 | 2.88x | 11.72x
+# two_type (4, 6, 10) x 1024: grids [(35, 32), (60, 44), (264, 140)]; validation vs CPU loop on 16 points: value rel diff max 3.5e-13, grad rel diff max 4.0e-11
+two_type (4, 6, 10)x1024 | 1 | 4.097 | 0.627 | 3.430 | 244 | 4.79 | 18.40 | 1.17x | 4.49x
+two_type (4, 6, 10)x1024 | 4 | 2.270 | 0.523 | 1.734 | 441 | 4.79 | 18.40 | 2.11x | 8.11x
+two_type (4, 6, 10)x1024 | 16 | 1.933 | 0.490 | 1.438 | 517 | 4.79 | 18.40 | 2.48x | 9.52x
+two_type (4, 6, 10)x1024 | 64 | 1.836 | 0.479 | 1.356 | 545 | 4.79 | 18.40 | 2.61x | 10.02x
+two_type (4, 6, 10)x1024 | 256 | 1.794 | 0.459 | 1.334 | 558 | 4.79 | 18.40 | 2.67x | 10.26x
+# reversible_ab (4, 6) x 128: grids [(32, 32), (49, 36)]; validation vs CPU loop on 16 points: value rel diff max 2.2e-14, grad rel diff max 3.3e-11
+reversible_ab (4, 6)x128 | 1 | 1.817 | 0.454 | 1.331 | 550 | 1.27 | 1.71 | 0.70x | 0.94x
+reversible_ab (4, 6)x128 | 4 | 0.748 | 0.375 | 0.364 | 1337 | 1.27 | 1.71 | 1.70x | 2.28x
+reversible_ab (4, 6)x128 | 16 | 0.503 | 0.352 | 0.147 | 1989 | 1.27 | 1.71 | 2.53x | 3.39x
+reversible_ab (4, 6)x128 | 64 | 0.416 | 0.340 | 0.076 | 2402 | 1.27 | 1.71 | 3.05x | 4.10x
+reversible_ab (4, 6)x128 | 256 | 0.404 | 0.346 | 0.058 | 2474 | 1.27 | 1.71 | 3.15x | 4.22x
+peak GPU memory GiB 0.500704288482666

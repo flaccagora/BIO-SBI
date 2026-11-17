@@ -1,0 +1,28 @@
+case | point class | n | kappa range | max value rel diff | max grad rel diff (max_d |g1-g0| / max_d |g0|)
+reversible_ab gens=(3, 6, 9) clones=256 obs=confusion | boundary | 20 | 3.2e-07..5.0e+02 | 0.0e+00 | 6.4e-05
+reversible_ab gens=(3, 6, 9) clones=256 obs=confusion | near | 20 | 7.7e-07..4.5e-01 | 0.0e+00 | 8.9e-07
+reversible_ab gens=(3, 6, 9) clones=256 obs=confusion | truth | 1 | 5.0e-06..5.0e-06 | 0.0e+00 | 3.0e-10
+reversible_ab gens=(3, 6, 9) clones=256 obs=confusion | uniform | 20 | 6.2e+01..1.2e+03 | 0.0e+00 | 2.9e-03
+reversible_ab gens=(4, 6) clones=128 obs=perfect | boundary | 20 | 4.3e-08..1.1e+03 | 0.0e+00 | 8.3e-04
+reversible_ab gens=(4, 6) clones=128 obs=perfect | near | 20 | 5.5e-09..6.1e-06 | 0.0e+00 | 1.0e-10
+reversible_ab gens=(4, 6) clones=128 obs=perfect | truth | 1 | 2.3e-08..2.3e-08 | 0.0e+00 | 4.7e-12
+reversible_ab gens=(4, 6) clones=128 obs=perfect | uniform | 20 | 4.7e+01..7.2e+02 | 0.0e+00 | 7.8e-03
+two_type gens=(2, 5) clones=64 obs=all | boundary | 20 | 5.6e-10..6.8e+01 | 0.0e+00 | 7.2e-05
+two_type gens=(2, 5) clones=64 obs=all | near | 20 | 5.0e-10..2.0e-08 | 0.0e+00 | 2.2e-12
+two_type gens=(2, 5) clones=64 obs=all | truth | 1 | 6.1e-10..6.1e-10 | 0.0e+00 | 3.8e-13
+two_type gens=(2, 5) clones=64 obs=all | uniform | 20 | 1.3e-03..8.3e+01 | 0.0e+00 | 3.5e-03
+two_type gens=(4, 6, 10) clones=1024 obs=perfect | boundary | 20 | 9.9e-05..7.0e+02 | 0.0e+00 | 2.5e-04
+two_type gens=(4, 6, 10) clones=1024 obs=perfect | near | 20 | 1.3e-07..4.7e+02 | 0.0e+00 | 1.4e-04
+two_type gens=(4, 6, 10) clones=1024 obs=perfect | truth | 1 | 5.0e-07..5.0e-07 | 0.0e+00 | 9.3e-11
+two_type gens=(4, 6, 10) clones=1024 obs=perfect | uniform | 20 | 1.3e+02..8.9e+02 | 0.0e+00 | 1.0e-03
+two_type gens=(4, 6, 8, 10) clones=128 obs=perfect | boundary | 20 | 5.7e-07..1.6e+03 | 0.0e+00 | 4.6e-04
+two_type gens=(4, 6, 8, 10) clones=128 obs=perfect | near | 20 | 6.3e-08..1.8e-01 | 0.0e+00 | 6.6e-07
+two_type gens=(4, 6, 8, 10) clones=128 obs=perfect | truth | 1 | 1.2e-07..1.2e-07 | 0.0e+00 | 7.9e-12
+two_type gens=(4, 6, 8, 10) clones=128 obs=perfect | uniform | 20 | 1.5e+02..1.4e+03 | 0.0e+00 | 6.9e-03
+
+kappa in [0e+00, 1e-08):  25 points, grad rel diff max 6.5e-13, median 3.1e-13
+kappa in [1e-08, 1e-06):  44 points, grad rel diff max 9.3e-11, median 2.5e-12
+kappa in [1e-06, 1e-04):  41 points, grad rel diff max 6.1e-10, median 2.2e-11
+kappa in [1e-04, 1e-02):  16 points, grad rel diff max 2.7e-07, median 1.6e-09
+kappa in [1e-02, inf): 179 points, grad rel diff max 7.8e-03, median 1.9e-04
+all points: value rel diff max 0.0e+00

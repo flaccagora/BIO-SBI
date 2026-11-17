@@ -99,11 +99,19 @@ class ExactLikelihood:
             largest observed counts of *this* dataset).
         floor, min_detection: Probability and detection-probability floors (see
             :func:`~bio_sbi.inference.gw_exact.log_likelihood`).
+        kernel: ``"loop"`` (forward-mode derivatives, default) or ``"adjoint"``
+            (polynomial-form pgf, reverse-mode gradient: same values and gradients up to
+            round-off, ~3x faster gradients); see
+            :func:`~bio_sbi.inference.gw_exact.log_likelihood`.
     """
 
     def __init__(self, simulator, observation, cohorts, grid: dict | None = None,
-                 floor: float = 1e-15, min_detection: float = 1e-6) -> None:  # fmt: skip
+                 floor: float = 1e-15, min_detection: float = 1e-6,
+                 kernel: str = "loop") -> None:  # fmt: skip
         check_supported(simulator, observation)
+        if kernel not in ("loop", "adjoint"):
+            raise ValueError(f"inference.method.kernel must be loop or adjoint; got {kernel!r}")
+        self.kernel = kernel
         self.sim = simulator
         self.space = simulator.space
         self.floor = float(floor)
@@ -235,7 +243,9 @@ class ExactLikelihood:
         if weights is not None:
             data = [replace(h, weight=np.asarray(w, dtype=float))
                     for h, w in zip(self.data, weights, strict=True)]  # fmt: skip
-        ll, g = _log_likelihood(self.model, P, dP, rows, data, self.floor, self.min_detection)
+        ll, g = _log_likelihood(
+            self.model, P, dP, rows, data, self.floor, self.min_detection, self.kernel
+        )
         with self._lock:
             self.evals += 1
             self.grad_evals += bool(grad)
@@ -352,6 +362,8 @@ class ExactGW(InferenceMethod):
             ``max_points``); see :func:`~bio_sbi.inference.gw_exact.grid_spec`.
         floor: Probability floor of the likelihood.
         min_detection: Floor of the detection probability in the conditioning.
+        kernel: Likelihood kernel, ``loop`` (forward-mode derivatives; default) or
+            ``adjoint`` (reverse-mode gradient, same values up to round-off, faster).
         sbc: Overrides of ``chains``/``warmup``/``draws``/``init_starts`` for each SBC case.
         optimise: Point-estimation settings (:mod:`~bio_sbi.inference.gw_optimise`: MLE or
             physical-probability MAP by PSO + L-BFGS-B). With ``enabled: true``,
@@ -380,6 +392,7 @@ class ExactGW(InferenceMethod):
         grid: dict | None = None,
         floor: float = 1e-15,
         min_detection: float = 1e-6,
+        kernel: str = "loop",
         sbc: dict | None = None,
         optimise: dict | None = None,
         log_every: int = 50,
@@ -402,6 +415,7 @@ class ExactGW(InferenceMethod):
         self.grid = dict(grid or {})
         self.floor = float(floor)
         self.min_detection = float(min_detection)
+        self.kernel = str(kernel)
         self.sbc = dict(sbc or {})
         self.optimise = dict(optimise or {})
         self.log_every = int(log_every)
@@ -422,7 +436,7 @@ class ExactGW(InferenceMethod):
         if max_points is not None:
             grid["max_points"] = max_points
         return ExactLikelihood(
-            simulator, observation, cohorts, grid, self.floor, self.min_detection
+            simulator, observation, cohorts, grid, self.floor, self.min_detection, self.kernel
         )
 
     def _initial_points(self, lik: ExactLikelihood, n_starts: int, n_keep: int, key):

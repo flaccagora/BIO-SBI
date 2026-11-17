@@ -345,7 +345,16 @@ the posterior of the **raw counts** (no summary, no simulations) with NUTS
 * likelihood = product over clones and horizons of `p(A, B | theta)`, conditioned on
   `Z != (0, 0)` for `selection=detected` (detection probability in complement form);
   counts are histogrammed per horizon; probabilities floored at `1e-15`;
-* exact gradients by forward mode through the pgf recursion;
+* exact gradients by forward mode through the pgf recursion (default
+  `inference.method.kernel=loop`); `kernel=adjoint` evaluates the offspring pgfs in
+  polynomial form with row-vectorised (SIMD) Numba loops and takes the gradient in
+  reverse mode (adjoint of the inverse FFT, one backward sweep per grid point for all
+  coordinates). Same values (bit-identical for the shipped laws) and gradients up to
+  round-off; ~3-5x faster objective and gradient calls (`scripts/gw_speedup/`). Opt-in
+  because NUTS draws then differ from `loop` runs at round-off level. A GPU prototype
+  (`scripts/gw_speedup/gpu_numba.py`, many parameter vectors in lockstep, float64) reached
+  only ~3x the CPU adjoint kernel at 2 threads on an RTX A1000 (FP64-bound), so it is not
+  wired into the pipeline;
 * same `theta` coordinates and prior as NPE (stick-breaking Betas of the Dirichlet rows),
   sampled on `logit(theta)`; chains start at the best of `init_starts` L-BFGS optima;
   Stan-style warmup (dual averaging, dense mass matrix); split R-hat, ESS, divergences
