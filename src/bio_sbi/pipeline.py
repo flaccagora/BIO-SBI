@@ -358,6 +358,8 @@ def run_experiment(cfg: DictConfig, out: str | Path) -> dict:
     }
     if exact:
         metrics[comp.method.name] = fitted.diagnostics
+    if getattr(fitted, "optimisation", None) is not None:  # point estimate: own file
+        _write_json(out / "optimisation.json", fitted.optimisation)
 
     # 4. Posterior predictive check: does the fitted inference model reproduce x_obs?
     n_ppc = int(cfg.budget.get("ppc_samples", 0))
