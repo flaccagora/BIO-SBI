@@ -55,6 +55,16 @@ def main() -> None:
     p.add_argument("--threads", type=int, default=4)
     p.add_argument("--smc", nargs="*", default=[], help="extra smc options key=value")
     a = p.parse_args()
+    if a.arm == "branchev":  # per-branch SMC evidence (branch_evidence.py), --smc key=value
+        import subprocess
+
+        extra = [x for kv in a.smc for x in ("--" + kv.split("=", 1)[0].replace("_", "-"),
+                                             kv.split("=", 1)[1])]  # fmt: skip
+        script = Path(__file__).parent / "branch_evidence.py"
+        cmd = [sys.executable, str(script), "--cell", a.cell, *extra]
+        if a.seed is not None:
+            cmd += ["--seed", str(a.seed)]
+        sys.exit(subprocess.call(cmd))
     name = a.arm.replace("+", "_") + (f"_seed{a.seed}" if a.seed is not None else "")
     out = a.out / a.cell / name
     out.mkdir(parents=True, exist_ok=True)

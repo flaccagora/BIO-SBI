@@ -98,7 +98,15 @@ def summarise(cell: str, arm: str, r: dict) -> dict:
         j = names.index("B.to_A")
         low = phys[..., j] < BRANCH
         row["low_branch_pooled"] = float(low.mean())
-        row["low_branch_chains"] = "/".join(f"{x:.2f}" for x in low.mean(1))
+        per = low.mean(1)
+        if len(per) <= 8:
+            row["low_branch_chains"] = "/".join(f"{x:.2f}" for x in per)
+        else:  # SMC chains: how many sit (mostly) in each branch
+            row["low_branch_chains"] = (
+                f"{len(per)} chains: {(per > 0.9).sum()} low, "
+                f"{(per < 0.1).sum()} high, "
+                f"{((per >= 0.1) & (per <= 0.9)).sum()} mixed"
+            )
         if r["pop"] is not None:
             row["low_branch_smc_pop"] = smc_low_share(r)
     _ = free
