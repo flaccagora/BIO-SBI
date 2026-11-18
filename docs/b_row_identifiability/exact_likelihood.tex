@@ -9,6 +9,7 @@
 \newtheorem{lemma}[theorem]{Lemma}
 \newtheorem{proposition}[theorem]{Proposition}
 \newtheorem{corollary}[theorem]{Corollary}
+\newtheorem*{auxfacts}{Auxiliary facts}
 \theoremstyle{definition}
 \newtheorem{definition}[theorem]{Definition}
 \newtheorem{example}[theorem]{Example}
@@ -72,16 +73,96 @@ The series converges absolutely on the closed bidisk $|x|,|y|\le1$ (coefficients
 All follow from term-by-term manipulation of an absolutely convergent power series; uniqueness in (2) is the identity theorem for power series.
 \end{proof}
 
-\begin{lemma}[Sums and random sums]\label{lem:sums}
-(a) If $K$ and $K'$ are independent, $G_{K+K'}=G_KG_{K'}$.
-(b) Let $N=(N_A,N_B)$ be a random number of cells of each type, and let each type-$k$ cell, independently, produce a vector distributed like $Y^{(k)}$ with pgf $H_k$. Then the total $S$ has pgf
+Throughout, $0^0:=1$, so that $s^a$ is defined for every complex $s$ and $a\in\mathbb N=\{0,1,2,\dots\}$, and $s^{a+b}=s^as^b$ for all $a,b\in\mathbb N$. The closed bidisk is $\bar{\mathbb D}^2=\{(x,y)\in\mathbb C^2:|x|\le1,|y|\le1\}$.
+
+\begin{auxfacts}
+\begin{enumerate}
+\item[(F1)] If $K$ takes values in $\mathbb N^2$ and $(x,y)\in\bar{\mathbb D}^2$, then $|x^{K_A}y^{K_B}|\le1$; hence $\E[x^{K_A}y^{K_B}]$ exists (real and imaginary parts separately) and $|\E[x^{K_A}y^{K_B}]|\le1$.
+\item[(F2)] If $W_1,\dots,W_m$ are independent, bounded, complex-valued random variables, then $\E[W_1\cdots W_m]=\E[W_1]\cdots\E[W_m]$.
+\end{enumerate}
+\end{auxfacts}
+\begin{proof}
+(F1) $|x^{K_A}y^{K_B}|=|x|^{K_A}|y|^{K_B}\le1$ pointwise. A bounded complex random variable is integrable, and $|\E W|\le\E|W|\le1$.
+
+(F2) For $m=2$ write $W_r=U_r+iV_r$ with $U_r,V_r$ real and bounded. Then
 \[
-G_S(x,y)=G_N\big(H_A(x,y),\,H_B(x,y)\big).
+W_1W_2=(U_1U_2-V_1V_2)+i\,(U_1V_2+V_1U_2).
+\]
+Each of $U_1U_2$, $V_1V_2$, $U_1V_2$, $V_1U_2$ is the product of a function of $W_1$ and a function of $W_2$, i.e.\ of two independent bounded real variables, whose expectation is the product of the expectations. By linearity,
+\[
+\E[W_1W_2]=(\E U_1\E U_2-\E V_1\E V_2)+i(\E U_1\E V_2+\E V_1\E U_2)=\E[W_1]\,\E[W_2].
+\]
+For $m>2$ use induction: $W_1\cdots W_{m-1}$ is bounded and, being a function of $(W_1,\dots,W_{m-1})$, independent of $W_m$.
+\end{proof}
+
+\begin{lemma}[Sums and random sums]\label{lem:sums}
+\textbf{(a)} If $K$ and $K'$ are independent random vectors in $\mathbb N^2$, then $G_{K+K'}=G_KG_{K'}$ on $\bar{\mathbb D}^2$.
+
+\textbf{(b)} Let $N=(N_A,N_B)$ be a random vector in $\mathbb N^2$ with pgf $G_N$. For each type $k\in\{A,B\}$ let $Y^{(k)}_1,Y^{(k)}_2,\dots$ be random vectors in $\mathbb N^2$, all with the law of a generic $Y^{(k)}$ whose pgf is $H_k(x,y)=\E\big[x^{Y^{(k)}_A}y^{Y^{(k)}_B}\big]$. Assume
+\begin{equation}\label{eq:indep}
+\text{the family }\{N,\ Y^{(A)}_1,Y^{(A)}_2,\dots,\ Y^{(B)}_1,Y^{(B)}_2,\dots\}\text{ is mutually independent.}
+\end{equation}
+Define the random sum
+\[
+S=\sum_{l=1}^{N_A}Y^{(A)}_l+\sum_{l=1}^{N_B}Y^{(B)}_l\qquad(\text{empty sums are }0).
+\]
+Then for every $(x,y)\in\bar{\mathbb D}^2$,
+\[
+G_S(x,y):=\E\big[x^{S_A}y^{S_B}\big]=G_N\big(H_A(x,y),\,H_B(x,y)\big).
 \]
 \end{lemma}
 \begin{proof}
-(a) $\E[x^{K_A+K'_A}y^{K_B+K'_B}]=\E[x^{K_A}y^{K_B}]\,\E[x^{K'_A}y^{K'_B}]$ by independence. (b) Conditional on $N=(i,j)$, $S$ is a sum of $i$ independent copies of $Y^{(A)}$ and $j$ of $Y^{(B)}$, so by (a) $\E[x^{S_A}y^{S_B}\mid N=(i,j)]=H_A^iH_B^j$. Take expectations over $N$.
+Part (a) is the case $N\equiv(1,1)$, $Y^{(A)}_1=K$, $Y^{(B)}_1=K'$ of part (b), since then $G_N(u,v)=uv$ (equivalently: one application of (F2)). We prove (b).
+
+Fix $(x,y)\in\bar{\mathbb D}^2$ and put $Z:=x^{S_A}y^{S_B}$; by (F1), $|Z|\le1$.
+
+\emph{Step 0 (the right-hand side is well defined).} By (F1), $|H_A(x,y)|\le1$ and $|H_B(x,y)|\le1$. Hence every term of $\sum_{i,j\ge0}\Prob(N=(i,j))\,H_A^iH_B^j$ has modulus $\le\Prob(N=(i,j))$, and these sum to 1; the series converges absolutely and equals $G_N(H_A(x,y),H_B(x,y))$ by definition of $G_N$.
+
+\emph{Step 1 ($S$ is a random variable).} For fixed $(i,j)\in\mathbb N^2$ define the sum with a \emph{deterministic} number of terms
+\[
+T_{ij}:=\sum_{l=1}^{i}Y^{(A)}_l+\sum_{l=1}^{j}Y^{(B)}_l ,
+\]
+a finite sum of random vectors, hence measurable. The events $E_{ij}:=\{N=(i,j)\}$ are measurable, pairwise disjoint and $\bigcup_{i,j}E_{ij}=\Omega$. Pointwise, $S=\sum_{i,j}T_{ij}\mathbf 1_{E_{ij}}$ (exactly one term is non-zero at each $\omega$), so $S$ is measurable.
+
+\emph{Step 2 (split the expectation over the values of $N$).} Since the $E_{ij}$ partition $\Omega$, $Z=\sum_{i,j}Z\,\mathbf 1_{E_{ij}}$ pointwise, and every partial sum has modulus $\le|Z|\le1$. By dominated convergence (applied to real and imaginary parts),
+\begin{equation}\label{eq:split}
+\E[Z]=\sum_{i,j\ge0}\E\big[Z\,\mathbf 1_{E_{ij}}\big].
+\end{equation}
+
+\emph{Step 3 (on $E_{ij}$, replace $S$ by $T_{ij}$).} On $E_{ij}$, $N_A=i$ and $N_B=j$, so $S=T_{ij}$ there. Hence, pointwise,
+\begin{equation}\label{eq:replace}
+Z\,\mathbf 1_{E_{ij}}=x^{T_{ij,A}}y^{T_{ij,B}}\,\mathbf 1_{E_{ij}} .
+\end{equation}
+
+\emph{Step 4 (separate the sum from the event).} $x^{T_{ij,A}}y^{T_{ij,B}}$ is a function of $(Y^{(A)}_1,\dots,Y^{(A)}_i,Y^{(B)}_1,\dots,Y^{(B)}_j)$ and $\mathbf 1_{E_{ij}}$ is a function of $N$. By \eqref{eq:indep} the two are independent, and both are bounded. By (F2) with $m=2$,
+\begin{equation}\label{eq:sep}
+\E\big[x^{T_{ij,A}}y^{T_{ij,B}}\,\mathbf 1_{E_{ij}}\big]=\E\big[x^{T_{ij,A}}y^{T_{ij,B}}\big]\;\Prob(N=(i,j)).
+\end{equation}
+
+\emph{Step 5 (the pgf of a sum of fixed length is a product).} Write the coordinates of $T_{ij}$ as $T_{ij,A}=\sum_{l\le i}Y^{(A)}_{l,A}+\sum_{l\le j}Y^{(B)}_{l,A}$ and similarly for $T_{ij,B}$. Applying $s^{a+b}=s^as^b$ finitely many times,
+\[
+x^{T_{ij,A}}y^{T_{ij,B}}=\prod_{l=1}^{i}x^{Y^{(A)}_{l,A}}y^{Y^{(A)}_{l,B}}\;\cdot\;\prod_{l=1}^{j}x^{Y^{(B)}_{l,A}}y^{Y^{(B)}_{l,B}} .
+\]
+The $i+j$ factors are bounded by (F1) and mutually independent, each being a function of a different member of the independent family $Y^{(A)}_1,\dots,Y^{(A)}_i,Y^{(B)}_1,\dots,Y^{(B)}_j$ (by \eqref{eq:indep}). By (F2) the expectation of the product is the product of the expectations. Each $Y^{(A)}_l$ has the law of $Y^{(A)}$, so each factor of the first product has expectation $H_A(x,y)$; likewise each factor of the second has expectation $H_B(x,y)$. Therefore
+\begin{equation}\label{eq:prod}
+\E\big[x^{T_{ij,A}}y^{T_{ij,B}}\big]=H_A(x,y)^i\,H_B(x,y)^j .
+\end{equation}
+For $i=j=0$, $T_{00}=0$ and both sides equal 1 (empty product), so \eqref{eq:prod} holds for all $(i,j)$.
+
+\emph{Step 6 (assemble).} Substituting \eqref{eq:replace}, \eqref{eq:sep} and \eqref{eq:prod} into \eqref{eq:split},
+\[
+G_S(x,y)=\E[Z]=\sum_{i,j\ge0}\Prob(N=(i,j))\,H_A(x,y)^iH_B(x,y)^j=G_N\big(H_A(x,y),H_B(x,y)\big),
+\]
+the last equality by Step 0.
 \end{proof}
+
+\begin{remark}[What the proof uses, and why it applies to branching processes]
+\begin{enumerate}
+\item The only probabilistic input is \eqref{eq:indep}: Step 4 uses that $N$ is independent of the $Y$'s, Step 5 that the $Y$'s are mutually independent and identically distributed within each type. Everything else is algebra ($s^{a+b}=s^as^b$) and boundedness (F1), which justifies dominated convergence and the convergence of $G_N$.
+\item Outside $\bar{\mathbb D}^2$, $x^{S_A}$ can be unbounded and the expectations may not exist. The algorithms of \S\ref{sec:dft} only evaluate pgfs at $|x|=|y|=1$, or at radius $r<1$, so the lemma covers every point they use.
+\item In a branching process every potential cell (labelled by its family path: founder, its first daughter, that daughter's second daughter, \dots) gets its own independent offspring draw. The founder's daughters ($N$) and the subclones grown from them (the $Y$'s) use disjoint sets of these draws, so \eqref{eq:indep} holds, and subclones started by same-type cells are identically distributed. This is why Theorems~\ref{thm:gwcomp} and~\ref{thm:bhint} can invoke the lemma. In the Bellman--Harris case the same holds for the subclones started at the founder's death time $u$, conditional on $u$, by the independence of lifetimes.
+\end{enumerate}
+\end{remark}
 
 \begin{example}[Offspring pgfs]
 Each outcome contributes its probability times $x^ay^b$:
