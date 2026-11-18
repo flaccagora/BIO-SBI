@@ -120,31 +120,36 @@ f_k(x,y)=\sum_o\pi_{k,o}\,x^{a_{ko}}y^{b_{ko}},\qquad f=(f_A,f_B),
 e.g.\ $f_A=\pi_{A,\mathrm{death}}+\pi_{A,\mathrm{persist}}x+\pi_{A,\mathrm{switch}}y+\pi_{A,AA}x^2+\pi_{A,AB}xy+\pi_{A,BB}y^2$. Their first derivatives at $(1,1)$ form the mean matrix $M_{kj}=\partial_jf_k(1,1)$ (expected type-$j$ daughters of a type-$k$ cell).
 
 %======================================================================
-\section{Construction and the composition theorem}\label{sec:composition}
-\subsection{Construction (Ulam--Harris)}
-Cells are labelled by finite words over $\{1,2\}$: $U=\bigcup_{n\ge0}\{1,2\}^n$, the founder is the empty word $\emptyset$, $u1,u2$ are the daughters of $u$, $|u|$ is the generation, and $uU$ is the set of descendants of $u$. For each outcome let $D_k(o)$ be the ordered list of daughter types (length $\ell_k(o)\le2$, with $a_{ko}$ A's and $b_{ko}$ B's).
-
-On a probability space take outcomes $O^{(j)}_u$, $u\in U$, $j\in\{A,B\}$, mutually independent with $\Prob(O^{(j)}_u=o)=\pi_{j,o}$ (a countable product space; Kolmogorov / Ionescu-Tulcea). The clone started at $u$ with type $j$ is defined recursively from the variables indexed by $uU$: $L^{u,j}_0=\{u\}$ with $\tau(u)=j$; if $v\in L^{u,j}_m$ has outcome $o=O^{(\tau(v))}_v$ and $D_{\tau(v)}(o)=(d_1,\dots,d_\ell)$ then $v1,\dots,v\ell\in L^{u,j}_{m+1}$ with $\tau(vi)=d_i$. $Z^{u,j}_m\in\N^2$ counts the types in $L^{u,j}_m$. The clone of a type-$k$ founder is $Z^{(k)}_n:=Z^{\emptyset,k}_n$ and $F_{n,k}$ is its pgf; $F_n=(F_{n,A},F_{n,B})$ maps $\Dbar$ to $\Dbar$.
-
-\begin{lemma}[Branching property]\label{lem:branching}
-(A) $Z^{u,j}_m$ has the law of $Z^{\emptyset,j}_m$ for all $u,j,m$. (B) Functions of the variables indexed by pairwise disjoint subsets of $U$ are independent. In particular, for distinct $u,u'$ neither a prefix of the other, $uU\cap u'U=\emptyset$; and $\{v:|v|\le n-2\}\cap\{v:|v|=n-1\}=\emptyset$.
-\end{lemma}
-\begin{proof}
-(A) $Z^{u,j}_m=\Phi_{m,j}((O^{(i)}_{uw})_{w,i})$ and $Z^{\emptyset,j}_m=\Phi_{m,j}((O^{(i)}_w)_{w,i})$ for the same measurable $\Phi_{m,j}$ (the recursion refers only to relative words), and the two input families are i.i.d.\ with the same marginals. (B) Grouping property of independent families.
-\end{proof}
+\section{The process and the composition theorem}\label{sec:composition}
+\begin{definition}[Two-type Galton--Watson process]\label{def:gw}
+A sequence $Z_0,Z_1,\dots$ of random vectors in $\N^2$ (numbers of A and B cells per generation) is a two-type GW process with offspring pgfs $f=(f_A,f_B)$ if, for every $n\ge1$ and every $(i,j)$ with $\Prob(Z_{n-1}=(i,j))>0$, conditionally on $Z_0,\dots,Z_{n-1}$ with $Z_{n-1}=(i,j)$,
+\[
+Z_n\overset{d}{=}\sum_{l=1}^{i}\xi^{(A)}_l+\sum_{l=1}^{j}\xi^{(B)}_l,
+\]
+where the $\xi^{(k)}_l$ are independent and $\xi^{(k)}_l$ has pgf $f_k$ (the daughters of one type-$k$ cell). $Z^{(k)}_n$ denotes the process started from $Z_0=e_k$ (one type-$k$ cell), $F_{n,k}$ its pgf, and $F_n=(F_{n,A},F_{n,B})$, a map $\Dbar\to\Dbar$.
+\end{definition}
+\noindent In words: given the current generation, every cell independently draws its outcome and is replaced by its daughters. That such a process exists, and that the cell-level model of \S\ref{sec:model} is one, is shown in Appendix~\ref{app:construction}.
 
 \begin{theorem}[Composition]\label{thm:comp}
-$F_0=\mathrm{id}$ and $F_n=f\circ F_{n-1}=F_{n-1}\circ f$ for $n\ge1$; hence $F_n=f^{\circ n}$.
+$F_0=\mathrm{id}$ and $F_n=F_{n-1}\circ f=f\circ F_{n-1}$ for $n\ge1$; hence $F_n=f^{\circ n}$.
 \end{theorem}
 \begin{proof}
-Fix $n\ge1$, $k$, $(x,y)\in\Dbar$, $\Xi=x^{Z^{(k)}_{n,A}}y^{Z^{(k)}_{n,B}}$.
+Fix $k$, $n\ge1$ and $(x,y)\in\Dbar$.
 
-\emph{First step.} Partition by the founder's outcome $E_o=\{O^{(k)}_\emptyset=o\}$ (finitely many). On $E_o$ the daughters are words $1,\dots,\ell$ with types $d_i$, every generation-$n$ cell descends from exactly one of them, so $Z^{(k)}_n=\sum_iZ^{i,d_i}_{n-1}$ and $\Xi\one_{E_o}=\one_{E_o}\prod_ix^{Z^{i,d_i}_{n-1,A}}y^{Z^{i,d_i}_{n-1,B}}$. The factors depend on the disjoint word sets $\{\emptyset\},1U,2U$; by Lemma~\ref{lem:branching}(B) and (F2), then (A), $\E[\Xi\one_{E_o}]=\pi_{k,o}\prod_iF_{n-1,d_i}=\pi_{k,o}F_{n-1,A}^{a_{ko}}F_{n-1,B}^{b_{ko}}$ (death: $\Xi=1$ on $E_o$, empty product). Summing over $o$: $F_{n,k}=f_k(F_{n-1})$.
+\emph{(1) Condition on the previous generation.} Given $Z^{(k)}_{n-1}=(i,j)$, Definition~\ref{def:gw} makes $Z^{(k)}_n$ a sum of $i+j$ independent vectors with pgfs $f_A$ ($i$ of them) and $f_B$ ($j$ of them). The pgf of a sum of independent vectors is the product of their pgfs (Lemma~\ref{lem:sums} with $N$ constant, or directly (F2)), so
+\[
+\E\big[x^{Z^{(k)}_{n,A}}y^{Z^{(k)}_{n,B}}\,\big|\,Z^{(k)}_{n-1}\big]=f_A(x,y)^{Z^{(k)}_{n-1,A}}\,f_B(x,y)^{Z^{(k)}_{n-1,B}} .
+\]
 
-\emph{Last step.} Let $C$ be the type-labelled set $L^{\emptyset,k}_{n-1}$ (countably many values). On $\{C=c\}$, $Z^{(k)}_n=\sum_{u\in c}\xi_u$ with $\xi_u$ the daughter counts of $O^{(\tau(u))}_u$. $\{C=c\}$ depends on words of length $\le n-2$, each $\xi_u$ on $u$ alone (length $n-1$); by (B), (F2) and $\E[x^{\xi_{u,A}}y^{\xi_{u,B}}]=f_{\tau(u)}(x,y)$, $\E[\Xi\one_{C=c}]=\Prob(C=c)f_A^{\alpha}f_B^{\beta}$ where $c$ has $\alpha$ A and $\beta$ B cells. Sum over $c$ (dominated convergence) and group by $(\alpha,\beta)=Z^{(k)}_{n-1}$: $F_{n,k}=F_{n-1,k}(f_A,f_B)$, the series converging since $|f_k|\le1$.
+\emph{(2) Average over the previous generation.} By the tower rule (for the discrete variable $Z^{(k)}_{n-1}$ this is $\E\Xi=\sum_{ij}\E[\Xi\mid Z_{n-1}=(i,j)]\Prob(Z_{n-1}=(i,j))$, a series that converges absolutely because every term is bounded by $\Prob(Z_{n-1}=(i,j))$, by (F1)),
+\[
+F_{n,k}(x,y)=\E\Big[f_A(x,y)^{Z^{(k)}_{n-1,A}}f_B(x,y)^{Z^{(k)}_{n-1,B}}\Big]=F_{n-1,k}\big(f_A(x,y),f_B(x,y)\big),
+\]
+the last step being the definition of the pgf of $Z^{(k)}_{n-1}$ at the point $(f_A(x,y),f_B(x,y))$, which lies in $\Dbar$ by (F1).
 
-Since $Z^{(k)}_0=e_k$, $F_0=\mathrm{id}$, and both recursions give $f^{\circ n}$ by induction and associativity of composition.
+\emph{(3) Unroll.} $Z^{(k)}_0=e_k$, so $F_0=\mathrm{id}$, and by induction $F_n=F_{n-1}\circ f=f^{\circ n}$. Since composition is associative, $f^{\circ n}=f\circ f^{\circ(n-1)}=f\circ F_{n-1}$, which is the other form.
 \end{proof}
+\noindent The form $F_n=f\circ F_{n-1}$ also has a direct reading (``the founder acts once, then each daughter starts an independent clone''), proved from the construction in Appendix~\ref{app:construction}; the proof above does not need it.
 
 \begin{corollary}\label{cor:degree}
 (i) $F_{n,k}$ is a polynomial of total degree $\le2^n$, so $Z^{(k)}_{n,A},Z^{(k)}_{n,B}\le2^n$. (ii) $\E Z^{(k)}_n=e_kM^n$.
@@ -561,6 +566,36 @@ Exact per-clone Fisher information at $\theta^\star$ (10 free parameters) is pos
 \item \textbf{MCMC.} NUTS can struggle with multimodal posteriors (two runs with $\hat R>1.1$); SBC with MCMC is expensive and therefore coarse.
 \item \textbf{Global identifiability} is not proved; local identifiability and profiles are computed at $\theta^\star$ only.
 \end{itemize}
+
+%======================================================================
+\appendix
+\section{Construction of the process}\label{app:construction}
+Definition~\ref{def:gw} specifies the process by its conditional laws. This appendix builds it from independent cell-level outcomes and checks that the result satisfies the definition; it also proves the ``first-step'' reading of Theorem~\ref{thm:comp}. None of this is needed to use the theorem.
+
+\paragraph{Labels and outcomes (Ulam--Harris).} Cells are labelled by finite words over $\{1,2\}$: $U=\bigcup_{n\ge0}\{1,2\}^n$; the founder is the empty word $\emptyset$, $u1,u2$ are the daughters of $u$, $|u|$ is the generation, and $uU$ is the set of descendants of $u$ (including $u$). For each outcome $o$ of type $k$ let $D_k(o)$ be the ordered list of daughter types, of length $\ell_k(o)\le2$, with $a_{ko}$ A's and $b_{ko}$ B's. On a probability space take outcomes $O^{(j)}_u$, $u\in U$, $j\in\{A,B\}$, mutually independent with $\Prob(O^{(j)}_u=o)=\pi_{j,o}$ (a countable product space, which exists by Kolmogorov's extension theorem). Each cell carries one prepared outcome per possible type and uses the one of its actual type.
+
+\paragraph{Clones.} The clone started at $u$ with type $j$ is defined recursively from the variables indexed by $uU$: $L^{u,j}_0=\{u\}$ with type $\tau(u)=j$; if $v\in L^{u,j}_m$ has outcome $o=O^{(\tau(v))}_v$ and $D_{\tau(v)}(o)=(d_1,\dots,d_\ell)$, then $v1,\dots,v\ell\in L^{u,j}_{m+1}$ with $\tau(vi)=d_i$. $Z^{u,j}_m\in\N^2$ counts the A and B cells of $L^{u,j}_m$, and $Z^{(k)}_n:=Z^{\emptyset,k}_n$. Every $L^{u,j}_m$ is finite and each step uses finitely many variables, so everything is measurable.
+
+\begin{lemma}[Branching property]\label{lem:branching}
+(A) $Z^{u,j}_m$ has the law of $Z^{\emptyset,j}_m$ for all $u$, $j$, $m$. (B) Functions of the variables indexed by pairwise disjoint subsets of $U$ are independent. In particular $uU\cap u'U=\emptyset$ when neither of $u\ne u'$ is a prefix of the other, and $\{v:|v|\le n-2\}\cap\{v:|v|=n-1\}=\emptyset$.
+\end{lemma}
+\begin{proof}
+(A) $Z^{u,j}_m=\Phi_{m,j}\big((O^{(i)}_{uw})_{w,i}\big)$ and $Z^{\emptyset,j}_m=\Phi_{m,j}\big((O^{(i)}_w)_{w,i}\big)$ for the same measurable map $\Phi_{m,j}$, because the recursion refers only to the relative word $w$; the two input families are i.i.d.\ with the same marginals, hence have the same joint law. (B) Grouping property of independent families (Williams [18], Ch.~4).
+\end{proof}
+
+\begin{proposition}[The construction is a GW process]\label{prop:construction}
+$(Z^{(k)}_n)_{n\ge0}$ satisfies Definition~\ref{def:gw}.
+\end{proposition}
+\begin{proof}
+Fix $n\ge1$. Let $\mathcal H$ be the information in the outcomes of all words of length $\le n-2$; it determines the type-labelled set $C=L^{\emptyset,k}_{n-1}$ and $Z^{(k)}_0,\dots,Z^{(k)}_{n-1}$. Each $u\in C$ has length $n-1$, so its outcome $O_u^{(\tau(u))}$ is independent of $\mathcal H$ (Lemma~\ref{lem:branching}(B)), the outcomes of distinct $u\in C$ are independent, and $O^{(\tau(u))}_u\sim\pi_{\tau(u)}$. Hence, given $\mathcal H$ with $C$ containing $i$ A cells and $j$ B cells, $Z^{(k)}_n=\sum_{u\in C}\xi_u$ ($\xi_u$ = daughter counts of $u$) is a sum of $i$ independent vectors with pgf $f_A$ and $j$ with pgf $f_B$. This conditional law depends on $\mathcal H$ only through $(i,j)=Z^{(k)}_{n-1}$, so it is also the conditional law given $Z^{(k)}_0,\dots,Z^{(k)}_{n-1}$.
+\end{proof}
+
+\begin{proposition}[First-step decomposition]\label{prop:firststep}
+$F_{n,k}=f_k(F_{n-1,A},F_{n-1,B})$, read as ``the founder acts once, then each daughter starts an independent clone''.
+\end{proposition}
+\begin{proof}
+Fix $(x,y)\in\Dbar$ and let $\Xi=x^{Z^{(k)}_{n,A}}y^{Z^{(k)}_{n,B}}$. Partition by the founder's outcome $E_o=\{O^{(k)}_\emptyset=o\}$. On $E_o$ the daughters are the words $1,\dots,\ell$ with types $d_i$ from $D_k(o)$, and every generation-$n$ cell descends from exactly one of them, so $Z^{(k)}_n=\sum_iZ^{i,d_i}_{n-1}$ and $\Xi\one_{E_o}=\one_{E_o}\prod_ix^{Z^{i,d_i}_{n-1,A}}y^{Z^{i,d_i}_{n-1,B}}$. The factors depend on the disjoint word sets $\{\emptyset\},1U,2U$, so by Lemma~\ref{lem:branching}(B), (F2) and then (A), $\E[\Xi\one_{E_o}]=\pi_{k,o}\prod_iF_{n-1,d_i}(x,y)=\pi_{k,o}F_{n-1,A}^{a_{ko}}F_{n-1,B}^{b_{ko}}$ (for death $\Xi=1$ on $E_o$ and the product is empty). Summing over the finitely many $o$ gives $f_k(F_{n-1,A},F_{n-1,B})$.
+\end{proof}
 
 %======================================================================
 \section*{References}\addcontentsline{toc}{section}{References}
