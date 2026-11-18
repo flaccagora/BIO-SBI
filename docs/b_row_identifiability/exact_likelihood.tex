@@ -364,6 +364,66 @@ The system is non-stiff on the unit circle ($|G|\le1$, rates $\lambda_k=m/\mu_k\
 
 %======================================================================
 \section{From pgf values to probabilities: DFT, FFT, aliasing}\label{sec:dft}
+
+\subsection*{A worked example: from $\theta$ to the likelihood}
+\addcontentsline{toc}{subsection}{A worked example: from $\theta$ to the likelihood}\label{sec:dftexample}
+\paragraph{The key point.} The DFT is \emph{never applied to the data}. It is applied to the \emph{model}, at one parameter value $\theta$, to produce the model's table of probabilities $\Prob(\text{counts}\mid\theta)$. The data enter only at the end, as look-ups in that table.
+
+\paragraph{Setting.} One cell type with offspring pgf $f(s)=0.2+0.3s+0.5s^2$ (die, persist, divide), observed after $n=2$ generations. Six detected organoids had sizes $1,2,2,4,1,3$. The likelihood needs one number per organoid, $\Prob(Z_2=k\mid\text{detected})$ for its observed $k$; all of them together form the model's probability table.
+
+\paragraph{Step 1: the table is hidden in the pgf.} The clone pgf is $F_2(s)=f(f(s))$ (Theorem~\ref{thm:gwcomp}), a polynomial of degree 4 whose coefficients are the table:
+\begin{center}\small
+\begin{tabular}{@{}lccccc@{}}\toprule
+$k$ cells & 0 & 1 & 2 & 3 & 4\\\midrule
+$\Prob(Z_2=k)$ & 0.280 & 0.150 & 0.295 & 0.150 & 0.125\\\bottomrule
+\end{tabular}
+\end{center}
+Here they were obtained by expanding the polynomial symbolically. At generation 10 with two types the polynomial has up to $\sim10^6$ coefficients and expansion is hopeless, so another route is needed.
+
+\paragraph{Step 2: evaluate the pgf at a few numbers instead.} Evaluating $F_2$ at a given number $s$ is cheap: compute $f(s)$, then $f$ of the result. Choose the $L=5$ fifth roots of unity ($L=\deg F_2+1$, so nothing folds; Corollary~\ref{cor:fold}):
+\begin{center}\small
+\begin{tabular}{@{}lccccc@{}}\toprule
+point $s=\omega_5^j$ & $1$ & $0.309+0.951i$ & $-0.809+0.588i$ & $-0.809-0.588i$ & $0.309-0.951i$\\
+$F_2(s)$ & $1$ & $0.005+0.109i$ & $0.195-0.123i$ & $0.195+0.123i$ & $0.005-0.109i$\\\bottomrule
+\end{tabular}
+\end{center}
+These are five numbers; nothing has been expanded.
+
+\paragraph{Step 3: the DFT turns the values back into the coefficients.} Applying the inversion formula of Theorem~\ref{thm:fold} ($c_k=\frac15\sum_j F_2(\omega_5^j)\,\omega_5^{-jk}$, i.e.\ \code{np.fft.fft(values)/5}) gives
+\[
+(c_0,\dots,c_4)=(0.280,\ 0.150,\ 0.295,\ 0.150,\ 0.125),
+\]
+exactly the table of Step~1, recovered from the five values alone. \emph{Why:} a polynomial of degree 4 is determined by its values at 5 points (interpolation); recovering the coefficients means solving a $5\times5$ linear system, and at roots of unity that system has the explicit solution ``average the values with weights $\omega^{-jk}$'', because orthogonality (Lemma~\ref{lem:orth}) cancels every coefficient except the $k$-th. The FFT computes these averages for all $k$ at once.
+
+\paragraph{Step 4: condition on detection.} Empty clones are not recorded, so divide by $1-c_0=0.720$:
+\begin{center}\small
+\begin{tabular}{@{}lcccc@{}}\toprule
+$k$ & 1 & 2 & 3 & 4\\\midrule
+$\Prob(Z_2=k\mid Z_2\ne0)$ & 0.208 & 0.410 & 0.208 & 0.174\\\bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{Step 5: look up the data and add the logs.} For the sizes $1,2,2,4,1,3$,
+\[
+\log L(\theta)=\log0.208+\log0.410+\log0.410+\log0.174+\log0.208+\log0.208=-8.241 .
+\]
+
+\paragraph{Step 6: another $\theta$ means another table.} For $f(s)=0.3+0.3s+0.4s^2$, Steps 2--5 give the table $(0.426,0.162,0.252,0.096,0.064)$ and $\log L=-8.158$ (with only six organoids this value fits slightly better). The likelihood \emph{function} is ``run Steps 2--5 at the given $\theta$''; maximum likelihood, profiles and MCMC call it many times with different $\theta$, on the same data.
+
+\paragraph{The same pipeline in the real models.}
+\begin{center}\small
+\begin{tabular}{@{}p{0.25\linewidth}p{0.7\linewidth}@{}}\toprule
+this example & two-type GW (and BH)\\\midrule
+one variable $s$ & two variables $(x,y)$ for A and B\\
+5 roots of unity & an $L_A\times L_B$ grid of pairs $(\omega_{L_A}^j,\omega_{L_B}^l)$, e.g.\ $384\times384$\\
+$F_2=f(f(s))$ & GW: apply $(f_A,f_B)$ $n$ times per grid point; BH: solve the phase ODEs (Theorem~\ref{thm:phase}) to the endpoint\\
+1-D DFT & 2-D DFT (\code{fft2}): $\Prob(a\text{ A cells},b\text{ B cells})$ for every $(a,b)$ at once\\
+table of 5 numbers & $\sim10^5$ numbers per endpoint\\
+look up sizes & look up each organoid's $(A,B)$ at its endpoint (Proposition~\ref{prop:lik})\\\bottomrule
+\end{tabular}
+\end{center}
+In one line: $\theta\to$ offspring pgf $\to$ clone pgf evaluated on a grid of roots of unity (cheap) $\to$ DFT $\to$ probability table for every possible count $\to$ look up the observed counts $\to$ sum of logs. The rest of this section proves Step 3 and controls its errors when the table must be truncated. Code: \code{scripts/b_row_theory/demo_dft_likelihood.py}.
+
 \subsection{Inversion on roots of unity}
 \paragraph{Idea.} A pgf is a power series whose coefficients are the probabilities we want. We cannot expand $F_n$ symbolically (degree $2^n$), but we can \emph{evaluate} it cheaply at any point (\S\ref{sec:gw}, \S\ref{sec:bh}). If we evaluate it at $L$ suitably chosen points on a circle, a weighted average of these values isolates one coefficient, because the weights cancel every other coefficient. The suitable points are the roots of unity.
 
@@ -513,7 +573,7 @@ For the direction ``increase $\pi_{k,o}$'' the explicit term is the monomial $x^
 
 %======================================================================
 \section{The likelihood}\label{sec:lik}
-\begin{proposition}
+\begin{proposition}\label{prop:lik}
 For a design with endpoints $h$ and observed detected clones $z_{h,1},\dots,z_{h,N_h}$, independent across clones and endpoints,
 \[
 \ell(\theta)=\sum_h\sum_{i=1}^{N_h}\log\tilde p_h(z_{h,i};\theta)=\sum_h\sum_{z}n_h(z)\,\log\tilde p_h(z;\theta),
