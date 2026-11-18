@@ -319,29 +319,37 @@ def typing_table(typ: pd.DataFrame, null: pd.DataFrame) -> pd.DataFrame:
 
 def fig_typing(tt: pd.DataFrame, out: Path) -> None:
     bases = sorted(tt.base.unique())
-    typings = [t for t in ("sym0.02", "sym0.05", "bA0.02", "bA0.05") if t in set(tt.typing)]
-    fig, axes = plt.subplots(1, len(bases), figsize=(4.2 * len(bases), 3.2), sharey=True,
-                             squeeze=False)  # fmt: skip
-    style = {"sym0.02": ("#a6d854", "o"), "sym0.05": ("#4daf4a", "o"),
-             "bA0.02": ("#fc8d62", "s"), "bA0.05": ("#e41a1c", "s")}  # fmt: skip
-    for j, base in enumerate(bases):
-        ax = axes[0, j]
-        for t in typings:
-            for an, ls in (("ignored", "-"), ("modelled", "--")):
+    order = ("bA0.005", "bA0.01", "bA0.02", "bA0.05", "sym0.02", "sym0.05")
+    typings = [t for t in order if t in set(tt.typing)]
+    analyses = [a for a in ("ignored", "half", "modelled") if a in set(tt.analysis)]
+    title = {"ignored": "typing errors ignored", "half": "modelled with half the true rate",
+             "modelled": "known confusion matrix modelled"}  # fmt: skip
+    style = {"bA0.005": ("#fdd0a2", "s"), "bA0.01": ("#fd8d3c", "s"),
+             "bA0.02": ("#e6550d", "s"), "bA0.05": ("#a63603", "s"),
+             "sym0.02": ("#74c476", "o"), "sym0.05": ("#238b45", "o")}  # fmt: skip
+    fig, axes = plt.subplots(len(analyses), len(bases), figsize=(4.0 * len(bases),
+                             2.6 * len(analyses)), sharex=True, sharey=True, squeeze=False)  # fmt: skip
+    for i, an in enumerate(analyses):
+        for j, base in enumerate(bases):
+            ax = axes[i, j]
+            for t in typings:
                 g = tt[(tt.base == base) & (tt.typing == t) & (tt.analysis == an)].sort_values("n")
                 if len(g):
-                    ax.plot(g.n, g.fpr_mc, ls=ls, marker=style[t][1], color=style[t][0], ms=3,
-                            label=f"{t}, {an}")  # fmt: skip
-        ax.axhline(ALPHA, color="grey", lw=0.6, ls=":")
-        ax.set_xscale("log", base=2)
-        ax.set_xticks(NS)
-        ax.set_xticklabels(NS)
-        ax.set_ylim(0, 1.02)
-        ax.set_xlabel("clones per endpoint")
-        ax.set_title(f"{base} (no dedifferentiation)", fontsize=9)
-    axes[0, 0].set_ylabel("false-positive rate at 5%")
-    axes[0, -1].legend(fontsize=6, loc="center right")
-    fig.suptitle("Mis-typing: false positives (sym = symmetric, bA = B read as A)", fontsize=10)
+                    ax.plot(g.n, g.fpr_mc, marker=style[t][1], color=style[t][0], ms=3,
+                            label=t)  # fmt: skip
+            ax.axhline(ALPHA, color="grey", lw=0.6, ls=":")
+            ax.set_xscale("log", base=2)
+            ax.set_xticks(NS)
+            ax.set_xticklabels(NS)
+            ax.set_ylim(0, 1.02)
+            ax.set_title(f"{base}: {title[an]}", fontsize=9)
+            if i == len(analyses) - 1:
+                ax.set_xlabel("clones per endpoint")
+            if j == 0:
+                ax.set_ylabel("false-positive rate")
+    axes[0, -1].legend(fontsize=6, loc="center right", title="data typing", title_fontsize=6)
+    fig.suptitle("Mis-typing under H0 (bA = B read as A, sym = symmetric); "
+                 "MC critical value of the perfectly typed null", fontsize=9)  # fmt: skip
     fig.tight_layout()
     fig.savefig(out, dpi=130)
     plt.close(fig)
