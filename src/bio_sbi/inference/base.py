@@ -26,6 +26,14 @@ from ..rng import seed_for, seed_torch
 SimulateFn = Callable[[np.ndarray, int], np.ndarray]
 
 
+def _is_spline_numerical_failure(error: AssertionError) -> bool:
+    """Whether ``error`` is nflows' spline-inverse assertion (round-off), not a real bug."""
+    import traceback
+
+    frames = traceback.extract_tb(error.__traceback__)
+    return bool(frames) and "nflows/transforms/splines" in frames[-1].filename.replace("\\", "/")
+
+
 @dataclass
 class FittedPosterior:
     """Trained sbi posterior plus the preprocessing needed to condition it.
@@ -69,6 +77,11 @@ class FittedPosterior:
         never finishes. Sampling is therefore capped at :attr:`max_sampling_time`
         seconds and returns the samples accepted so far (possibly fewer than ``n``, or
         none), with a warning. Use :meth:`support_mass` to quantify the problem.
+
+        For the same kind of ``x`` the flow can also fail numerically: nflows' spline
+        inverse asserts a non-negative discriminant, which float32 round-off violates
+        when the conditioning network outputs extreme spline parameters. That is treated
+        like the time-out with nothing accepted (no samples, warning).
         """
         seed_torch(seed)
         options = {"show_progress_bars": False}
@@ -77,20 +90,26 @@ class FittedPosterior:
                 max_sampling_time=getattr(self, "max_sampling_time", 60.0),
                 return_partial_on_timeout=True,
             )
+        empty = torch.empty((0, self.posterior.prior.event_shape[0]))
         try:
             with torch.no_grad():
                 samples = self.posterior.sample((n,), x=self.condition(x), **options)
         except RuntimeError as error:  # sbi raises when the cap is hit with 0 accepted
             if "max_sampling_time" not in str(error):
                 raise
-            samples = torch.empty((0, self.posterior.prior.event_shape[0]))
+            samples = empty
+        except AssertionError as error:
+            if not _is_spline_numerical_failure(error):
+                raise
+            samples = empty
         if len(samples) < n:
             import warnings
 
             warnings.warn(
                 f"Only {len(samples)}/{n} posterior samples inside the prior support were "
-                "drawn before the time limit: the posterior mass lies mostly outside the "
-                "prior (see support_mass); results for this x are unreliable.",
+                "drawn before the time limit (or the flow failed numerically): the posterior "
+                "mass lies mostly outside the prior (see support_mass); results for this x "
+                "are unreliable.",
                 stacklevel=2,
             )
         return samples.cpu().numpy()

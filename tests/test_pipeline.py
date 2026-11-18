@@ -229,16 +229,18 @@ def test_truth_seed_fixes_prior_truth_across_data_seeds():
     assert not np.array_equal(same, truth("seed=0", "++truth.seed=12"))
     assert np.array_equal(truth("seed=3"), truth("seed=3", "++truth.seed=null"))
     # the dataset still follows data_seed
-    assert reference_fingerprint("truth.source=prior", "++truth.seed=11", "seed=0") != \
-        reference_fingerprint("truth.source=prior", "++truth.seed=11", "seed=1")
+    assert reference_fingerprint(
+        "truth.source=prior", "++truth.seed=11", "seed=0"
+    ) != reference_fingerprint("truth.source=prior", "++truth.seed=11", "seed=1")
 
 
 @pytest.mark.usefixtures("keep_torch_rng")
 def test_truth_mean_cells_filter():
     from bio_sbi.pipeline import build_data_generator, reference_parameters, truth_plausible
 
-    cfg = config("truth.source=prior", "seed=0",
-                 "++truth.mean_cells={horizon: 10, min: 30, max: 300}")
+    cfg = config(
+        "truth.source=prior", "seed=0", "++truth.mean_cells={horizon: 10, min: 30, max: 300}"
+    )
     data = build_data_generator(cfg, build_components(cfg).generator)
     verdicts = []
     for attempt in range(20):
@@ -325,6 +327,12 @@ def test_npe_sbc_is_bounded_and_counts_leakage(tmp_path):
     assert time.perf_counter() - start < 60
     assert metrics["cases"] + metrics["excluded_leakage"] + metrics["invalid_cases"] == 4
     assert ranks.shape == (metrics["cases"], comp.simulator.theta_dim)
+    # With a longer cap, sampling at such an x goes on long enough for the flow to fail
+    # numerically (nflows spline assertion; how soon depends on CPU speed, which made
+    # this test flaky): that too must end as "no samples", not as an exception.
+    fitted.max_sampling_time = 5.0
+    with pytest.warns(UserWarning, match="posterior samples inside the prior support"):
+        assert len(fitted.sample(x[0], 20, seed=1)) < 20
 
 
 def test_data_section_from_runs(tmp_path):
