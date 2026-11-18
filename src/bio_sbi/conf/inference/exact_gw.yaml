@@ -65,6 +65,49 @@ method:
     max_draws: 1000            # per chain
     confirm: 1                 # consecutive passing checks
     monitor_logp: true
+  # ---- sampler coordinates (opt-in; gw_reparam.py). Exact reparametrisations: same prior and
+  # posterior, draws returned in theta. none = u = logit(theta) (default, original code path) |
+  # probit (stick = Phi(v): Gaussian tails at the simplex boundary) | brow (B's row broken as
+  # to_A, persist, death, div_AA, div_AB, div_BB: one stick for "B switches back", the rest
+  # "B is lost" split hierarchically) | brow+probit. stick_order: {row: [entries]} overrides.
+  reparam: none
+  stick_order: {}
+  # ---- tempered SMC from the prior (opt-in; reference fit only, not with warm_start).
+  # Likelihood-only evaluations (~1/3 of a gradient evaluation). mode=start: the beta = 1
+  # population (all branches, with their mass) replaces the L-BFGS initialisation; NUTS chains
+  # start at population members (select: resample = in proportion to mass | kmeans = spread),
+  # population covariance as initial / prior inverse mass, short warmup. mode=final: the SMC
+  # chains (adaptive RW + independence MH, nested R-hat / ESS stopping rule) are the draws.
+  # Population and evidence in metrics.json exact_gw.smc; population in posterior.pt.
+  smc:
+    enabled: false
+    mode: start                # start | final
+    chains: 64                 # MH chains; population = chains x steps
+    steps: 8
+    ess_fraction: 0.5          # next temperature keeps this Kish ESS fraction of the population
+    rw_acceptance: 0.3
+    imh_prob: 0.5              # independence (t mixture fitted to the population) proposals
+    imh_components: 2          # BIC-selected mixture components (separate branches)
+    df: 5
+    de_prob: 0.0
+    rw_scale_sd: 0.0
+    max_evals: 60000           # likelihood evaluations incl. the final stage
+    final_steps: 16            # mode=start: MH steps at beta = 1 before the hand-over
+    select: resample           # mode=start: chain starts
+    warmup: 200                # mode=start: NUTS warmup per chain (replaces warmup)
+    init_buffer: 25
+    term_buffer: 50
+    mass_prior: 50             # pseudo-draws of the population covariance in the mass window
+    target_ess: 400            # mode=final: stopping rule (bulk ESS, nested R-hat, tail ESS)
+    max_rhat: 1.01
+    tail_fraction: 0.5
+    superchains: 4
+    min_final_steps: 16
+    max_final_steps: 3000
+    final_burn: 0.25
+    check_every: 8
+    local_k: 0
+    keep_population: true
   grid:                        # FFT grid per horizon, from the dataset's largest counts
     factor: 1.25               # L = next_fast_len(max(min_size, factor * max_count + margin))
     margin: 16
