@@ -10,6 +10,8 @@
 \newtheorem{proposition}[theorem]{Proposition}
 \newtheorem{corollary}[theorem]{Corollary}
 \newtheorem*{auxfacts}{Auxiliary facts}
+\newtheorem*{lemmaA}{Lemma A (subclones are fresh clones)}
+\newtheorem*{lemmaB}{Lemma B (disjoint families are independent)}
 \theoremstyle{definition}
 \newtheorem{definition}[theorem]{Definition}
 \newtheorem{example}[theorem]{Example}
@@ -177,6 +179,32 @@ Mean matrix $M_{kj}=\partial_jf_k(1,1)$; second factorial moments $\partial_x^2f
 
 %======================================================================
 \section{Galton--Watson: pgf by composition}\label{sec:gw}
+\subsection{Construction of the process}\label{sec:gwconstr}
+A formal proof of the composition rule needs the process built explicitly, so that ``a subclone is an independent fresh clone'' (the \emph{branching property}) can be proved rather than assumed.
+
+\paragraph{Labels (Ulam--Harris).} Cells are named by finite words over $\{1,2\}$ (a cell has at most two daughters): $U=\bigcup_{n\ge0}\{1,2\}^n$, with the empty word $\emptyset$ for the founder and $u1,u2$ for the first and second daughter of $u$. The length $|u|$ is the generation. $U$ is countable. We write $uU=\{uw:w\in U\}$ for the descendants of $u$ (including $u$).
+
+\paragraph{Outcomes.} For each type $k$ and outcome $o$ let $D_k(o)$ be the ordered list of daughter types, of length $\ell_k(o)\le2$; e.g.\ $D_A(\mathrm{div\_AB})=(A,B)$, $D_A(\mathrm{persist})=(A)$, $D_A(\mathrm{death})=()$, $D_B(\mathrm{to\_A})=(A)$. Let $(a_{ko},b_{ko})$ be the numbers of A and B entries of $D_k(o)$, so that $f_k(u,v)=\sum_o\pi_{k,o}u^{a_{ko}}v^{b_{ko}}$.
+
+\paragraph{Randomness.} On $(\Omega,\mathcal F,\Prob)$ take random outcomes $O_u^{(j)}$, $u\in U$, $j\in\{A,B\}$, with $\Prob(O_u^{(j)}=o)=\pi_{j,o}$ and the whole family $\{O_u^{(j)}:u\in U,\ j\in\{A,B\}\}$ mutually independent. Such a space exists because the family is countable (countable product of probability spaces; Kolmogorov / Ionescu-Tulcea). Each cell carries one prepared outcome per possible type and uses the one of its actual type.
+
+\paragraph{The clone started at $u$ with type $j$.} Define recursively, using only variables indexed by $uU$: $L_0^{u,j}=\{u\}$ with type $\tau(u)=j$; if $v\in L_m^{u,j}$ has type $\tau(v)$, outcome $o=O_v^{(\tau(v))}$ and $D_{\tau(v)}(o)=(d_1,\dots,d_\ell)$, then $v1,\dots,v\ell\in L_{m+1}^{u,j}$ with $\tau(vi)=d_i$. Let $Z_m^{u,j}\in\mathbb N^2$ count the A and B cells of $L_m^{u,j}$. The process of the theorem is $Z_n:=Z_n^{\emptyset,k}$ and $F_{n,k}(x,y)=\E\big[x^{Z^{\emptyset,k}_{n,A}}y^{Z^{\emptyset,k}_{n,B}}\big]$. Every $L_m^{u,j}$ is finite and each step uses finitely many variables, so all these objects are measurable.
+
+\begin{lemmaA}
+For every $u\in U$, type $j$ and $m\ge0$, $Z_m^{u,j}$ has the same law as $Z_m^{\emptyset,j}$; in particular its pgf is $F_{m,j}$.
+\end{lemmaA}
+\begin{proof}
+By construction $Z_m^{u,j}=\Phi_{m,j}\big((O^{(i)}_{uw})_{w\in U,i}\big)$ and $Z_m^{\emptyset,j}=\Phi_{m,j}\big((O^{(i)}_w)_{w\in U,i}\big)$ for the \emph{same} measurable map $\Phi_{m,j}$, because the recursion refers only to the relative word $w$, not to the prefix $u$. The family $(O^{(i)}_{uw})_{w,i}$ is i.i.d.\ with the same marginals as $(O^{(i)}_w)_{w,i}$, so the two families have the same joint law, and so do their images under $\Phi_{m,j}$.
+\end{proof}
+
+\begin{lemmaB}
+Let $V_1,\dots,V_r\subset U$ be pairwise disjoint and let $X_i$ be a measurable function of $\{O^{(j)}_v:v\in V_i,\ j\in\{A,B\}\}$. Then $X_1,\dots,X_r$ are independent.
+\end{lemmaB}
+\begin{proof}
+Grouping property of independence: functions of disjoint subfamilies of a mutually independent family are mutually independent (e.g.\ Williams [28], Ch.~4).
+\end{proof}
+\noindent Two disjointness facts are used below: (i) if $u\ne u'$ and neither is a prefix of the other (e.g.\ the daughters $1$ and $2$), then $uU\cap u'U=\emptyset$; (ii) the sets $\{v:|v|\le n-2\}$ and $\{v:|v|=n-1\}$ are disjoint.
+
 \subsection{The recursion}
 Write $F_n=(F_{n,A},F_{n,B})$ with $F_{n,k}$ the pgf of $Z_n$ started from one type-$k$ cell, and $f=(f_A,f_B)$.
 \begin{theorem}[Composition]\label{thm:gwcomp}
@@ -186,8 +214,68 @@ F_n=f\circ F_{n-1}=F_{n-1}\circ f\qquad(\text{so }F_n=f^{\circ n}).
 \]
 \end{theorem}
 \begin{proof}
-\emph{First-step decomposition:} the founder's daughters $Z_1$ have pgf $f_k$; each daughter of type $j$ independently starts a clone whose generation-$(n-1)$ content has pgf $F_{n-1,j}$. Lemma~\ref{lem:sums}(b) with $N=Z_1$, $H=F_{n-1}$ gives $F_{n,k}=f_k\circ F_{n-1}$. \emph{Last-step decomposition:} each cell of $Z_{n-1}$ independently produces offspring with pgf $f$; Lemma~\ref{lem:sums}(b) with $N=Z_{n-1}$, $H=f$ gives $F_{n,k}=F_{n-1,k}\circ f$.
+Fix $n\ge1$, a founder type $k$ and $(x,y)\in\bar{\mathbb D}^2$, and put $Z:=x^{Z_{n,A}}y^{Z_{n,B}}$; $|Z|\le1$ by (F1).
+
+\medskip\noindent\textbf{(I) First-step decomposition: $F_{n,k}=f_k(F_{n-1,A},F_{n-1,B})$.}
+
+\emph{Step 1 (partition by the founder's outcome).} The events $E_o:=\{O_\emptyset^{(k)}=o\}$, over the finitely many outcomes $o$, partition $\Omega$, so $\E[Z]=\sum_o\E[Z\mathbf 1_{E_o}]$ (a finite sum).
+
+\emph{Step 2 (on $E_o$ the clone is a fixed sum of subclones).} On $E_o$ the founder's daughters are the words $1,\dots,\ell$ with $\ell=\ell_k(o)$ and types $(d_1,\dots,d_\ell)=D_k(o)$. By the recursive definition every cell of generation $n$ descends from exactly one daughter $i$, so $L_n^{\emptyset,k}$ is the disjoint union of the $L_{n-1}^{i,d_i}$ and
+\[
+Z_n=\sum_{i=1}^{\ell}Z^{i,d_i}_{n-1},\qquad
+Z\,\mathbf 1_{E_o}=\mathbf 1_{E_o}\prod_{i=1}^{\ell}x^{Z^{i,d_i}_{n-1,A}}y^{Z^{i,d_i}_{n-1,B}}\quad(\text{using }s^{a+b}=s^as^b).
+\]
+
+\emph{Step 3 (independence).} $\mathbf 1_{E_o}$ is a function of the variables at $\{\emptyset\}$; the $i$-th factor is a function of the variables at $iU$. The sets $\{\emptyset\},1U,2U$ are pairwise disjoint, so by Lemma~B and (F2)
+\[
+\E[Z\mathbf 1_{E_o}]=\Prob(E_o)\prod_{i=1}^{\ell}\E\Big[x^{Z^{i,d_i}_{n-1,A}}y^{Z^{i,d_i}_{n-1,B}}\Big].
+\]
+
+\emph{Step 4 (identify the factors).} By Lemma~A the $i$-th expectation is $F_{n-1,d_i}(x,y)$. Exactly $a_{ko}$ of the $d_i$ equal A and $b_{ko}$ equal B, and $\Prob(E_o)=\pi_{k,o}$, so
+\[
+\E[Z\mathbf 1_{E_o}]=\pi_{k,o}\,F_{n-1,A}(x,y)^{a_{ko}}F_{n-1,B}(x,y)^{b_{ko}} .
+\]
+For death ($\ell=0$), $Z_n=0$, so $Z=1$ on $E_o$, and the right side is $\pi_{k,o}$ times an empty product: the formula holds as well.
+
+\emph{Step 5 (assemble).} Summing over $o$ and using the definition of $f_k$,
+\[
+F_{n,k}(x,y)=\sum_o\pi_{k,o}F_{n-1,A}^{a_{ko}}F_{n-1,B}^{b_{ko}}=f_k\big(F_{n-1,A}(x,y),F_{n-1,B}(x,y)\big),
+\]
+where $(F_{n-1,A},F_{n-1,B})(x,y)\in\bar{\mathbb D}^2$ by (F1).
+
+\medskip\noindent\textbf{(II) Last-step decomposition: $F_{n,k}=F_{n-1,k}(f_A,f_B)$.}
+
+\emph{Step 1 (partition by the generation-$(n-1)$ configuration).} Let $C$ be the set $L_{n-1}^{\emptyset,k}$ together with the type of each of its cells. $C$ takes values in the countable set of finite type-labelled subsets of $\{1,2\}^{n-1}$, so the events $\{C=c\}$ partition $\Omega$, and by dominated convergence ($|Z|\le1$)
+\[
+\E[Z]=\sum_c\E\big[Z\mathbf 1_{\{C=c\}}\big].
+\]
+
+\emph{Step 2 (on $\{C=c\}$ the last generation is a fixed sum).} On $\{C=c\}$ each $u\in c$ has a type $\tau(u)$ fixed by $c$, and its daughters are counted by $\xi_u:=\big(a_{\tau(u),O_u},\,b_{\tau(u),O_u}\big)$ with $O_u=O^{(\tau(u))}_u$. Hence $Z_n=\sum_{u\in c}\xi_u$ and
+\[
+Z\,\mathbf 1_{\{C=c\}}=\mathbf 1_{\{C=c\}}\prod_{u\in c}x^{\xi_{u,A}}y^{\xi_{u,B}} .
+\]
+
+\emph{Step 3 (independence).} $\{C=c\}$ depends only on outcomes at words of length $\le n-2$ (generation $n-1$ is built from its ancestors' outcomes); the factor for $u$ depends only on the outcomes at $u$, of length $n-1$. These word sets are pairwise disjoint, so by Lemma~B and (F2)
+\[
+\E\big[Z\mathbf 1_{\{C=c\}}\big]=\Prob(C=c)\prod_{u\in c}\E\big[x^{\xi_{u,A}}y^{\xi_{u,B}}\big].
+\]
+
+\emph{Step 4 (identify the factors).} For $u\in c$ of type $j$, $O^{(j)}_u\sim\pi_j$, so $\E[x^{\xi_{u,A}}y^{\xi_{u,B}}]=\sum_o\pi_{j,o}x^{a_{jo}}y^{b_{jo}}=f_j(x,y)$. If $c$ has $\alpha$ cells of type A and $\beta$ of type B,
+\[
+\E\big[Z\mathbf 1_{\{C=c\}}\big]=\Prob(C=c)\,f_A(x,y)^\alpha f_B(x,y)^\beta .
+\]
+
+\emph{Step 5 (assemble).} Grouping the configurations by their counts $(\alpha,\beta)=Z_{n-1}$,
+\[
+F_{n,k}(x,y)=\sum_{\alpha,\beta\ge0}\Prob\big(Z_{n-1}=(\alpha,\beta)\big)f_A^\alpha f_B^\beta=F_{n-1,k}\big(f_A(x,y),f_B(x,y)\big),
+\]
+the series converging absolutely since $|f_A|,|f_B|\le1$ by (F1).
+
+\medskip\noindent\textbf{(III) Conclusion.} $Z_0=e_k$, so $F_0=\mathrm{id}$. By (I) and induction, $F_n=f\circ F_{n-1}=f^{\circ n}$; by (II), $F_n=F_{n-1}\circ f=f^{\circ(n-1)}\circ f=f^{\circ n}$ as well (composition is associative). So the two forms agree, and iterating $(u,v)\leftarrow(f_A(u,v),f_B(u,v))$ $n$ times from $(x,y)$ computes $F_{n,k}(x,y)$ exactly.
 \end{proof}
+
+\paragraph{Remark (relation to Lemma~\ref{lem:sums}).}
+(I) is Lemma~\ref{lem:sums}(b) with $N=Z_1$ and (II) with $N=Z_{n-1}$, $H=f$. They are proved directly because the subclones are indexed by daughter \emph{position} (or by word) rather than as ``the $l$-th A daughter'' of Lemma~\ref{lem:sums}; the partition is then over outcomes or configurations instead of over values of $N$, and the steps are otherwise identical to the proof of Lemma~\ref{lem:sums}. Lemmas~A and~B are the branching property; everything else is (F1), (F2) and $s^{a+b}=s^as^b$.
 
 \begin{corollary}[Degree bound]\label{cor:degree}
 With at most two daughters per event, $F_{n,k}$ is a polynomial of total degree $\le2^n$; in particular $Z_{n,A},Z_{n,B}\le2^n$.
@@ -506,6 +594,7 @@ Every implementation in this project was checked against all of these; reuse the
 \item[{[25]}] M.\,D.\ Hoffman and A.\ Gelman, ``The No-U-Turn sampler: adaptively setting path lengths in Hamiltonian Monte Carlo'', \emph{J.\ Mach.\ Learn.\ Res.}\ 15 (2014) 1593--1623.
 \item[{[26]}] A.\ Vehtari, A.\ Gelman, D.\ Simpson, B.\ Carpenter and P.-C.\ B\"urkner, ``Rank-normalization, folding, and localization: an improved $\hat R$ for assessing convergence of MCMC'', \emph{Bayesian Analysis} 16 (2021) 667--718.
 \item[{[27]}] S.\ Talts, M.\ Betancourt, D.\ Simpson, A.\ Vehtari and A.\ Gelman, ``Validating Bayesian inference algorithms with simulation-based calibration'', arXiv:1804.06788, 2018.
+\item[{[28]}] D.\ Williams, \emph{Probability with Martingales}, Cambridge University Press, 1991. Ch.~4: independence, including functions of disjoint subfamilies of independent families.
 \end{enumerate}
 
 \end{document}
