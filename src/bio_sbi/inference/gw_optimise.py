@@ -429,6 +429,7 @@ def sgd(obj: PointObjective, x0: np.ndarray, s: dict, rng: np.random.Generator |
 
         def to_x(z):
             return z
+
     batch = s.get("sgd_batch")
     if batch is not None and not 0.0 < float(batch) <= 1.0:
         raise ValueError(f"sgd_batch must be None or a fraction in (0, 1]; got {batch!r}")
@@ -780,9 +781,12 @@ def _sgd_candidates(obj, s, seed, key, workers, out) -> list[dict]:
         ref = refs.get(i)
         c = _describe(obj, X[i] if ref is None else ref["x"], s["near_tol"])
         gap = np.minimum(X[i] - obj.lower, obj.upper - X[i])
-        c.update(source=f"sgd{i}", start_value=float(r["best_value"]),
-                 sgd_min_stick_gap=float(gap.min()) if len(gap) else None,
-                 refinement=None if ref is None else {k: v for k, v in ref.items() if k != "x"})
+        c.update(
+            source=f"sgd{i}",
+            start_value=float(r["best_value"]),
+            sgd_min_stick_gap=float(gap.min()) if len(gap) else None,
+            refinement=None if ref is None else {k: v for k, v in ref.items() if k != "x"},
+        )
         candidates.append(c)
     return candidates
 
