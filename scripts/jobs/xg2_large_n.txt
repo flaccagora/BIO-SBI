@@ -1,0 +1,27 @@
+# XG2 extension: locate the n at which B's row converges (truths whose B row had not
+# converged at n = 1024). Datasets stay nested (first 1024 clones = the XG2 datasets).
+# n = 4096 first (if converged there, 2048 brackets it).
+T1_ref 4096 0
+T3_Bdiv 4096 0
+T4_slowA 4096 0
+T2_toA05 4096 0
+T1_ref 4096 1
+T3_Bdiv 4096 1
+T4_slowA 4096 1
+T2_toA05 4096 1
+T1_ref 4096 2
+T3_Bdiv 4096 2
+T4_slowA 4096 2
+T2_toA05 4096 2
+T1_ref 2048 0
+T3_Bdiv 2048 0
+T4_slowA 2048 0
+T2_toA05 2048 0
+T1_ref 2048 1
+T3_Bdiv 2048 1
+T4_slowA 2048 1
+T2_toA05 2048 1
+T1_ref 2048 2
+T3_Bdiv 2048 2
+T4_slowA 2048 2
+T2_toA05 2048 2

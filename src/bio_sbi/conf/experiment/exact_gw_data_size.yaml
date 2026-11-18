@@ -81,6 +81,8 @@ priors:
   central:     # symmetric Dirichlet(5): pulls every row towards 1/6 each
     A: {death: 5, persist: 5, to_B: 5, div_AA: 5, div_AB: 5, div_BB: 5}
     B: {death: 5, persist: 5, to_A: 5, div_AA: 5, div_AB: 5, div_BB: 5}
+  flat_btoa:   # B->A marginal Uniform(0,1): B row Dirichlet(to_A 1, other outcomes 0.2);
+    B: {death: 0.2, persist: 0.2, to_A: 1, div_AA: 0.2, div_AB: 0.2, div_BB: 0.2}  # A row flat
   wrong:       # concentrated (total 20) on a wrong biology: A rarely self-renews,
     A: {death: 2, persist: 2, to_B: 2, div_AA: 6, div_AB: 4, div_BB: 4}   # B dies / divides
     B: {death: 6, persist: 4, to_A: 4, div_AA: 2, div_AB: 2, div_BB: 2}   # (B.to_A mean 0.2)
