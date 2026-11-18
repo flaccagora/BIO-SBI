@@ -117,7 +117,7 @@ G_S(x,y):=\E\big[x^{S_A}y^{S_B}\big]=G_N\big(H_A(x,y),\,H_B(x,y)\big).
 \begin{proof}
 Part (a) is the case $N\equiv(1,1)$, $Y^{(A)}_1=K$, $Y^{(B)}_1=K'$ of part (b), since then $G_N(u,v)=uv$ (equivalently: one application of (F2)). We prove (b).
 
-Fix $(x,y)\in\bar{\mathbb D}^2$ and put $Z:=x^{S_A}y^{S_B}$; by (F1), $|Z|\le1$.
+Fix $(x,y)\in\bar{\mathbb D}^2$ and put $\Xi:=x^{S_A}y^{S_B}$, a complex-valued random variable (a function of the random vector $S$ at the fixed point $(x,y)$, not to be confused with $S$ itself), so that $G_S(x,y)=\E[\Xi]$; by (F1), $|\Xi|\le1$.
 
 \emph{Step 0 (the right-hand side is well defined).} By (F1), $|H_A(x,y)|\le1$ and $|H_B(x,y)|\le1$. Hence every term of $\sum_{i,j\ge0}\Prob(N=(i,j))\,H_A^iH_B^j$ has modulus $\le\Prob(N=(i,j))$, and these sum to 1; the series converges absolutely and equals $G_N(H_A(x,y),H_B(x,y))$ by definition of $G_N$.
 
@@ -127,14 +127,14 @@ T_{ij}:=\sum_{l=1}^{i}Y^{(A)}_l+\sum_{l=1}^{j}Y^{(B)}_l ,
 \]
 a finite sum of random vectors, hence measurable. The events $E_{ij}:=\{N=(i,j)\}$ are measurable, pairwise disjoint and $\bigcup_{i,j}E_{ij}=\Omega$. Pointwise, $S=\sum_{i,j}T_{ij}\mathbf 1_{E_{ij}}$ (exactly one term is non-zero at each $\omega$), so $S$ is measurable.
 
-\emph{Step 2 (split the expectation over the values of $N$).} Since the $E_{ij}$ partition $\Omega$, $Z=\sum_{i,j}Z\,\mathbf 1_{E_{ij}}$ pointwise, and every partial sum has modulus $\le|Z|\le1$. By dominated convergence (applied to real and imaginary parts),
+\emph{Step 2 (split the expectation over the values of $N$).} Since the $E_{ij}$ partition $\Omega$, $\Xi=\sum_{i,j}\Xi\,\mathbf 1_{E_{ij}}$ pointwise, and every partial sum has modulus $\le|\Xi|\le1$. By dominated convergence (applied to real and imaginary parts),
 \begin{equation}\label{eq:split}
-\E[Z]=\sum_{i,j\ge0}\E\big[Z\,\mathbf 1_{E_{ij}}\big].
+\E[\Xi]=\sum_{i,j\ge0}\E\big[\Xi\,\mathbf 1_{E_{ij}}\big].
 \end{equation}
 
 \emph{Step 3 (on $E_{ij}$, replace $S$ by $T_{ij}$).} On $E_{ij}$, $N_A=i$ and $N_B=j$, so $S=T_{ij}$ there. Hence, pointwise,
 \begin{equation}\label{eq:replace}
-Z\,\mathbf 1_{E_{ij}}=x^{T_{ij,A}}y^{T_{ij,B}}\,\mathbf 1_{E_{ij}} .
+\Xi\,\mathbf 1_{E_{ij}}=x^{T_{ij,A}}y^{T_{ij,B}}\,\mathbf 1_{E_{ij}} .
 \end{equation}
 
 \emph{Step 4 (separate the sum from the event).} $x^{T_{ij,A}}y^{T_{ij,B}}$ is a function of $(Y^{(A)}_1,\dots,Y^{(A)}_i,Y^{(B)}_1,\dots,Y^{(B)}_j)$ and $\mathbf 1_{E_{ij}}$ is a function of $N$. By \eqref{eq:indep} the two are independent, and both are bounded. By (F2) with $m=2$,
@@ -154,7 +154,7 @@ For $i=j=0$, $T_{00}=0$ and both sides equal 1 (empty product), so \eqref{eq:pro
 
 \emph{Step 6 (assemble).} Substituting \eqref{eq:replace}, \eqref{eq:sep} and \eqref{eq:prod} into \eqref{eq:split},
 \[
-G_S(x,y)=\E[Z]=\sum_{i,j\ge0}\Prob(N=(i,j))\,H_A(x,y)^iH_B(x,y)^j=G_N\big(H_A(x,y),H_B(x,y)\big),
+G_S(x,y)=\E[\Xi]=\sum_{i,j\ge0}\Prob(N=(i,j))\,H_A(x,y)^iH_B(x,y)^j=G_N\big(H_A(x,y),H_B(x,y)\big),
 \]
 the last equality by Step 0.
 \end{proof}
@@ -222,28 +222,28 @@ F_n=f\circ F_{n-1}=F_{n-1}\circ f\qquad(\text{so }F_n=f^{\circ n}).
 \]
 \end{theorem}
 \begin{proof}
-Fix $n\ge1$, a founder type $k$ and $(x,y)\in\bar{\mathbb D}^2$, and put $Z:=x^{Z^{(k)}_{n,A}}y^{Z^{(k)}_{n,B}}$; $|Z|\le1$ by (F1).
+Fix $n\ge1$, a founder type $k$ and $(x,y)\in\bar{\mathbb D}^2$, and put $\Xi:=x^{Z^{(k)}_{n,A}}y^{Z^{(k)}_{n,B}}$; $|\Xi|\le1$ by (F1).
 
 \medskip\noindent\textbf{(I) First-step decomposition: $F_{n,k}=f_k(F_{n-1,A},F_{n-1,B})$.}
 
-\emph{Step 1 (partition by the founder's outcome).} The events $E_o:=\{O_\emptyset^{(k)}=o\}$, over the finitely many outcomes $o$, partition $\Omega$, so $\E[Z]=\sum_o\E[Z\mathbf 1_{E_o}]$ (a finite sum).
+\emph{Step 1 (partition by the founder's outcome).} The events $E_o:=\{O_\emptyset^{(k)}=o\}$, over the finitely many outcomes $o$, partition $\Omega$, so $\E[\Xi]=\sum_o\E[\Xi\mathbf 1_{E_o}]$ (a finite sum).
 
 \emph{Step 2 (on $E_o$ the clone is a fixed sum of subclones).} On $E_o$ the founder's daughters are the words $1,\dots,\ell$ with $\ell=\ell_k(o)$ and types $(d_1,\dots,d_\ell)=D_k(o)$. By the recursive definition every cell of generation $n$ descends from exactly one daughter $i$, so $L_n^{\emptyset,k}$ is the disjoint union of the $L_{n-1}^{i,d_i}$ and
 \[
 Z^{(k)}_n=\sum_{i=1}^{\ell}Z^{i,d_i}_{n-1},\qquad
-Z\,\mathbf 1_{E_o}=\mathbf 1_{E_o}\prod_{i=1}^{\ell}x^{Z^{i,d_i}_{n-1,A}}y^{Z^{i,d_i}_{n-1,B}}\quad(\text{using }s^{a+b}=s^as^b).
+\Xi\,\mathbf 1_{E_o}=\mathbf 1_{E_o}\prod_{i=1}^{\ell}x^{Z^{i,d_i}_{n-1,A}}y^{Z^{i,d_i}_{n-1,B}}\quad(\text{using }s^{a+b}=s^as^b).
 \]
 
 \emph{Step 3 (independence).} $\mathbf 1_{E_o}$ is a function of the variables at $\{\emptyset\}$; the $i$-th factor is a function of the variables at $iU$. The sets $\{\emptyset\},1U,2U$ are pairwise disjoint, so by Lemma~B and (F2)
 \[
-\E[Z\mathbf 1_{E_o}]=\Prob(E_o)\prod_{i=1}^{\ell}\E\Big[x^{Z^{i,d_i}_{n-1,A}}y^{Z^{i,d_i}_{n-1,B}}\Big].
+\E[\Xi\mathbf 1_{E_o}]=\Prob(E_o)\prod_{i=1}^{\ell}\E\Big[x^{Z^{i,d_i}_{n-1,A}}y^{Z^{i,d_i}_{n-1,B}}\Big].
 \]
 
 \emph{Step 4 (identify the factors).} By Lemma~A the $i$-th expectation is $F_{n-1,d_i}(x,y)$. Exactly $a_{ko}$ of the $d_i$ equal A and $b_{ko}$ equal B, and $\Prob(E_o)=\pi_{k,o}$, so
 \[
-\E[Z\mathbf 1_{E_o}]=\pi_{k,o}\,F_{n-1,A}(x,y)^{a_{ko}}F_{n-1,B}(x,y)^{b_{ko}} .
+\E[\Xi\mathbf 1_{E_o}]=\pi_{k,o}\,F_{n-1,A}(x,y)^{a_{ko}}F_{n-1,B}(x,y)^{b_{ko}} .
 \]
-For death ($\ell=0$), $Z^{(k)}_n=0$, so $Z=1$ on $E_o$, and the right side is $\pi_{k,o}$ times an empty product: the formula holds as well.
+For death ($\ell=0$), $Z^{(k)}_n=0$, so $\Xi=1$ on $E_o$, and the right side is $\pi_{k,o}$ times an empty product: the formula holds as well.
 
 \emph{Step 5 (assemble).} Summing over $o$ and using the definition of $f_k$,
 \[
@@ -253,24 +253,24 @@ where $(F_{n-1,A},F_{n-1,B})(x,y)\in\bar{\mathbb D}^2$ by (F1).
 
 \medskip\noindent\textbf{(II) Last-step decomposition: $F_{n,k}=F_{n-1,k}(f_A,f_B)$.}
 
-\emph{Step 1 (partition by the generation-$(n-1)$ configuration).} Let $C$ be the set $L_{n-1}^{\emptyset,k}$ together with the type of each of its cells. $C$ takes values in the countable set of finite type-labelled subsets of $\{1,2\}^{n-1}$, so the events $\{C=c\}$ partition $\Omega$, and by dominated convergence ($|Z|\le1$)
+\emph{Step 1 (partition by the generation-$(n-1)$ configuration).} Let $C$ be the set $L_{n-1}^{\emptyset,k}$ together with the type of each of its cells. $C$ takes values in the countable set of finite type-labelled subsets of $\{1,2\}^{n-1}$, so the events $\{C=c\}$ partition $\Omega$, and by dominated convergence ($|\Xi|\le1$)
 \[
-\E[Z]=\sum_c\E\big[Z\mathbf 1_{\{C=c\}}\big].
+\E[\Xi]=\sum_c\E\big[\Xi\mathbf 1_{\{C=c\}}\big].
 \]
 
 \emph{Step 2 (on $\{C=c\}$ the last generation is a fixed sum).} On $\{C=c\}$ each $u\in c$ has a type $\tau(u)$ fixed by $c$, and its daughters are counted by $\xi_u:=\big(a_{\tau(u),O_u},\,b_{\tau(u),O_u}\big)$ with $O_u=O^{(\tau(u))}_u$. Hence $Z^{(k)}_n=\sum_{u\in c}\xi_u$ and
 \[
-Z\,\mathbf 1_{\{C=c\}}=\mathbf 1_{\{C=c\}}\prod_{u\in c}x^{\xi_{u,A}}y^{\xi_{u,B}} .
+\Xi\,\mathbf 1_{\{C=c\}}=\mathbf 1_{\{C=c\}}\prod_{u\in c}x^{\xi_{u,A}}y^{\xi_{u,B}} .
 \]
 
 \emph{Step 3 (independence).} $\{C=c\}$ depends only on outcomes at words of length $\le n-2$ (generation $n-1$ is built from its ancestors' outcomes); the factor for $u$ depends only on the outcomes at $u$, of length $n-1$. These word sets are pairwise disjoint, so by Lemma~B and (F2)
 \[
-\E\big[Z\mathbf 1_{\{C=c\}}\big]=\Prob(C=c)\prod_{u\in c}\E\big[x^{\xi_{u,A}}y^{\xi_{u,B}}\big].
+\E\big[\Xi\mathbf 1_{\{C=c\}}\big]=\Prob(C=c)\prod_{u\in c}\E\big[x^{\xi_{u,A}}y^{\xi_{u,B}}\big].
 \]
 
 \emph{Step 4 (identify the factors).} For $u\in c$ of type $j$, $O^{(j)}_u\sim\pi_j$, so $\E[x^{\xi_{u,A}}y^{\xi_{u,B}}]=\sum_o\pi_{j,o}x^{a_{jo}}y^{b_{jo}}=f_j(x,y)$. If $c$ has $\alpha$ cells of type A and $\beta$ of type B,
 \[
-\E\big[Z\mathbf 1_{\{C=c\}}\big]=\Prob(C=c)\,f_A(x,y)^\alpha f_B(x,y)^\beta .
+\E\big[\Xi\mathbf 1_{\{C=c\}}\big]=\Prob(C=c)\,f_A(x,y)^\alpha f_B(x,y)^\beta .
 \]
 
 \emph{Step 5 (assemble).} Grouping the configurations by their counts $(\alpha,\beta)=Z^{(k)}_{n-1}$,
