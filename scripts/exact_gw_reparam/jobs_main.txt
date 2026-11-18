@@ -2,6 +2,7 @@ T1_n1024_s0 probit
 T1_n1024_s0 branchev --smc chains=256 steps=12 ess_fraction=0.9 reps=4 tag=_big final_steps=24
 T1_n1024_s0 branchis
 T1_n1024_s0 brow
+T1_n1024_s0 smc+brow+probit --smc chains=256 steps=12 ess_fraction=0.9 max_evals=400000
 P3_n1024_s0 baseline
 P3_n1024_s0 brow+probit
 P3_n1024_s0 probit

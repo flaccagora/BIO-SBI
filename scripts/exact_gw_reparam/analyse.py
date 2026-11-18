@@ -185,6 +185,73 @@ def main() -> None:
         print(ag.round(3).to_string(index=False))
         ag.to_csv(a.out / "agreement.csv", index=False)
     df.to_csv(a.out / "runs.csv", index=False)
+    t1 = a.out / "T1_n1024_s0"
+    if t1.exists():
+        branch_report(t1)
+
+
+def branch_report(cell_dir: Path) -> None:
+    """Branch masses (per-branch SMC evidence, IS) and a branch-stratified posterior."""
+    print("\n=== T1 branch masses (B.to_A < %.2f)" % BRANCH)
+    for f in sorted(cell_dir.glob("branch_evidence*/summary.json")):
+        s = json.loads(f.read_text())
+        print(f"{f.parent.name}: chains {s['settings']['chains']} x steps "
+              f"{s['settings']['steps']}, ess_fraction {s['settings']['ess_fraction']}: "
+              f"log Z low {np.round(s['log_evidence_low'], 2).tolist()}, high "
+              f"{np.round(s['log_evidence_high'], 2).tolist()}; mass low per rep "
+              f"{np.round(s['mass_low_per_rep'], 3).tolist()}, pooled "
+              f"{s['mass_low_pooled']:.3f}")  # fmt: skip
+    f = cell_dir / "branch_is" / "summary.json"
+    if f.exists():
+        s = json.loads(f.read_text())
+        for r in s["rows"]:
+            print(f"IS {r['branch']} rep {r['rep']}: log Z {r['log_z']:.2f}, Pareto k "
+                  f"{r['pareto_k']:.2f}, ESS {r['ess']:.0f}")  # fmt: skip
+        print(f"IS mass low pooled {s['mass_low_pooled']:.3f}")
+    big = cell_dir / "branch_evidence_big"
+    if not (big / "summary.json").exists():
+        return
+    s = json.loads((big / "summary.json").read_text())
+    m = s["mass_low_pooled"]
+    z = np.load(big / "populations.npz")
+    names = [str(n) for n in z["names"]]
+    j = names.index("B.to_A")
+    low = np.concatenate([z[k] for k in z.files if k.startswith("low")])
+    high_smc = np.concatenate([z[k] for k in z.files if k.startswith("high")])
+    # stratified: high branch from the SMC populations, low branch likewise, mass m
+    keys = ["B.death", "B.persist", "B.to_A", "B.div_AA", "B.div_AB", "B.div_BB",
+            "A.div_AA", "A.div_AB", "A.div_BB", "A.to_B"]  # fmt: skip
+    idx = [names.index(k) for k in keys]
+
+    def moments(x, w=None):
+        w = np.ones(len(x)) / len(x) if w is None else w / w.sum()
+        mu = w @ x
+        return mu, np.sqrt(w @ (x - mu) ** 2)
+
+    w = np.concatenate(
+        [np.full(len(low), m / len(low)), np.full(len(high_smc), (1 - m) / len(high_smc))]
+    )
+    strat_mu, strat_sd = moments(np.concatenate([low, high_smc])[:, idx], w)
+    rows = [{"source": f"stratified SMC (mass low {m:.2f})",
+             **{k: f"{a:.3f}+-{b:.3f}" for k, a, b in zip(keys, strat_mu, strat_sd,
+                                                         strict=True)}}]  # fmt: skip
+    for k_name, x in (("SMC low branch", low), ("SMC high branch", high_smc)):
+        mu, sd = moments(x[:, idx])
+        rows.append({"source": k_name, **{k: f"{a:.3f}+-{b:.3f}" for k, a, b in
+                                          zip(keys, mu, sd, strict=True)}})  # fmt: skip
+    for d in sorted(cell_dir.iterdir()):
+        r = load_run(d)
+        if r is None or r["diag"].get("sampler") == "smc":
+            continue
+        x = r["phys"].reshape(-1, len(names))
+        mu, sd = moments(x[:, idx])
+        rows.append(
+            {
+                "source": f"{d.name} (low {np.mean(x[:, j] < BRANCH):.2f})",
+                **{k: f"{a:.3f}+-{b:.3f}" for k, a, b in zip(keys, mu, sd, strict=True)},
+            }
+        )
+    print(pd.DataFrame(rows).to_string(index=False))
 
 
 def smc_low_share(r: dict) -> float:
