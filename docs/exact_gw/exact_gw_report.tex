@@ -1,0 +1,589 @@
+\documentclass[11pt]{article}
+\usepackage[a4paper,margin=2.3cm]{geometry}
+\usepackage{amsmath,mathtools,amssymb,amsthm,booktabs,microtype,xcolor}
+\usepackage{float}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage[colorlinks,linkcolor=blue!50!black,citecolor=blue!50!black,urlcolor=blue!50!black]{hyperref}
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{corollary}[theorem]{Corollary}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{example}[theorem]{Example}
+\newtheorem{assumption}[theorem]{Assumption}
+\theoremstyle{remark}
+\newtheorem{remark}[theorem]{Remark}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\Prob}{\mathbb{P}}
+\newcommand{\N}{\mathbb{N}}
+\newcommand{\C}{\mathbb{C}}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\Dbar}{\bar{\mathbb D}^2}
+\newcommand{\one}{\mathbf 1}
+\newcommand{\code}[1]{\texttt{\detokenize{#1}}}
+\DeclareMathOperator{\logit}{logit}
+\DeclareMathOperator{\expit}{expit}
+\DeclareMathOperator{\Var}{Var}
+\DeclareMathOperator{\KL}{KL}
+
+\title{Exact likelihood inference for two-type Galton--Watson clone counts:\\ theory, algorithms and validation}
+\author{BIO-SBI project}
+\date{18 November 2026}
+
+\begin{document}
+\sloppy\emergencystretch=3em
+\maketitle
+
+\begin{abstract}
+Organoid experiments measure, at a few endpoints, the numbers of stem-like (A) and differentiated (B) cells in each clone grown from a single cell. A two-type Galton--Watson (GW) branching process with six outcomes per cell type is the simplest mechanistic model of such data. Its likelihood is usually considered intractable and the model is fitted by simulation-based inference (SBI). We show that the likelihood of endpoint counts is available \emph{exactly}, together with its gradient, at a cost of milliseconds per evaluation, and we sample the exact posterior with the No-U-Turn Sampler (NUTS). The method rests on four results, all proved here: (i) the probability generating function (pgf) of a clone is the $n$-fold composition of the offspring pgfs, which can be evaluated at any complex point by $n$ cheap iterations; (ii) the coefficients of a pgf are recovered from its values at roots of unity by a discrete Fourier transform, with an explicit aliasing formula that controls truncation and damping; (iii) derivatives commute with this transform and propagate through the iteration in forward mode; (iv) observation errors and detection-conditioning enter by substitution and complement recursions. We give the full Bayesian construction (stick-breaking Dirichlet prior in logit coordinates), the theory of Hamiltonian Monte Carlo and NUTS as implemented (multinomial NUTS with generalised U-turn criterion, dual-averaging step size and windowed dense mass-matrix adaptation, Laplace-initialised chains), pseudo-code, costs and a validation protocol. On the same synthetic datasets as neural posterior estimation (NPE), exact inference agrees with NPE where the data are weak and recovers the switching probability B$\to$A $=0.778\pm0.020$ (truth 0.8) at 4096 clones per endpoint, where NPE returned 0.27--0.34.
+\end{abstract}
+
+\tableofcontents
+
+%======================================================================
+\section{Introduction}\label{sec:intro}
+\paragraph{Problem.} Each organoid in a well is a clone grown from one founder cell. At an endpoint (here: a number of generations $n$) the experiment records, for every detected clone, the numbers $(a,b)$ of A and B cells. Clones are measured once (destructively) and independently. We want the posterior of the cell-fate probabilities given these counts.
+
+\paragraph{Why not simulation-based inference alone.} The model is easy to simulate, and the project's main pipeline uses NPE on summary statistics. NPE's accuracy cannot be judged without a reference; in particular, when the posterior is very narrow or lies in a region the training simulations rarely visit, NPE can be confidently wrong. An exact likelihood gives (a) a gold-standard posterior to validate NPE, (b) exact Fisher information for identifiability and design questions, and (c) an inference method in its own right for GW models.
+
+\paragraph{Contributions.}
+\begin{enumerate}
+\item A self-contained derivation, with proofs, of the exact law of a two-type GW clone at an endpoint via pgf composition and DFT inversion, including observation errors, founder mixtures and detection (\S\ref{sec:pgf}--\S\ref{sec:inversion}).
+\item Exact gradients by forward-mode differentiation through the pgf iteration and the DFT (\S\ref{sec:deriv}).
+\item A Bayesian formulation matching the NPE prior, and a complete account of NUTS as implemented, with the invariance arguments, adaptation, initialisation and diagnostics (\S\ref{sec:prior}--\S\ref{sec:mcmc}).
+\item Algorithms, implementation details, costs, a validation protocol and results (\S\ref{sec:algorithms}--\S\ref{sec:results}).
+\end{enumerate}
+
+\paragraph{Code.} \code{src/bio_sbi/inference/gw_exact.py} (law, derivatives, detection, likelihood), \code{exact_gw.py} (prior, posterior, initialisation, SBC), \code{nuts.py} (sampler and diagnostics), configuration \code{conf/inference/exact_gw.yaml}; analysis scripts in \code{scripts/b_row_theory/}. Usage: \code{bio-sbi inference=exact_gw law=reversible_ab design=real_like}.
+
+%======================================================================
+\section{Model and data}\label{sec:model}
+\subsection{Two-type Galton--Watson process}
+Types $k\in\{A,B\}$. In every generation each living cell undergoes exactly one event, an \emph{outcome} $o$ drawn from its type's probability row $\pi_k=(\pi_{k,o})_o$, independently of everything else, and is replaced by the outcome's daughters. With the six outcomes of the \code{two_type} law:
+\begin{center}\small
+\begin{tabular}{@{}lcccccc@{}}\toprule
+outcome & death & persist & switch & div\_AA & div\_AB & div\_BB\\\midrule
+A daughters $(a_{Ao},b_{Ao})$ & (0,0) & (1,0) & (0,1) & (2,0) & (1,1) & (0,2)\\
+B daughters $(a_{Bo},b_{Bo})$ & (0,0) & (0,1) & (1,0) & (2,0) & (1,1) & (0,2)\\\bottomrule
+\end{tabular}
+\end{center}
+(``switch'' is A$\to$B for A and B$\to$A for B.) The parameter is $\theta=(\pi_A,\pi_B)$, two points of the 5-simplex; the \code{reversible_ab} law fixes B's three divisions to 0. Throughout, the reference truth is
+\[
+\theta^\star:\quad\pi_A=(.03,.03,.05,.55,.05,.29),\qquad\pi_B=(.10,.10,.80,0,0,0).
+\]
+
+\subsection{Data}
+A design is a set of endpoints $n$ with $N_n$ clones each. Clone counts $z=(a,b)\in\N^2$ at endpoint $n$ are i.i.d.\ across clones and independent across endpoints. A clone is \emph{detected} if at least one cell is observed; only detected clones are recorded. Optionally each final cell of true type $k$ is captured with probability $c_k$ and, if captured, labelled $j$ with probability $C_{kj}$. The founder may be a mixture: $S$ founder cells ($\Prob(S=s)=\varpi_s$), each of type $k$ with probability $\varphi_k$. The default is one A founder, perfect capture and labels.
+
+\subsection{Notation}
+$\Dbar=\{(x,y)\in\C^2:|x|\le1,|y|\le1\}$ is the closed bidisk. $0^0:=1$, so $s^a$ is defined for all $s\in\C$, $a\in\N$, and $s^{a+b}=s^as^b$. $\omega_L=e^{2\pi i/L}$. For a pgf $G$ (\S\ref{sec:pgf}), $p_{ab}$ denotes its coefficients. Vectors of outcome probabilities are indexed $(k,o)$.
+
+%======================================================================
+\section{Probability generating functions}\label{sec:pgf}
+\begin{definition}
+The pgf of a random vector $K=(K_A,K_B)\in\N^2$ is $G_K(x,y)=\E[x^{K_A}y^{K_B}]=\sum_{a,b}\Prob(K=(a,b))x^ay^b$ for $(x,y)\in\Dbar$.
+\end{definition}
+
+\begin{lemma}[Auxiliary facts]\label{lem:aux}
+(F1) If $K\in\N^2$ and $(x,y)\in\Dbar$ then $|x^{K_A}y^{K_B}|\le1$; hence $G_K$ is well defined on $\Dbar$, the series converges absolutely there, and $|G_K|\le1$.
+(F2) If $W_1,\dots,W_m$ are independent bounded complex random variables then $\E[W_1\cdots W_m]=\E W_1\cdots\E W_m$.
+\end{lemma}
+\begin{proof}
+(F1) $|x|^{K_A}|y|^{K_B}\le1$ pointwise; bounded variables are integrable and $|\E W|\le\E|W|$. Absolute convergence: $\sum p_{ab}|x|^a|y|^b\le\sum p_{ab}=1$.
+(F2) For $m=2$ write $W_r=U_r+iV_r$ with real bounded parts; $W_1W_2=(U_1U_2-V_1V_2)+i(U_1V_2+V_1U_2)$, and each product is of two independent bounded real variables, whose expectation factorises; recombine by linearity. Induct on $m$, since $W_1\cdots W_{m-1}$ is a bounded function of $(W_1,\dots,W_{m-1})$, independent of $W_m$.
+\end{proof}
+
+\begin{proposition}[What a pgf encodes]\label{prop:pgfbasic}
+(1) $G_K(1,1)=1$ and $G_K(0,0)=\Prob(K=0)$. (2) $\Prob(K=(a,b))=\partial_x^a\partial_y^bG_K(0,0)/(a!\,b!)$; equal pgfs on an open subset of $\Dbar$ imply equal laws. (3) $\E K_A=\partial_xG_K(1,1)$, $\E[K_A(K_A-1)]=\partial_x^2G_K(1,1)$, $\E[K_AK_B]=\partial_x\partial_yG_K(1,1)$ when finite (one-sided derivatives at the boundary). (4) $G_{K_A}(x)=G_K(x,1)$. (5) Real coefficients give $G_K(\bar x,\bar y)=\overline{G_K(x,y)}$.
+\end{proposition}
+\begin{proof}
+Term-by-term operations on an absolutely convergent power series with non-negative coefficients (Abel's theorem for (3)); uniqueness in (2) by the identity theorem for power series.
+\end{proof}
+
+\begin{lemma}[Random sums]\label{lem:sums}
+Let $N\in\N^2$ have pgf $G_N$; for each type $k$ let $Y^{(k)}_1,Y^{(k)}_2,\dots\in\N^2$ have the law of $Y^{(k)}$ with pgf $H_k$, and assume
+\begin{equation}\label{eq:indep}
+\{N,\ Y^{(A)}_1,Y^{(A)}_2,\dots,\ Y^{(B)}_1,Y^{(B)}_2,\dots\}\ \text{are mutually independent.}
+\end{equation}
+Then $S=\sum_{l\le N_A}Y^{(A)}_l+\sum_{l\le N_B}Y^{(B)}_l$ has pgf $G_S(x,y)=G_N(H_A(x,y),H_B(x,y))$ on $\Dbar$. In particular (with $N\equiv(1,1)$) the pgf of a sum of two independent vectors is the product of their pgfs.
+\end{lemma}
+\begin{proof}
+Fix $(x,y)\in\Dbar$, $Z:=x^{S_A}y^{S_B}$, $|Z|\le1$. \emph{(0)} $|H_k|\le1$ by (F1), so $\sum_{i,j}\Prob(N=(i,j))H_A^iH_B^j$ converges absolutely to $G_N(H_A,H_B)$. \emph{(1)} For fixed $(i,j)$ let $T_{ij}=\sum_{l\le i}Y^{(A)}_l+\sum_{l\le j}Y^{(B)}_l$ (measurable); the events $E_{ij}=\{N=(i,j)\}$ partition $\Omega$ and $S=\sum_{ij}T_{ij}\one_{E_{ij}}$. \emph{(2)} By dominated convergence ($|Z|\le1$), $\E Z=\sum_{ij}\E[Z\one_{E_{ij}}]$. \emph{(3)} On $E_{ij}$, $Z=x^{T_{ij,A}}y^{T_{ij,B}}$. \emph{(4)} $x^{T_{ij,A}}y^{T_{ij,B}}$ is a function of the $Y$'s and $\one_{E_{ij}}$ of $N$; by \eqref{eq:indep} and (F2), $\E[Z\one_{E_{ij}}]=\E[x^{T_{ij,A}}y^{T_{ij,B}}]\Prob(E_{ij})$. \emph{(5)} $x^{T_{ij,A}}y^{T_{ij,B}}=\prod_{l\le i}x^{Y^{(A)}_{l,A}}y^{Y^{(A)}_{l,B}}\prod_{l\le j}x^{Y^{(B)}_{l,A}}y^{Y^{(B)}_{l,B}}$, a product of $i+j$ independent bounded factors, so by (F2) and identical distribution its expectation is $H_A^iH_B^j$ (also for $i=j=0$: both sides 1). \emph{(6)} Assemble: $\E Z=\sum_{ij}\Prob(N=(i,j))H_A^iH_B^j=G_N(H_A,H_B)$.
+\end{proof}
+
+\noindent The offspring pgfs are
+\[
+f_k(x,y)=\sum_o\pi_{k,o}\,x^{a_{ko}}y^{b_{ko}},\qquad f=(f_A,f_B),
+\]
+e.g.\ $f_A=\pi_{A,\mathrm{death}}+\pi_{A,\mathrm{persist}}x+\pi_{A,\mathrm{switch}}y+\pi_{A,AA}x^2+\pi_{A,AB}xy+\pi_{A,BB}y^2$. Their first derivatives at $(1,1)$ form the mean matrix $M_{kj}=\partial_jf_k(1,1)$ (expected type-$j$ daughters of a type-$k$ cell).
+
+%======================================================================
+\section{Construction and the composition theorem}\label{sec:composition}
+\subsection{Construction (Ulam--Harris)}
+Cells are labelled by finite words over $\{1,2\}$: $U=\bigcup_{n\ge0}\{1,2\}^n$, the founder is the empty word $\emptyset$, $u1,u2$ are the daughters of $u$, $|u|$ is the generation, and $uU$ is the set of descendants of $u$. For each outcome let $D_k(o)$ be the ordered list of daughter types (length $\ell_k(o)\le2$, with $a_{ko}$ A's and $b_{ko}$ B's).
+
+On a probability space take outcomes $O^{(j)}_u$, $u\in U$, $j\in\{A,B\}$, mutually independent with $\Prob(O^{(j)}_u=o)=\pi_{j,o}$ (a countable product space; Kolmogorov / Ionescu-Tulcea). The clone started at $u$ with type $j$ is defined recursively from the variables indexed by $uU$: $L^{u,j}_0=\{u\}$ with $\tau(u)=j$; if $v\in L^{u,j}_m$ has outcome $o=O^{(\tau(v))}_v$ and $D_{\tau(v)}(o)=(d_1,\dots,d_\ell)$ then $v1,\dots,v\ell\in L^{u,j}_{m+1}$ with $\tau(vi)=d_i$. $Z^{u,j}_m\in\N^2$ counts the types in $L^{u,j}_m$. The clone of a type-$k$ founder is $Z^{(k)}_n:=Z^{\emptyset,k}_n$ and $F_{n,k}$ is its pgf; $F_n=(F_{n,A},F_{n,B})$ maps $\Dbar$ to $\Dbar$.
+
+\begin{lemma}[Branching property]\label{lem:branching}
+(A) $Z^{u,j}_m$ has the law of $Z^{\emptyset,j}_m$ for all $u,j,m$. (B) Functions of the variables indexed by pairwise disjoint subsets of $U$ are independent. In particular, for distinct $u,u'$ neither a prefix of the other, $uU\cap u'U=\emptyset$; and $\{v:|v|\le n-2\}\cap\{v:|v|=n-1\}=\emptyset$.
+\end{lemma}
+\begin{proof}
+(A) $Z^{u,j}_m=\Phi_{m,j}((O^{(i)}_{uw})_{w,i})$ and $Z^{\emptyset,j}_m=\Phi_{m,j}((O^{(i)}_w)_{w,i})$ for the same measurable $\Phi_{m,j}$ (the recursion refers only to relative words), and the two input families are i.i.d.\ with the same marginals. (B) Grouping property of independent families.
+\end{proof}
+
+\begin{theorem}[Composition]\label{thm:comp}
+$F_0=\mathrm{id}$ and $F_n=f\circ F_{n-1}=F_{n-1}\circ f$ for $n\ge1$; hence $F_n=f^{\circ n}$.
+\end{theorem}
+\begin{proof}
+Fix $n\ge1$, $k$, $(x,y)\in\Dbar$, $Z=x^{Z^{(k)}_{n,A}}y^{Z^{(k)}_{n,B}}$.
+
+\emph{First step.} Partition by the founder's outcome $E_o=\{O^{(k)}_\emptyset=o\}$ (finitely many). On $E_o$ the daughters are words $1,\dots,\ell$ with types $d_i$, every generation-$n$ cell descends from exactly one of them, so $Z^{(k)}_n=\sum_iZ^{i,d_i}_{n-1}$ and $Z\one_{E_o}=\one_{E_o}\prod_ix^{Z^{i,d_i}_{n-1,A}}y^{Z^{i,d_i}_{n-1,B}}$. The factors depend on the disjoint word sets $\{\emptyset\},1U,2U$; by Lemma~\ref{lem:branching}(B) and (F2), then (A), $\E[Z\one_{E_o}]=\pi_{k,o}\prod_iF_{n-1,d_i}=\pi_{k,o}F_{n-1,A}^{a_{ko}}F_{n-1,B}^{b_{ko}}$ (death: $Z=1$ on $E_o$, empty product). Summing over $o$: $F_{n,k}=f_k(F_{n-1})$.
+
+\emph{Last step.} Let $C$ be the type-labelled set $L^{\emptyset,k}_{n-1}$ (countably many values). On $\{C=c\}$, $Z^{(k)}_n=\sum_{u\in c}\xi_u$ with $\xi_u$ the daughter counts of $O^{(\tau(u))}_u$. $\{C=c\}$ depends on words of length $\le n-2$, each $\xi_u$ on $u$ alone (length $n-1$); by (B), (F2) and $\E[x^{\xi_{u,A}}y^{\xi_{u,B}}]=f_{\tau(u)}(x,y)$, $\E[Z\one_{C=c}]=\Prob(C=c)f_A^{\alpha}f_B^{\beta}$ where $c$ has $\alpha$ A and $\beta$ B cells. Sum over $c$ (dominated convergence) and group by $(\alpha,\beta)=Z^{(k)}_{n-1}$: $F_{n,k}=F_{n-1,k}(f_A,f_B)$, the series converging since $|f_k|\le1$.
+
+Since $Z^{(k)}_0=e_k$, $F_0=\mathrm{id}$, and both recursions give $f^{\circ n}$ by induction and associativity of composition.
+\end{proof}
+
+\begin{corollary}\label{cor:degree}
+(i) $F_{n,k}$ is a polynomial of total degree $\le2^n$, so $Z^{(k)}_{n,A},Z^{(k)}_{n,B}\le2^n$. (ii) $\E Z^{(k)}_n=e_kM^n$.
+\end{corollary}
+\begin{proof}
+(i) $f$ has degree 2 and composing polynomials multiplies degrees. (ii) Differentiate $F_n=F_{n-1}\circ f$ at $(1,1)$ (chain rule, $f(1,1)=(1,1)$): the Jacobian of $F_n$ at $(1,1)$ is that of $F_{n-1}$ times $M$; induct.
+\end{proof}
+
+\paragraph{Evaluation.} Theorem~\ref{thm:comp} gives the algorithm used everywhere: to evaluate $F_{n,k}$ at a point, set $(u,v)\leftarrow(x,y)$ and apply $(u,v)\leftarrow(f_A(u,v),f_B(u,v))$ $n$ times; cost $O(n)$, never expanding the degree-$2^n$ polynomial. Corollary~\ref{cor:degree}(ii) is the first validation check (\S\ref{sec:validation}).
+
+%======================================================================
+\section{Observation, founders and detection}\label{sec:obs}
+\begin{proposition}[Observation by substitution]\label{prop:obs}
+With capture $c_k$ and labelling $C_{kj}$ applied independently to every endpoint cell, the measured counts of a type-$k$ founder have pgf $F_{n,k}\circ F^{\mathrm{obs}}_0$, where $F^{\mathrm{obs}}_{0,k}(x,y)=1-c_k+c_k(C_{kA}x+C_{kB}y)$.
+\end{proposition}
+\begin{proof}
+Lemma~\ref{lem:sums} with $N=Z^{(k)}_n$ and $Y^{(k)}$ the (independent, given the clone) measurement of one type-$k$ cell, whose pgf is $F^{\mathrm{obs}}_{0,k}$: it contributes nothing with probability $1-c_k$, an A label with $c_kC_{kA}$, a B label with $c_kC_{kB}$.
+\end{proof}
+\noindent In the iteration this only changes the start: $(u,v)\leftarrow F^{\mathrm{obs}}_0(x,y)$.
+
+\begin{proposition}[Founder mixture]\label{prop:founder}
+If a clone starts from $S$ founders ($\Prob(S=s)=\varpi_s$), each independently of type $k$ with probability $\varphi_k$, its pgf is $G(x,y)=\sum_s\varpi_s\big(\varphi_AF_{n,A}(x,y)+\varphi_BF_{n,B}(x,y)\big)^s$.
+\end{proposition}
+\begin{proof}
+Each founder's clone has pgf $\varphi_AF_{n,A}+\varphi_BF_{n,B}$ (mixture over its type); $s$ independent founders give the $s$-th power (Lemma~\ref{lem:sums}); mix over $s$.
+\end{proof}
+
+\paragraph{Detection.} Detected clones have law $\tilde p_z=p_z/(1-p_{00})$ for $z\ne0$, where $p_{00}=G(0,0)$. When detection is rare, $1-p_{00}$ computed by subtraction loses all digits, so it is computed directly.
+\begin{proposition}[Complement recursion]\label{prop:detect}
+Let $g_{m,k}=1-F_{m,k}(F^{\mathrm{obs}}_0(0,0))$ be the probability that a type-$k$ cell has a detected descendant $m$ generations later. Then $g_{0,k}=c_k$ and
+\begin{align*}
+g_{m,k}&=\sum_o\pi_{k,o}\Big(1-(1-g_{m-1,A})^{a_{ko}}(1-g_{m-1,B})^{b_{ko}}\Big),\\
+1-p_{00}&=\sum_s\varpi_s\Big(1-\big(1-\varphi_Ag_{n,A}-\varphi_Bg_{n,B}\big)^s\Big).
+\end{align*}
+\end{proposition}
+\begin{proof}
+$F^{\mathrm{obs}}_{0,k}(0,0)=1-c_k$, so $g_{0,k}=c_k$. By Theorem~\ref{thm:comp} (first step), $1-g_{m,k}=f_k(1-g_{m-1,A},1-g_{m-1,B})=\sum_o\pi_{k,o}(1-g_{m-1,A})^{a_{ko}}(1-g_{m-1,B})^{b_{ko}}$; subtract from $1=\sum_o\pi_{k,o}$. The founder formula is Proposition~\ref{prop:founder} at $(0,0)$, subtracted from 1.
+\end{proof}
+\noindent Each bracket $1-(1-g_A)^a(1-g_B)^b$ is evaluated as $-\mathrm{expm1}(a\,\mathrm{log1p}(-g_A)+b\,\mathrm{log1p}(-g_B))$, which is accurate for tiny $g$. Its derivative propagates by the chain rule as in \S\ref{sec:deriv}.
+
+%======================================================================
+\section{Exact inversion: from pgf values to probabilities}\label{sec:inversion}
+\subsection{Roots of unity}
+\begin{lemma}\label{lem:roots}
+For integers $m,m'$: (R1) $\omega_L^m=e^{2\pi im/L}$, $|\omega_L^m|=1$, $\omega_L^m\omega_L^{m'}=\omega_L^{m+m'}$; (R2) $\omega_L^m$ depends only on $m\bmod L$; (R3) $\omega_L^m=1\iff L\mid m$; (R4) $\omega_L^0,\dots,\omega_L^{L-1}$ are distinct and are all the roots of $z^L-1$; (R5) $\overline{\omega_L^m}=\omega_L^{-m}$.
+\end{lemma}
+\begin{proof}
+(R1) Euler's formula. (R2) $\omega_L^L=1$. (R3) $e^{2\pi im/L}=1$ iff $m/L\in\mathbb Z$. (R4) distinct by (R3) since $0<j'-j<L$; each is a root, and a degree-$L$ polynomial has at most $L$ roots. (R5) $\bar z=1/z$ on the unit circle.
+\end{proof}
+
+\begin{lemma}[Orthogonality]\label{lem:orth}
+$\sum_{j=0}^{L-1}\omega_L^{jm}=L\,\one[L\mid m]$, and the two-variable average $\frac1{L_AL_B}\sum_{j,l}\omega_{L_A}^{jm}\omega_{L_B}^{lm'}=\one[L_A\mid m]\one[L_B\mid m']$.
+\end{lemma}
+\begin{proof}
+With $q=\omega_L^m$: if $L\mid m$, $q=1$ and the sum is $L$. Otherwise $q\ne1$ and $(1-q)\sum_{j<L}q^j=1-q^L=0$ (telescoping; $q^L=1$), so the sum is 0. The double sum factorises.
+\end{proof}
+
+\begin{theorem}[Inversion with folding]\label{thm:fold}
+Let $G(x,y)=\sum_{a,b}p_{ab}x^ay^b$ with $\sum|p_{ab}|<\infty$, $0<r_A,r_B\le1$, and $g_{jl}=G(r_A\omega_{L_A}^j,r_B\omega_{L_B}^l)$. For $0\le a<L_A$, $0\le b<L_B$,
+\[
+c_{ab}:=\frac1{L_AL_B}\sum_{j,l}g_{jl}\,\omega_{L_A}^{-ja}\omega_{L_B}^{-lb}=\sum_{s,t\ge0}p_{a+sL_A,\,b+tL_B}\,r_A^{a+sL_A}r_B^{b+tL_B}.
+\]
+\end{theorem}
+\begin{proof}
+(1) $g_{jl}=\sum_{a',b'}p_{a'b'}r_A^{a'}r_B^{b'}\omega_{L_A}^{ja'}\omega_{L_B}^{lb'}$, absolutely convergent. (2) Multiply by the constant $\omega^{-ja}\omega^{-lb}$ and combine powers. (3) A finite sum of convergent series is the series of termwise sums, so $c_{ab}=\sum_{a',b'}p_{a'b'}r_A^{a'}r_B^{b'}\big[\frac1{L_AL_B}\sum_{j,l}\omega_{L_A}^{j(a'-a)}\omega_{L_B}^{l(b'-b)}\big]$. (4) By Lemma~\ref{lem:orth} the bracket is $\one[L_A\mid a'-a]\one[L_B\mid b'-b]$. (5) $L_A\mid a'-a$ with $a'\ge0$, $0\le a<L_A$ iff $a'=a+sL_A$, $s\ge0$; same for $b'$; re-index the absolutely convergent series.
+\end{proof}
+
+\begin{corollary}[Exactness and error]\label{cor:fold}
+Let $\hat p_{ab}=c_{ab}r_A^{-a}r_B^{-b}$. (i) If $p_{ab}=0$ whenever $a\ge L_A$ or $b\ge L_B$, then $\hat p=p$; for GW this holds when $L_A,L_B>2^n$. (ii) For non-negative $p$, $0\le\hat p_{ab}-p_{ab}\le\max(r_A^{L_A},r_B^{L_B})\,\Prob(Z_A\ge L_A\text{ or }Z_B\ge L_B)$.
+\end{corollary}
+\begin{proof}
+$\hat p_{ab}-p_{ab}=\sum_{(s,t)\ne(0,0)}p_{a+sL_A,b+tL_B}r_A^{sL_A}r_B^{tL_B}$. (i) every term vanishes. (ii) each term has $s\ge1$ or $t\ge1$, so its damping factor is $\le\max(r_A^{L_A},r_B^{L_B})$, and the indices are distinct counts beyond the grid.
+\end{proof}
+
+\begin{example}[Aliasing]
+$G(s)=0.2+0.3s+0.5s^2$, $r=1$. With $L=2$: $G(1)=1$, $G(-1)=0.4$, so $c_0=0.7=p_0+p_2$ (folded) and $c_1=0.3$. With $L=3$: $(0.2,0.3,0.5)$ exactly.
+\end{example}
+
+\subsection{Round-off and the choice of grid}
+The computed $c_{ab}$ carry an absolute round-off error $\delta\approx\varepsilon\max_{jl}|g_{jl}|\le\varepsilon\approx10^{-16}$ (FFT error grows only like $\log L$). Rescaling by $r_A^{-a}r_B^{-b}$ multiplies it, so on cell $(a,b)$
+\[
+|\text{error}|\lesssim\underbrace{\varepsilon\,r_A^{-a}r_B^{-b}}_{\text{round-off}}+\underbrace{\max(r_A^{L_A},r_B^{L_B})\,\Prob(\text{beyond grid})}_{\text{aliasing}} .
+\]
+Two strategies follow.
+\begin{itemize}
+\item \textbf{No damping} ($r=1$): pick $L$ beyond the support (GW: $L>2^n$) or beyond negligible tail mass (checked with the one-variable marginal pgfs $G(x,1)$, $G(1,y)$ on a long grid). Used in the analysis scripts.
+\item \textbf{Data-sized grid with damping} (\code{exact_gw}): the likelihood only needs the cells up to the largest observed counts $(a_{\max},b_{\max})$. Take $L=\mathrm{next\_fast\_len}(\max(32,\lceil1.25\,m+16\rceil))$ per axis and $r=D^{-1/(2\max(m,8))}$ with $D=10^4$, where $m$ is that axis's largest count. Then the round-off amplification at the largest needed cell is $r_A^{-a_{\max}}r_B^{-b_{\max}}\le D$ (error $\lesssim10^{-12}$), and mass beyond the grid is damped by $r^{L}\le D^{-0.625}\approx3\times10^{-3}$. Each grid is checked against an undamped grid twice as large at the posterior median (\S\ref{sec:validation}).
+\end{itemize}
+Over-damping is harmful: $r^L=10^{-12}$ amplifies round-off by $10^{24}$ on the last cells.
+
+\subsection{Half grid and FFT}
+\begin{proposition}\label{prop:half}
+If the coefficients are real, $g_{L_A-j,\,L_B-l}=\overline{g_{jl}}$ (indices mod $L$), so $g$ is determined by the half grid $0\le l\le\lfloor L_B/2\rfloor$, and $c=\mathrm{irfft2}$ of that half (up to the sign convention).
+\end{proposition}
+\begin{proof}
+$g_{L_A-j,L_B-l}=G(r_A\omega^{-j},r_B\omega^{-l})=G(\overline{r_A\omega^j},\overline{r_B\omega^l})=\overline{g_{jl}}$ by (R5) and Proposition~\ref{prop:pgfbasic}(5).
+\end{proof}
+\noindent The FFT (Cooley--Tukey) computes all $L_AL_B$ coefficients in $O(L_AL_B\log(L_AL_B))$ operations instead of $O(L_A^2L_B^2)$. With numpy's convention (\code{fft} uses $e^{-2\pi ijk/L}$), $c=\mathrm{fft2}(g)/(L_AL_B)$; \code{ifft2} would return indices reversed. \code{exact_gw} evaluates at $\omega^{-j}$ and applies \code{irfft2}, which is equivalent.
+
+\subsection{Worked example}
+One type, $f(s)=0.2+0.3s+0.5s^2$, $n=2$: $F_2=f\circ f$ has degree 4, so $L=5$. The values at $\omega_5^j$ are $1$, $0.005\pm0.109i$, $0.195\mp0.123i$; their DFT is $(0.280,0.150,0.295,0.150,0.125)$, the exact law of $Z_2$. Conditioning on detection gives $(0.208,0.410,0.208,0.174)$ for sizes 1--4; six clones of sizes $1,2,2,4,1,3$ have log-likelihood $-8.241$. The DFT is applied to the model at one $\theta$, never to the data; the data enter as look-ups. (\code{scripts/b_row_theory/demo_dft_likelihood.py}.)
+
+%======================================================================
+\section{Exact derivatives}\label{sec:deriv}
+A direction $d$ moves probability within rows: $\sum_od_{k,o}=0$ for each $k$ (e.g.\ $e_{k,o}-e_{k,\mathrm{death}}$). $\partial_d$ is the derivative along $d$.
+\begin{proposition}[Derivative commutes with the DFT]\label{prop:dftderiv}
+If the grid values $g_{jl}(\theta)$ are differentiable along $d$, then $\partial_dc_{ab}=\frac1{L_AL_B}\sum_{jl}\partial_dg_{jl}\,\omega^{-ja}\omega^{-lb}$; with damping, $\partial_d\hat p_{ab}=r_A^{-a}r_B^{-b}\partial_dc_{ab}$. For GW with $L>2^n$ and $r=1$ this is $\partial_dp_{ab}$ exactly.
+\end{proposition}
+\begin{proof}
+$c_{ab}$ is a finite linear combination of the $g_{jl}$ with $\theta$-free coefficients, and $r$ does not depend on $\theta$. For the last claim, $\partial_dF_{n,A}=\sum_{ab}\partial_dp_{ab}x^ay^b$ is a polynomial of degree $\le2^n$, and Theorem~\ref{thm:fold} (which does not need positivity) inverts it.
+\end{proof}
+
+\begin{proposition}[Forward mode]\label{prop:forward}
+At a grid point let $g_0=F^{\mathrm{obs}}_0(x,y)$, $g_m=f(g_{m-1};\theta)$, $t_0=0$ and
+\[
+t_{m,k}=(\partial_df_k)(g_{m-1})+\partial_xf_k(g_{m-1})\,t_{m-1,A}+\partial_yf_k(g_{m-1})\,t_{m-1,B},\qquad(\partial_df_k)(u,v)=\sum_od_{k,o}u^{a_{ko}}v^{b_{ko}}.
+\]
+Then $t_m=\partial_dg_m$. With founders, $\partial_dG=\sum_s\varpi_s\,s\,(\varphi\cdot g_n)^{s-1}\,\varphi\cdot t_n$.
+\end{proposition}
+\begin{proof}
+Induction: $g_0$ does not depend on $\theta$; $f_k(u,v;\theta)$ is a polynomial in $(u,v)$ and linear in $\pi$, and the multivariable chain rule gives the direct term (explicit dependence on $\pi$) plus the terms through the arguments. The founder formula is the chain rule applied to Proposition~\ref{prop:founder}.
+\end{proof}
+
+\paragraph{Parameter coordinates.} The sampler works in stick-breaking coordinates $s$ (\S\ref{sec:prior}). For a row with free entries $1,\dots,K$ and free mass $\mu$ (one minus the fixed entries), $\pi_i=\mu\,s_i\prod_{l<i}(1-s_l)$ ($i<K$) and $\pi_K=\mu\prod_{l<K}(1-s_l)$, so
+\[
+\frac{\partial\pi_i}{\partial s_j}=\begin{cases}\mu\prod_{l<i,\,l\ne j}(1-s_l)\cdot s_i^{[i<K]}\cdot(-1)&j<i,\\ \mu\prod_{l<i}(1-s_l)& j=i<K,\\ 0&j>i,\end{cases}
+\]
+which defines one direction per stick coordinate (\code{ExactLikelihood.jacobian}).
+
+\paragraph{Worked check.} For $f(s)=\pi_0+ps+qs^2$, $\pi_0=1-p-q$, $(p,q)=(0.3,0.5)$, $n=2$, direction ``increase $q$, decrease death'': forward mode + DFT gives $\partial_q\Prob(Z_2=k)=(-1.46,-0.18,0.29,0.60,0.75)$, equal to symbolic differentiation within $2\times10^{-16}$ and to finite differences within $2.5\times10^{-11}$; the entries sum to 0. (\code{demo_exact_derivative.py}.)
+
+%======================================================================
+\section{Likelihood, information and profiles}\label{sec:likelihood}
+\begin{proposition}[Exact log-likelihood]\label{prop:lik}
+For endpoints $h$ with detected clone counts $z_{h,1..N_h}$ and count histograms $n_h(z)$,
+\[
+\ell(\theta)=\sum_h\sum_zn_h(z)\log p_h(z;\theta)-\sum_hN_h\log\Prob_\theta(\text{detected at }h),
+\]
+\[
+\partial_d\ell=\sum_h\sum_zn_h(z)\frac{\partial_dp_h(z)}{p_h(z)}-\sum_hN_h\frac{\partial_d\Prob_\theta(\text{detected})}{\Prob_\theta(\text{detected})}.
+\]
+\end{proposition}
+\begin{proof}
+Independence across clones and endpoints, and $\tilde p=p/\Prob(\text{detected})$ for $z\ne0$; differentiate the logarithm.
+\end{proof}
+\noindent One table per endpoint serves all clones; the histogram makes an evaluation a dot product over the distinct observed cells.
+
+\paragraph{Numerical safeguards.} (i) Probability floor: $\log\max(p,10^{-15})$, with zero gradient below the floor; below $\sim10^{-15}$ the computed $p$ is round-off. (ii) Detection floor: $\log\max(\Prob(\text{detected}),10^{-6})$. Where detection is essentially impossible, $p/\Prob(\text{detected})$ is round-off divided by a tiny number; without the floor a parameter region with near-zero detection scored about $+8\times10^5$ nats at the E0-at-4096 data. The floor underestimates the likelihood only in such regions. (iii) Counts beyond the planned grid raise an error (grids are sized from the data).
+
+\paragraph{Fisher information, KL, profiles.} Per clone at endpoint $h$: $I_h(\theta)=\sum_z\tilde p_h(z)\nabla\log\tilde p_h(z)\nabla\log\tilde p_h(z)^\top$ (sum over the table); for a design $I_{\mathcal D}=\sum_hN_hI_h$, and the Cram\'er--Rao bound for a functional with gradient $g$ is $\sqrt{g^\top I_{\mathcal D}^{-1}g}$. $\KL(\theta^\star\|\theta)=\sum_z\tilde p(z;\theta^\star)\log(\tilde p(z;\theta^\star)/\tilde p(z;\theta))$ is the expected per-clone log-likelihood ratio. The profile $K(\delta)=\min\{\sum_hw_h\KL_h(\theta^\star\|\theta):\text{B-division mass}=\delta\}$ is computed with L-BFGS on exact gradients.
+
+%======================================================================
+\section{Prior and posterior density}\label{sec:prior}
+Each free row has a Dirichlet$(\alpha_1,\dots,\alpha_K)$ prior on its free entries (scaled by the free mass $\mu$); $\alpha\equiv1$ (uniform) by default, as for NPE.
+\begin{proposition}[Stick-breaking representation]\label{prop:stick}
+Let $s_i\sim\mathrm{Beta}(\alpha_i,\beta_i)$ independently for $i<K$, with $\beta_i=\sum_{j>i}\alpha_j$, and $\pi_i=s_i\prod_{l<i}(1-s_l)$ ($i<K$), $\pi_K=\prod_{l<K}(1-s_l)$. Then $(\pi_1,\dots,\pi_K)\sim\mathrm{Dirichlet}(\alpha)$.
+\end{proposition}
+\begin{proof}
+The map $s\mapsto(\pi_1,\dots,\pi_{K-1})$ is a bijection $(0,1)^{K-1}\to\{\pi_i>0,\sum_{i<K}\pi_i<1\}$ (inverse $s_i=\pi_i/(1-\sum_{l<i}\pi_l)$). Its Jacobian matrix is lower triangular ($\pi_i$ depends on $s_1..s_i$) with diagonal $\partial\pi_i/\partial s_i=\prod_{l<i}(1-s_l)$, so $|\det|=\prod_{i<K}\prod_{l<i}(1-s_l)=\prod_{l\le K-2}(1-s_l)^{K-1-l}$. The Dirichlet density $\propto\prod_i\pi_i^{\alpha_i-1}$ becomes, substituting,
+\begin{align*}
+&\prod_{i<K}s_i^{\alpha_i-1}\prod_{l<K}(1-s_l)^{\sum_{i>l}(\alpha_i-1)}\cdot\prod_{l}(1-s_l)^{K-1-l}\\
+&\qquad=\prod_{l<K}s_l^{\alpha_l-1}(1-s_l)^{\beta_l-(K-l)+(K-1-l)}=\prod_{l<K}s_l^{\alpha_l-1}(1-s_l)^{\beta_l-1},
+\end{align*}
+using $\sum_{i>l}(\alpha_i-1)=\beta_l-(K-l)$; this is the product of the Beta$(\alpha_l,\beta_l)$ densities. By the change-of-variables formula the laws coincide.
+\end{proof}
+
+\paragraph{Unconstrained coordinates.} NUTS runs on $u_i=\logit s_i\in\R$. With $s=\expit(u)$ and $ds/du=s(1-s)$, the log posterior density of $u$ is, up to a constant,
+\[
+\log\pi(u\mid\text{data})=\ell(\theta(s(u)))+\sum_i\big[\alpha_i\log s_i+\beta_i\log(1-s_i)\big],
+\]
+because the Beta density $\propto s^{\alpha-1}(1-s)^{\beta-1}$ times the Jacobian $s(1-s)$ gives $s^\alpha(1-s)^\beta$. Its gradient is $\partial_{u_i}=\partial_{s_i}\ell\cdot s_i(1-s_i)+\alpha_i(1-s_i)-\beta_is_i$ (with $\partial\log s/\partial u=1-s$, $\partial\log(1-s)/\partial u=-s$). The density is smooth and positive on all of $\R^{\dim}$; boundary truths (e.g.\ B divisions $=0$) correspond to $u\to-\infty$.
+
+%======================================================================
+\section{Posterior sampling}\label{sec:mcmc}
+\subsection{Markov chain Monte Carlo}
+A Markov kernel $K(q,dq')$ leaves a density $\pi$ \emph{invariant} if $\int\pi(q)K(q,A)\,dq=\int_A\pi$ for all sets $A$; it is \emph{reversible} (in detailed balance) if $\pi(q)K(q,dq')\,dq=\pi(q')K(q',dq)\,dq'$, which implies invariance. If the chain is moreover irreducible and aperiodic, averages along the chain converge to posterior expectations. All samplers below are built from steps that each leave the target invariant.
+
+\subsection{Hamiltonian Monte Carlo}
+Let $U(q)=-\log\pi(q)$ (here $q=u$). Add a momentum $p\sim N(0,M)$, independent of $q$, and define the Hamiltonian and joint density
+\[
+H(q,p)=U(q)+\tfrac12p^\top M^{-1}p,\qquad\bar\pi(q,p)\propto e^{-H(q,p)} ;
+\]
+the $q$-marginal of $\bar\pi$ is $\pi$. Hamilton's equations $\dot q=M^{-1}p$, $\dot p=-\nabla U(q)$ define a flow $\Phi_t$.
+\begin{proposition}[Properties of the exact flow]\label{prop:flow}
+(i) $H$ is conserved; (ii) $\Phi_t$ preserves volume; (iii) with $R(q,p)=(q,-p)$, $R\circ\Phi_t\circ R\circ\Phi_t=\mathrm{id}$ (reversibility).
+\end{proposition}
+\begin{proof}
+(i) $\frac{d}{dt}H=\nabla U\cdot\dot q+p^\top M^{-1}\dot p=\nabla U\cdot M^{-1}p-p^\top M^{-1}\nabla U=0$. (ii) The vector field $(M^{-1}p,-\nabla U(q))$ has divergence $\nabla_q\cdot M^{-1}p+\nabla_p\cdot(-\nabla U(q))=0$, so by Liouville's theorem the flow preserves volume. (iii) If $(q(t),p(t))$ solves the equations then so does $(q(-t),-p(-t))$; starting from $\Phi_t(z)$ with negated momentum retraces the path.
+\end{proof}
+\paragraph{Leapfrog.} The flow is approximated by steps of size $\epsilon$:
+\[
+p\leftarrow p-\tfrac\epsilon2\nabla U(q),\qquad q\leftarrow q+\epsilon M^{-1}p,\qquad p\leftarrow p-\tfrac\epsilon2\nabla U(q).
+\]
+\begin{proposition}[Properties of leapfrog]\label{prop:leapfrog}
+Let $\Psi_\epsilon$ be one leapfrog step. (i) $\Psi_\epsilon$ preserves volume; (ii) $R\circ\Psi_\epsilon\circ R\circ\Psi_\epsilon=\mathrm{id}$, hence $T=R\circ\Psi_\epsilon^L$ is an involution ($T\circ T=\mathrm{id}$); (iii) $H$ is not conserved exactly; the energy error is $O(\epsilon^2)$ over a fixed time for smooth $U$.
+\end{proposition}
+\begin{proof}
+(i) Each of the three sub-steps is a shear: it changes one block by a function of the other, so its Jacobian is block-triangular with identity diagonal blocks and determinant 1; compositions have determinant 1. (ii) Write the step as $A\circ B\circ A$ with $A$: $p\leftarrow p-\frac\epsilon2\nabla U(q)$, $B$: $q\leftarrow q+\epsilon M^{-1}p$. One checks $R\circ A\circ R=A^{-1}$ and $R\circ B\circ R=B^{-1}$ (negating $p$, applying the shear, negating back undoes it). Hence $R\Psi_\epsilon R=A^{-1}B^{-1}A^{-1}=\Psi_\epsilon^{-1}$, and $R\Psi^L_\epsilon R=\Psi_\epsilon^{-L}$, so $(R\Psi^L_\epsilon)^2=R\Psi^L_\epsilon R\,R\Psi^L_\epsilon=\mathrm{id}$ (using $R^2=\mathrm{id}$). (iii) Leapfrog is a second-order symplectic integrator (Hairer, Lubich \& Wanner [11]).
+\end{proof}
+
+\begin{theorem}[HMC is $\bar\pi$-invariant]\label{thm:hmc}
+The kernel ``draw $p\sim N(0,M)$; propose $z'=T(z)=R\Psi_\epsilon^L(q,p)$; accept with probability $\alpha(z)=\min\{1,\bar\pi(z')/\bar\pi(z)\}=\min\{1,e^{H(z)-H(z')}\}$, else stay'' leaves $\pi$ invariant.
+\end{theorem}
+\begin{proof}
+The momentum refresh is a Gibbs step for $\bar\pi$ (exact conditional), so it leaves $\bar\pi$ invariant. For the Metropolis step, for measurable $A,B$ the probability flow from $A$ into $B$ by an accepted move is $\int_A\bar\pi(z)\alpha(z)\one_B(Tz)\,dz=\int_A\min\{\bar\pi(z),\bar\pi(Tz)\}\one_B(Tz)\,dz$. Substitute $w=Tz$: $T$ is an involution, so $z=Tw$, and volume-preserving, so $dz=dw$: the integral becomes $\int_B\min\{\bar\pi(Tw),\bar\pi(w)\}\one_A(Tw)\,dw$, the flow from $B$ into $A$. Detailed balance holds, so $\bar\pi$ is invariant, and the $q$-marginal $\pi$ is invariant. The final momentum flip $R$ is irrelevant because $p$ is redrawn.
+\end{proof}
+
+\subsection{The No-U-Turn Sampler}
+HMC's performance depends strongly on the trajectory length $L\epsilon$. NUTS chooses it adaptively and keeps invariance.
+
+\paragraph{Trajectory building.} From the current state $z_0=(q,p)$ with fresh $p$, NUTS builds a trajectory $\mathcal T$ by repeated doubling: at depth $j$ it picks a direction $v=\pm1$ uniformly and integrates $2^j$ leapfrog steps (with step $v\epsilon$) from the corresponding end, appending them as a new subtree. The new subtree is itself built recursively by doubling, as a balanced binary tree.
+
+\paragraph{Stopping (generalised no-U-turn).} For a (sub)trajectory with end momenta $p^-,p^+$ and summed momentum $\rho=\sum_{z\in\text{subtree}}p_z$, the trajectory is said to turn if
+\[
+\rho^\top M^{-1}p^-\le0\quad\text{or}\quad\rho^\top M^{-1}p^+\le0 ,
+\]
+i.e.\ continuing in either direction would start to move back. The criterion is checked for every subtree of the binary tree as it is built and for the full trajectory after each doubling; doubling also stops at the maximum depth (8 here, at most 255 leapfrog steps per transition). If a newly built subtree turns internally or diverges, it is \emph{discarded} and building stops.
+
+\paragraph{Divergences.} A leapfrog state with $H(z)-H(z_0)>1000$ is a divergence: the integrator has become unstable (typically in high-curvature regions). The subtree is discarded and the transition is flagged; many divergences indicate that the sample may be biased.
+
+\paragraph{Choosing the next state (multinomial sampling).} Each state $z\in\mathcal T$ has weight $w(z)=e^{-H(z)}$ (relative to $z_0$: $e^{H(z_0)-H(z)}$). Within a subtree, states are combined by \emph{progressive uniform} sampling: merging two halves with total weights $W_1,W_2$, the representative of the second is taken with probability $W_2/(W_1+W_2)$, so each state of the subtree is selected with probability proportional to its weight. When a new subtree (weight $W_{\mathrm{new}}$) is appended to the existing trajectory (weight $W_{\mathrm{old}}$), its representative replaces the current proposal with probability $\min\{1,W_{\mathrm{new}}/W_{\mathrm{old}}\}$ (\emph{biased progressive} sampling), which favours moving away from $z_0$.
+
+\begin{proposition}[Invariance of NUTS, outline]\label{prop:nuts}
+The NUTS transition leaves $\pi$ invariant.
+\end{proposition}
+\begin{proof}[Outline]
+Let $\mathcal T$ be a trajectory and $z\in\mathcal T$. (a) \emph{Trajectory symmetry:} the probability of building $\mathcal T$ starting from $z$ is the same for every $z\in\mathcal T$ from which $\mathcal T$ can be built: each of the $2^{j}$ ways of orienting the doublings has probability $2^{-j}$, and the stopping rules depend only on the set $\mathcal T$ and its subtrees---this is why the U-turn check is applied to all subtrees and why a doubling that would contain a turning subtree is discarded (otherwise some starting points inside $\mathcal T$ would have stopped earlier). The leapfrog states are images of $z$ under the volume-preserving maps $\Psi^k_{\pm\epsilon}$, so densities transfer without Jacobian factors. (b) \emph{Selection:} if the next state were drawn from $\mathcal T$ with probability $w(z')/\sum_{\mathcal T}w$, independent of the starting point, then for every $z'$,
+\[
+\sum_{\mathcal T\ni z'}\ \sum_{z\in\mathcal T}\bar\pi(z)\,P(\mathcal T)\,\frac{\bar\pi(z')}{\sum_{y\in\mathcal T}\bar\pi(y)}=\bar\pi(z')\sum_{\mathcal T\ni z'}P(\mathcal T)=\bar\pi(z'),
+\]
+which is invariance of $\bar\pi$. The progressive and biased-progressive schemes are kernels on the states of $\mathcal T$ that leave this multinomial distribution invariant (each merge is a Metropolis-type move between the two halves), so invariance is kept. (c) The momentum refresh is a Gibbs step. A complete proof is in Betancourt [3], Appendix A; the original NUTS is Hoffman \& Gelman [12].
+\end{proof}
+
+\paragraph{Acceptance statistic.} For adaptation, each transition reports $\bar a=\frac1{|\mathcal T|}\sum_{z\in\mathcal T}\min\{1,e^{H(z_0)-H(z)}\}$, the average Metropolis acceptance probability of the trajectory's states.
+
+\subsection{Adaptation during warm-up}
+Adaptation uses the chain's past, so it is done only during warm-up; the kernel is fixed afterwards and only post-warm-up draws are kept, so the theory above applies to them.
+
+\paragraph{Initial step size.} Starting from $\epsilon=0.1$ (or the current value), double or halve $\epsilon$ until the one-step acceptance $e^{H(z_0)-H(\Psi_\epsilon z_0)}$ crosses $1/2$ (Hoffman \& Gelman, Algorithm 4).
+
+\paragraph{Dual averaging (step size).} With target $\delta=0.8$ and the statistic $\bar a_m$ at warm-up iteration $m$,
+\begin{align*}
+\bar h_m&=\Big(1-\frac1{m+t_0}\Big)\bar h_{m-1}+\frac{\delta-\bar a_m}{m+t_0},\qquad
+\log\epsilon_m=\mu-\frac{\sqrt m}{\gamma}\bar h_m,\\
+\log\bar\epsilon_m&=m^{-\kappa}\log\epsilon_m+(1-m^{-\kappa})\log\bar\epsilon_{m-1},
+\end{align*}
+with $\mu=\log(10\epsilon_0)$, $\gamma=0.05$, $t_0=10$, $\kappa=0.75$. Sampling uses $\bar\epsilon$ at the end of warm-up. This is a stochastic-approximation scheme that drives the average acceptance statistic to $\delta$ (Nesterov's dual averaging).
+
+\paragraph{Mass matrix.} $M^{-1}$ should approximate the posterior covariance of $u$, which makes the target close to isotropic for the integrator. Warm-up follows Stan's schedule: an initial buffer of 75 iterations, then windows of 25, 50, 100, \dots\ iterations (the last absorbing the remainder), then a terminal buffer of 50 (scaled to 15\%/10\% for short warm-ups). At the end of each window the draws $u$ of that window give a regularised covariance
+\[
+M^{-1}=\frac{n}{n+5}\,\widehat\Sigma+10^{-3}\,\frac5{n+5}\,I\qquad(n=\text{window length}),
+\]
+dense by default, then the step size is re-initialised and dual averaging restarts.
+
+\subsection{Initialisation}
+Narrow, correlated or multimodal posteriors make a cold start expensive and can trap chains. \code{exact_gw} therefore:
+\begin{enumerate}
+\item draws 8 starting points from the prior (Proposition~\ref{prop:stick}) and maximises $\log\pi(u\mid\text{data})$ from each with L-BFGS-B (box $|u_i|\le15$, 200 iterations, exact gradients);
+\item keeps the optima within 20 nats of the best (a mode 20 nats lower carries relative mass $\sim e^{-20}$) and assigns them to the chains cyclically;
+\item at each chain's optimum computes a Laplace approximation: the Hessian of $-\log\pi$ by central differences of the exact gradient, symmetrised, with eigenvalues floored at $1/4$ (so flat or non-convex directions get a prior-scale variance);
+\item starts the chain from a draw of that Gaussian and uses its covariance as the initial $M^{-1}$.
+\end{enumerate}
+
+\subsection{Diagnostics}
+With $m$ chains of $n$ draws of a scalar quantity:
+\begin{itemize}
+\item \textbf{Split-$\hat R$.} Split every chain in two halves ($2m$ chains of length $n'=\lfloor n/2\rfloor$), let $W$ be the mean within-chain variance and $B=n'\Var(\text{chain means})$; $\hat R=\sqrt{\big(\frac{n'-1}{n'}W+\frac{B}{n'}\big)/W}$. Values near 1 indicate that chains agree; \code{exact_gw} warns above 1.05.
+\item \textbf{Effective sample size.} Autocorrelations $\hat\rho_t=1-(W-\overline{\mathrm{acov}}_t)/\widehat{\Var}^+$ combined over chains, summed in pairs $\hat\rho_{2s}+\hat\rho_{2s+1}$ while positive and made monotone (Geyer's initial monotone sequence); $\mathrm{ESS}=mn/\hat\tau$ with $\hat\tau=-1+2\sum(\text{pairs})$.
+\item \textbf{Divergences, tree-depth hits, step size, acceptance statistic}, per chain; per-chain posterior means expose chains stuck in different modes.
+\end{itemize}
+
+\subsection{Simulation-based calibration}
+\begin{proposition}[SBC ranks are uniform]\label{prop:sbc}
+Draw $\theta_0\sim$ prior, data $y\sim p(y\mid\theta_0)$, and $\theta_1,\dots,\theta_S$ i.i.d.\ from the exact posterior $p(\theta\mid y)$. For a scalar function $h$ with continuous distribution, the rank $\#\{i:h(\theta_i)<h(\theta_0)\}$ is uniform on $\{0,\dots,S\}$.
+\end{proposition}
+\begin{proof}
+$(\theta_0,y)$ has joint law prior$\times$likelihood $=p(y)\,p(\theta_0\mid y)$, so given $y$, $\theta_0$ is one more posterior draw, and $\theta_0,\dots,\theta_S$ are exchangeable given $y$. By exchangeability and the absence of ties, $\theta_0$'s position among the $S+1$ values is uniform.
+\end{proof}
+\noindent SBC thus tests the whole pipeline (likelihood, prior, sampler). For \code{exact_gw} each case is a full MCMC run, so the number of cases is small (default 20, short chains: 2 chains, 100 warm-up, 100 draws, depth 6) and cases whose counts need more than $2.5\times10^5$ grid points are skipped---a selection on the data only, which keeps ranks uniform. Ranks are computed on a random subset (without replacement) of $\min(\text{posterior samples},\ \text{chains}\times\text{draws})$ MCMC draws; because MCMC draws are autocorrelated, the effective number of draws is smaller and the rank histogram can deviate from uniform even for a correct sampler. With few cases SBC is a coarse check.
+
+%======================================================================
+\section{Algorithms}\label{sec:algorithms}
+\begin{algorithm}[H]
+\caption{Exact law and directional derivatives at one endpoint (\code{law_and_jac})}
+\begin{algorithmic}[1]
+\Require outcome probabilities $\pi$, directions $d_1..d_D$, generations $n$, grid $(L_A,L_B,r_A,r_B)$, observation $(c,C)$, founders $(\varphi,\varpi)$
+\ForAll{grid points $x=r_A\omega_{L_A}^{-j}$, $y=r_B\omega_{L_B}^{-l}$, $0\le l\le L_B/2$}
+  \State $(u,v)\gets F^{\mathrm{obs}}_0(x,y)$; $t_d\gets(0,0)$ for all $d$
+  \For{$m=1..n$}
+    \State $t_{d,k}\gets(\partial_{d}f_k)(u,v)+\partial_xf_k(u,v)\,t_{d,A}+\partial_yf_k(u,v)\,t_{d,B}$ \Comment{old $(u,v)$}
+    \State $(u,v)\gets(f_A(u,v),f_B(u,v))$
+  \EndFor
+  \State $S\gets\varphi_Au+\varphi_Bv$; $g\gets\sum_s\varpi_sS^s$; $\dot g_d\gets\sum_s\varpi_s sS^{s-1}(\varphi\cdot t_d)$
+\EndFor
+\State $p\gets\mathrm{irfft2}(g)$, $\partial_dp\gets\mathrm{irfft2}(\dot g_d)$; multiply cell $(a,b)$ by $r_A^{-a}r_B^{-b}$
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[H]
+\caption{Log-posterior and gradient in logit coordinates (\code{log_posterior_u})}
+\begin{algorithmic}[1]
+\Require $u$; data histograms $n_h$; grids sized from the data
+\State $s\gets\expit(u)$; $\pi\gets$ stick-breaking$(s)$; directions $\partial\pi/\partial s_i$ (\S\ref{sec:deriv})
+\For{each endpoint $h$}
+  \State $(p,\partial p)\gets$ Algorithm 1; $p_z\gets\max(p_z,10^{-15})$ on observed cells
+  \State $\ell\mathrel{+}=\sum_zn_h(z)\log p_z$; $\nabla\ell\mathrel{+}=\sum_zn_h(z)\,\partial p_z/p_z$ (zero where floored)
+  \State $(q,\partial q)\gets$ detection by Proposition~\ref{prop:detect}; if $q>10^{-6}$: $\ell\mathrel{-}=N_h\log q$, $\nabla\ell\mathrel{-}=N_h\partial q/q$; else $\ell\mathrel{-}=N_h\log10^{-6}$
+\EndFor
+\State \Return $\ell+\sum_i[\alpha_i\log s_i+\beta_i\log(1-s_i)]$,\ \ $\nabla\ell\odot s(1-s)+\alpha(1-s)-\beta s$
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[H]
+\caption{One NUTS transition (multinomial, generalised U-turn)}
+\begin{algorithmic}[1]
+\Require state $(q,\log\pi,\nabla)$, step $\epsilon$, inverse mass $M^{-1}$, max depth $J$
+\State $p\sim N(0,M)$; $H_0\gets-\log\pi(q)+\frac12p^\top M^{-1}p$; $\mathcal T\gets\{z_0\}$; proposal $\gets z_0$; $\log W\gets0$; $\rho\gets p$
+\For{$j=0..J-1$}
+  \State $v\gets\pm1$ uniformly; build a subtree of $2^j$ leapfrog steps from the $v$-end of $\mathcal T$ (Algorithm 4)
+  \If{subtree diverged or turned} \textbf{break} \Comment{subtree discarded}
+  \EndIf
+  \State with probability $\min\{1,W_{\mathrm{sub}}/W\}$: proposal $\gets$ subtree proposal \Comment{biased progressive}
+  \State $\log W\gets\log(W+W_{\mathrm{sub}})$; extend $\mathcal T$; $\rho\gets\rho+\rho_{\mathrm{sub}}$
+  \If{$\rho^\top M^{-1}p^-\le0$ or $\rho^\top M^{-1}p^+\le0$} \textbf{break}
+  \EndIf
+\EndFor
+\State \Return proposal, acceptance statistic, depth, divergence flag
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[H]
+\caption{Build a subtree (recursive)}
+\begin{algorithmic}[1]
+\Function{Build}{$z$, $v$, $j$}
+  \If{$j=0$}
+    \State $z'\gets\Psi_{v\epsilon}(z)$; $\log w\gets H_0-H(z')$; divergent if $-\log w>1000$
+    \State \Return leaf: ends $z'$, proposal $z'$, $\log W=\log w$, $\rho=p'$, acceptance $\min(1,w)$
+  \EndIf
+  \State $t_1\gets$ \Call{Build}{$z$, $v$, $j-1$}; \textbf{if} $t_1$ turned or diverged \textbf{return} $t_1$
+  \State $t_2\gets$ \Call{Build}{$v$-end of $t_1$, $v$, $j-1$}; \textbf{if} $t_2$ turned or diverged \textbf{return} $t_1$ marked as such
+  \State proposal $\gets t_2$'s with probability $W_2/(W_1+W_2)$, else $t_1$'s \Comment{progressive uniform}
+  \State $\rho\gets\rho_1+\rho_2$; turned $\gets[\rho^\top M^{-1}p^-\le0$ or $\rho^\top M^{-1}p^+\le0]$
+  \State \Return merged subtree
+\EndFunction
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[H]
+\caption{\code{exact_gw} for one dataset}
+\begin{algorithmic}[1]
+\State size one grid per endpoint from the largest observed counts (\S\ref{sec:inversion})
+\State 8 prior draws $\to$ L-BFGS-B on $\log\pi(u\mid\text{data})$; keep optima within 20 nats of the best
+\ForAll{chains $c=1..4$ \textbf{in parallel}}
+  \State Laplace covariance $\Sigma_c$ at optimum; $q_0\sim N(\text{optimum},\Sigma_c)$; $M^{-1}\gets\Sigma_c$
+  \State 300 warm-up NUTS transitions with step-size and mass adaptation; 500 kept draws
+\EndFor
+\State diagnostics (split-$\hat R$, ESS, divergences, depth hits); grid check at the posterior median
+\State optional: SBC with short chains; PPC by simulation from posterior draws
+\end{algorithmic}
+\end{algorithm}
+
+%======================================================================
+\section{Implementation and cost}\label{sec:impl}
+\begin{itemize}
+\item \textbf{Kernel.} The grid loop of Algorithm 1 is a Numba kernel (\code{_pgf_grid}) that releases the GIL; integer powers are tabulated per iteration; the 2-D FFT is \code{scipy.fft.irfft2}. Chains and optimisations run in threads (one core each).
+\item \textbf{Cost per evaluation} (production kernel, one thread): real-like data 6\,ms for the log-likelihood and 13\,ms with gradient; E0 at 4096 clones per endpoint 11\,ms / 24\,ms; real CRC0322 counts 3\,ms / 6\,ms. Cost is linear in grid points $\times$ generations $\times(1+D)$ plus the FFT, and almost independent of the number of clones (histograms).
+\item \textbf{Cost per posterior.} A fit with B divisions fixed took 10--15\,min, with them free 25--66\,min: wide or multimodal posteriors needed $4.5\times10^4$--$3.4\times10^5$ gradient evaluations (20--40\,ms each on a shared machine). NPE costs 0.5--17\,min of training and then $\approx0.03$\,s per dataset, so it wins for many datasets; exact GW is the reference for a few.
+\item \textbf{Memory.} A few complex arrays of the grid size per endpoint; grids are capped at $4\times10^6$ points.
+\end{itemize}
+
+%======================================================================
+\section{Validation}\label{sec:validation}
+\begin{enumerate}
+\item \textbf{Normalisation and means.} $\sum p=1$ to $10^{-15}$; means equal $e_AM^n$ (Corollary~\ref{cor:degree}) to machine precision at $\theta^\star$.
+\item \textbf{Monte Carlo agreement.} Exact laws agree with the repository simulator within Monte Carlo error.
+\item \textbf{Grid.} Each grid is compared with an undamped grid twice as large at the posterior median: relative error on observed cells $\le10^{-6}$ in all runs.
+\item \textbf{Derivatives.} Forward mode agrees with central finite differences to $\sim10^{-11}$ (relative); table derivatives sum to 0.
+\item \textbf{Detection floor.} A regression test reproduces the spurious $+8\times10^5$-nat likelihood without the floor.
+\item \textbf{Sampler.} Split-$\hat R$, ESS, divergences, tree-depth hits per run; SBC on a few cases.
+\item \textbf{Known answers.} Recovery of $\theta^\star$ on simulated data (\S\ref{sec:results}).
+\end{enumerate}
+
+%======================================================================
+\section{Results}\label{sec:results}
+\subsection{Exact posterior vs NPE on the same datasets}
+Five seeds per setting, identical reference datasets for both methods (\code{results/exact_gw/}, \code{exact_vs_npe.csv}); means over seeds; covered = 90\% interval contains the truth; B-div.\ = posterior mass on B divisions (truth 0).
+\begin{center}\footnotesize\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}lllllll@{}}\toprule
+design & law & method & B$\to$A (0.8) & post.\ sd & covered & B-div.\\\midrule
+$\{4,6,10\}\times4096$ & \code{two_type} & exact & 0.778 & 0.020 & 4/5 & 0.04\\
+ & & NPE 20k / 5k & 0.34 / 0.27 & 0.12 / 0.14 & 0/5 & 0.49 / 0.56\\
+$\{4,8,12\}\times32$ & \code{two_type} & exact & 0.27 & 0.17 & 0/5 & 0.52\\
+ & & NPE 5k--50k & 0.20--0.22 & 0.15 & 0/5 & 0.54\\
+$\{4,8,12\}\times32$ & \code{reversible_ab} & exact & 0.77 & 0.10 & 5/5 & ---\\
+ & & NPE 5k / 20k & 0.72 / 0.71 & 0.13 & 5/5 & ---\\
+real-like $\{6{:}165,10{:}101\}$ & \code{two_type} & exact & 0.25 & 0.16 & 0/5 & 0.56\\
+real-like & \code{reversible_ab} & exact & 0.77 & 0.08 & 5/5 & ---\\
+ & & NPE 5k (10 seeds) & 0.75 & 0.12 & 10/10 & ---\\
+$\{3\}\times266$ & \code{two_type} & exact & 0.23 & 0.19 & 0/5 & 0.54\\
+$\{2,3\}\times133$ & \code{two_type} & exact & 0.56 & 0.15 & 1/5 & 0.18\\\bottomrule
+\end{tabular}
+\end{center}
+Two runs had $\hat R$ 1.12 and 1.18 (multimodal posteriors); the \code{two_type} E0 runs have no SBC. Reading: where data are weak (B divisions free, realistic sizes) exact inference is as prior-dominated as NPE, so NPE's answers there reflect the data; with B divisions fixed both agree and exact posteriors are 25--40\% narrower; at 4096 clones per endpoint exact inference recovers B$\to$A at the Cram\'er--Rao scale while NPE fails.
+
+\subsection{Fisher information and design}
+Exact per-clone Fisher information at $\theta^\star$ (10 free parameters) is positive definite at every endpoint $n=2,\dots,12$ (smallest eigenvalue 0.36 at $n=2$, $6.7\times10^{-4}$ at $n=12$): the model is locally identifiable. The information about B's row decays with the endpoint (per-clone CR variance of B$\to$A 1.8 at $n=2$, 3.6 at $n=4$, 18 at $n=6$, 218 at $n=10$). Cram\'er--Rao sd of B$\to$A: 0.28 at the real-like design (above the uniform prior's sd 0.14), 0.27 at $\{4,8,12\}\times32$, 0.023 at $\{4,6,10\}\times4096$; with 266 organoids at $\{3\}$ or $\{2,3\}$, 0.08--0.09. The global profile, however, flattens far from $\theta^\star$: the best model with B-division mass 0.5 costs only 0.36 nats (real-like), 2.7 ($\{3\}\times266$) and 6.7 ($\{2,3\}\times133$) in total, against 51 nats at 4096 per endpoint---matching the posteriors above. Local bounds must therefore be checked against profiles or posteriors.
+
+%======================================================================
+\section{Limitations and extensions}\label{sec:limits}
+\begin{itemize}
+\item \textbf{Scope.} Two types, homogeneous law, fixed founder rows, generation endpoints (or hours mapped to generations). Free founder mixtures and clone heterogeneity are not supported.
+\item \textbf{Large clones.} Memory and time grow with $L_AL_B$; very large clones need damping, data-sized grids or approximations.
+\item \textbf{Continuous time.} For Bellman--Harris the pgf satisfies an integral equation; with integer Gamma shapes it reduces to phase ODEs, solved per grid point, after which the same inversion applies (\code{bhexact.py}); it is about 100 times more expensive.
+\item \textbf{MCMC.} NUTS can struggle with multimodal posteriors (two runs with $\hat R>1.1$); SBC with MCMC is expensive and therefore coarse.
+\item \textbf{Global identifiability} is not proved; local identifiability and profiles are computed at $\theta^\star$ only.
+\end{itemize}
+
+%======================================================================
+\section*{References}\addcontentsline{toc}{section}{References}
+\raggedright
+\begin{enumerate}\small
+\item[{[1]}] J.\ Abate and W.\ Whitt, ``Numerical inversion of probability generating functions'', \emph{Oper.\ Res.\ Lett.}\ 12 (1992) 245--251.
+\item[{[2]}] K.\,B.\ Athreya and P.\,E.\ Ney, \emph{Branching Processes}, Springer, 1972.
+\item[{[3]}] M.\ Betancourt, ``A conceptual introduction to Hamiltonian Monte Carlo'', arXiv:1701.02434, 2017.
+\item[{[4]}] W.\,L.\ Briggs and V.\,E.\ Henson, \emph{The DFT: An Owner's Manual for the Discrete Fourier Transform}, SIAM, 1995.
+\item[{[5]}] B.\ Carpenter et al., ``Stan: a probabilistic programming language'', \emph{J.\ Statist.\ Software} 76 (2017) 1--32 (warm-up schedule).
+\item[{[6]}] J.\,W.\ Cooley and J.\,W.\ Tukey, ``An algorithm for the machine calculation of complex Fourier series'', \emph{Math.\ Comp.}\ 19 (1965) 297--301.
+\item[{[7]}] W.\ Feller, \emph{An Introduction to Probability Theory and Its Applications}, Vol.~I, 3rd ed., Wiley, 1968, Ch.~XI--XII.
+\item[{[8]}] C.\,J.\ Geyer, ``Practical Markov chain Monte Carlo'', \emph{Statist.\ Sci.}\ 7 (1992) 473--483 (initial monotone sequence).
+\item[{[9]}] A.\ Griewank and A.\ Walther, \emph{Evaluating Derivatives}, 2nd ed., SIAM, 2008.
+\item[{[10]}] T.\,E.\ Harris, \emph{The Theory of Branching Processes}, Springer, 1963.
+\item[{[11]}] E.\ Hairer, C.\ Lubich and G.\ Wanner, \emph{Geometric Numerical Integration}, 2nd ed., Springer, 2006.
+\item[{[12]}] M.\,D.\ Hoffman and A.\ Gelman, ``The No-U-Turn sampler: adaptively setting path lengths in Hamiltonian Monte Carlo'', \emph{J.\ Mach.\ Learn.\ Res.}\ 15 (2014) 1593--1623.
+\item[{[13]}] R.\,M.\ Neal, ``MCMC using Hamiltonian dynamics'', in \emph{Handbook of Markov Chain Monte Carlo}, CRC, 2011.
+\item[{[14]}] Y.\ Nesterov, ``Primal-dual subgradient methods for convex problems'', \emph{Math.\ Program.}\ 120 (2009) 221--259.
+\item[{[15]}] J.\ Nocedal and S.\,J.\ Wright, \emph{Numerical Optimization}, 2nd ed., Springer, 2006.
+\item[{[16]}] S.\ Talts, M.\ Betancourt, D.\ Simpson, A.\ Vehtari and A.\ Gelman, ``Validating Bayesian inference algorithms with simulation-based calibration'', arXiv:1804.06788, 2018.
+\item[{[17]}] A.\ Vehtari, A.\ Gelman, D.\ Simpson, B.\ Carpenter and P.-C.\ B\"urkner, ``Rank-normalization, folding, and localization: an improved $\hat R$'', \emph{Bayesian Anal.}\ 16 (2021) 667--718.
+\item[{[18]}] D.\ Williams, \emph{Probability with Martingales}, Cambridge University Press, 1991.
+\item[{[19]}] R.\,J.\ Connor and J.\,E.\ Mosimann, ``Concepts of independence for proportions with a generalization of the Dirichlet distribution'', \emph{J.\ Amer.\ Statist.\ Assoc.}\ 64 (1969) 194--206 (stick-breaking).
+\end{enumerate}
+\end{document}
