@@ -90,18 +90,16 @@ class FittedPosterior:
                 max_sampling_time=getattr(self, "max_sampling_time", 60.0),
                 return_partial_on_timeout=True,
             )
-        empty = torch.empty((0, self.posterior.prior.event_shape[0]))
         try:
             with torch.no_grad():
                 samples = self.posterior.sample((n,), x=self.condition(x), **options)
-        except RuntimeError as error:  # sbi raises when the cap is hit with 0 accepted
-            if "max_sampling_time" not in str(error):
+        except (RuntimeError, AssertionError) as error:
+            # RuntimeError: sbi raises when the cap is hit with 0 accepted.
+            if isinstance(error, RuntimeError) and "max_sampling_time" not in str(error):
                 raise
-            samples = empty
-        except AssertionError as error:
-            if not _is_spline_numerical_failure(error):
+            if isinstance(error, AssertionError) and not _is_spline_numerical_failure(error):
                 raise
-            samples = empty
+            samples = torch.empty((0, self.posterior.prior.event_shape[0]))
         if len(samples) < n:
             import warnings
 
