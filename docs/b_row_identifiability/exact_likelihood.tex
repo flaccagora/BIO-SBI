@@ -166,7 +166,7 @@ the last equality by Step 0.
 \end{enumerate}
 \end{remark}
 
-\begin{example}[Offspring pgfs]
+\begin{example}[Offspring pgfs]\label{ex:offspring}
 Each outcome contributes its probability times $x^ay^b$:
 \begin{align*}
 f_A(x,y)&=\pi_{A,\mathrm{death}}+\pi_{A,\mathrm{persist}}x+\pi_{A,\mathrm{to\_B}}y+\pi_{A,AA}x^2+\pi_{A,AB}xy+\pi_{A,BB}y^2,\\
@@ -188,7 +188,7 @@ A formal proof of the composition rule needs the process built explicitly, so th
 
 \paragraph{Randomness.} On $(\Omega,\mathcal F,\Prob)$ take random outcomes $O_u^{(j)}$, $u\in U$, $j\in\{A,B\}$, with $\Prob(O_u^{(j)}=o)=\pi_{j,o}$ and the whole family $\{O_u^{(j)}:u\in U,\ j\in\{A,B\}\}$ mutually independent. Such a space exists because the family is countable (countable product of probability spaces; Kolmogorov / Ionescu-Tulcea). Each cell carries one prepared outcome per possible type and uses the one of its actual type.
 
-\paragraph{The clone started at $u$ with type $j$.} Define recursively, using only variables indexed by $uU$: $L_0^{u,j}=\{u\}$ with type $\tau(u)=j$; if $v\in L_m^{u,j}$ has type $\tau(v)$, outcome $o=O_v^{(\tau(v))}$ and $D_{\tau(v)}(o)=(d_1,\dots,d_\ell)$, then $v1,\dots,v\ell\in L_{m+1}^{u,j}$ with $\tau(vi)=d_i$. Let $Z_m^{u,j}\in\mathbb N^2$ count the A and B cells of $L_m^{u,j}$. The process of the theorem is $Z_n:=Z_n^{\emptyset,k}$ and $F_{n,k}(x,y)=\E\big[x^{Z^{\emptyset,k}_{n,A}}y^{Z^{\emptyset,k}_{n,B}}\big]$. Every $L_m^{u,j}$ is finite and each step uses finitely many variables, so all these objects are measurable.
+\paragraph{The clone started at $u$ with type $j$.} Define recursively, using only variables indexed by $uU$: $L_0^{u,j}=\{u\}$ with type $\tau(u)=j$; if $v\in L_m^{u,j}$ has type $\tau(v)$, outcome $o=O_v^{(\tau(v))}$ and $D_{\tau(v)}(o)=(d_1,\dots,d_\ell)$, then $v1,\dots,v\ell\in L_{m+1}^{u,j}$ with $\tau(vi)=d_i$. Let $Z_m^{u,j}\in\mathbb N^2$ count the A and B cells of $L_m^{u,j}$. The clone of the theorem, started by one type-$k$ cell, is $Z_n^{(k)}:=Z_n^{\emptyset,k}$ and $F_{n,k}(x,y)=\E\big[x^{Z^{\emptyset,k}_{n,A}}y^{Z^{\emptyset,k}_{n,B}}\big]$. Every $L_m^{u,j}$ is finite and each step uses finitely many variables, so all these objects are measurable.
 
 \begin{lemmaA}
 For every $u\in U$, type $j$ and $m\ge0$, $Z_m^{u,j}$ has the same law as $Z_m^{\emptyset,j}$; in particular its pgf is $F_{m,j}$.
@@ -206,7 +206,14 @@ Grouping property of independence: functions of disjoint subfamilies of a mutual
 \noindent Two disjointness facts are used below: (i) if $u\ne u'$ and neither is a prefix of the other (e.g.\ the daughters $1$ and $2$), then $uU\cap u'U=\emptyset$; (ii) the sets $\{v:|v|\le n-2\}$ and $\{v:|v|=n-1\}$ are disjoint.
 
 \subsection{The recursion}
-Write $F_n=(F_{n,A},F_{n,B})$ with $F_{n,k}$ the pgf of $Z_n$ started from one type-$k$ cell, and $f=(f_A,f_B)$.
+\paragraph{The objects in the theorem.}
+\begin{itemize}
+\item \textbf{$Z_n^{(k)}$, the clone at generation $n$.} Start a well with one cell of type $k$ and let the process run for $n$ generations. $Z_n^{(k)}=(Z^{(k)}_{n,A},Z^{(k)}_{n,B})$ is the random pair \emph{(number of A cells, number of B cells)} alive at generation $n$. Formally $Z_n^{(k)}:=Z_n^{\emptyset,k}$ of \S\ref{sec:gwconstr}. In this project the founder is A, and $Z_n:=Z_n^{(A)}$ is what one organoid measured at endpoint $n$ looks like (before detection and assay errors). Examples: $Z_0^{(k)}$ is the founder alone, $(1,0)$ for $k=A$; $Z_1^{(k)}$ are its daughters, e.g.\ $(1,1)$ if an A founder divides into AB; $Z_n^{(k)}=(0,0)$ means the clone is extinct by generation $n$.
+\item \textbf{$F_{n,k}$, its pgf.} $F_{n,k}(x,y)=\E\big[x^{Z^{(k)}_{n,A}}y^{Z^{(k)}_{n,B}}\big]=\sum_{a,b}\Prob\big(Z_n^{(k)}=(a,b)\big)x^ay^b$. It is the whole law of the generation-$n$ clone packed into one function: the coefficient of $x^ay^b$ is the probability of seeing $a$ A cells and $b$ B cells. Readings (Proposition~\ref{prop:pgfbasic}): $F_{n,k}(0,0)$ is the probability that the clone is extinct by generation $n$; $\partial_xF_{n,k}(1,1)$ is the expected number of A cells; $F_{n,k}(1,1)=1$.
+\item \textbf{$F_n=(F_{n,A},F_{n,B})$, both founder types at once.} A map $\bar{\mathbb D}^2\to\bar{\mathbb D}^2$ that, for each starting type, gives the pgf of the clone at generation $n$. Both components are needed because a clone started by A contains B cells, whose own subclones follow $F_{\cdot,B}$.
+\item \textbf{$f=(f_A,f_B)$, one generation.} The offspring pgfs of Example~\ref{ex:offspring}: $f_k$ is the law of what \emph{one} type-$k$ cell leaves after \emph{one} event. Hence $F_0=(x,y)$ (no generation has passed: the clone is the founder, contributing $x$ if A and $y$ if B) and $F_1=f$.
+\end{itemize}
+\noindent The theorem says that the $n$-generation map is $f$ applied $n$ times: to see $n$ generations ahead, either let the founder act once and then look $n-1$ generations ahead from each daughter ($f\circ F_{n-1}$), or look $n-1$ generations ahead and then let every cell present act once ($F_{n-1}\circ f$).
 \begin{theorem}[Composition]\label{thm:gwcomp}
 $F_0(x,y)=(x,y)$ and, for $n\ge1$,
 \[
@@ -214,7 +221,7 @@ F_n=f\circ F_{n-1}=F_{n-1}\circ f\qquad(\text{so }F_n=f^{\circ n}).
 \]
 \end{theorem}
 \begin{proof}
-Fix $n\ge1$, a founder type $k$ and $(x,y)\in\bar{\mathbb D}^2$, and put $Z:=x^{Z_{n,A}}y^{Z_{n,B}}$; $|Z|\le1$ by (F1).
+Fix $n\ge1$, a founder type $k$ and $(x,y)\in\bar{\mathbb D}^2$, and put $Z:=x^{Z^{(k)}_{n,A}}y^{Z^{(k)}_{n,B}}$; $|Z|\le1$ by (F1).
 
 \medskip\noindent\textbf{(I) First-step decomposition: $F_{n,k}=f_k(F_{n-1,A},F_{n-1,B})$.}
 
@@ -222,7 +229,7 @@ Fix $n\ge1$, a founder type $k$ and $(x,y)\in\bar{\mathbb D}^2$, and put $Z:=x^{
 
 \emph{Step 2 (on $E_o$ the clone is a fixed sum of subclones).} On $E_o$ the founder's daughters are the words $1,\dots,\ell$ with $\ell=\ell_k(o)$ and types $(d_1,\dots,d_\ell)=D_k(o)$. By the recursive definition every cell of generation $n$ descends from exactly one daughter $i$, so $L_n^{\emptyset,k}$ is the disjoint union of the $L_{n-1}^{i,d_i}$ and
 \[
-Z_n=\sum_{i=1}^{\ell}Z^{i,d_i}_{n-1},\qquad
+Z^{(k)}_n=\sum_{i=1}^{\ell}Z^{i,d_i}_{n-1},\qquad
 Z\,\mathbf 1_{E_o}=\mathbf 1_{E_o}\prod_{i=1}^{\ell}x^{Z^{i,d_i}_{n-1,A}}y^{Z^{i,d_i}_{n-1,B}}\quad(\text{using }s^{a+b}=s^as^b).
 \]
 
@@ -235,7 +242,7 @@ Z\,\mathbf 1_{E_o}=\mathbf 1_{E_o}\prod_{i=1}^{\ell}x^{Z^{i,d_i}_{n-1,A}}y^{Z^{i
 \[
 \E[Z\mathbf 1_{E_o}]=\pi_{k,o}\,F_{n-1,A}(x,y)^{a_{ko}}F_{n-1,B}(x,y)^{b_{ko}} .
 \]
-For death ($\ell=0$), $Z_n=0$, so $Z=1$ on $E_o$, and the right side is $\pi_{k,o}$ times an empty product: the formula holds as well.
+For death ($\ell=0$), $Z^{(k)}_n=0$, so $Z=1$ on $E_o$, and the right side is $\pi_{k,o}$ times an empty product: the formula holds as well.
 
 \emph{Step 5 (assemble).} Summing over $o$ and using the definition of $f_k$,
 \[
@@ -250,7 +257,7 @@ where $(F_{n-1,A},F_{n-1,B})(x,y)\in\bar{\mathbb D}^2$ by (F1).
 \E[Z]=\sum_c\E\big[Z\mathbf 1_{\{C=c\}}\big].
 \]
 
-\emph{Step 2 (on $\{C=c\}$ the last generation is a fixed sum).} On $\{C=c\}$ each $u\in c$ has a type $\tau(u)$ fixed by $c$, and its daughters are counted by $\xi_u:=\big(a_{\tau(u),O_u},\,b_{\tau(u),O_u}\big)$ with $O_u=O^{(\tau(u))}_u$. Hence $Z_n=\sum_{u\in c}\xi_u$ and
+\emph{Step 2 (on $\{C=c\}$ the last generation is a fixed sum).} On $\{C=c\}$ each $u\in c$ has a type $\tau(u)$ fixed by $c$, and its daughters are counted by $\xi_u:=\big(a_{\tau(u),O_u},\,b_{\tau(u),O_u}\big)$ with $O_u=O^{(\tau(u))}_u$. Hence $Z^{(k)}_n=\sum_{u\in c}\xi_u$ and
 \[
 Z\,\mathbf 1_{\{C=c\}}=\mathbf 1_{\{C=c\}}\prod_{u\in c}x^{\xi_{u,A}}y^{\xi_{u,B}} .
 \]
@@ -265,17 +272,17 @@ Z\,\mathbf 1_{\{C=c\}}=\mathbf 1_{\{C=c\}}\prod_{u\in c}x^{\xi_{u,A}}y^{\xi_{u,B
 \E\big[Z\mathbf 1_{\{C=c\}}\big]=\Prob(C=c)\,f_A(x,y)^\alpha f_B(x,y)^\beta .
 \]
 
-\emph{Step 5 (assemble).} Grouping the configurations by their counts $(\alpha,\beta)=Z_{n-1}$,
+\emph{Step 5 (assemble).} Grouping the configurations by their counts $(\alpha,\beta)=Z^{(k)}_{n-1}$,
 \[
-F_{n,k}(x,y)=\sum_{\alpha,\beta\ge0}\Prob\big(Z_{n-1}=(\alpha,\beta)\big)f_A^\alpha f_B^\beta=F_{n-1,k}\big(f_A(x,y),f_B(x,y)\big),
+F_{n,k}(x,y)=\sum_{\alpha,\beta\ge0}\Prob\big(Z^{(k)}_{n-1}=(\alpha,\beta)\big)f_A^\alpha f_B^\beta=F_{n-1,k}\big(f_A(x,y),f_B(x,y)\big),
 \]
 the series converging absolutely since $|f_A|,|f_B|\le1$ by (F1).
 
-\medskip\noindent\textbf{(III) Conclusion.} $Z_0=e_k$, so $F_0=\mathrm{id}$. By (I) and induction, $F_n=f\circ F_{n-1}=f^{\circ n}$; by (II), $F_n=F_{n-1}\circ f=f^{\circ(n-1)}\circ f=f^{\circ n}$ as well (composition is associative). So the two forms agree, and iterating $(u,v)\leftarrow(f_A(u,v),f_B(u,v))$ $n$ times from $(x,y)$ computes $F_{n,k}(x,y)$ exactly.
+\medskip\noindent\textbf{(III) Conclusion.} $Z^{(k)}_0=e_k$, so $F_0=\mathrm{id}$. By (I) and induction, $F_n=f\circ F_{n-1}=f^{\circ n}$; by (II), $F_n=F_{n-1}\circ f=f^{\circ(n-1)}\circ f=f^{\circ n}$ as well (composition is associative). So the two forms agree, and iterating $(u,v)\leftarrow(f_A(u,v),f_B(u,v))$ $n$ times from $(x,y)$ computes $F_{n,k}(x,y)$ exactly.
 \end{proof}
 
 \paragraph{Remark (relation to Lemma~\ref{lem:sums}).}
-(I) is Lemma~\ref{lem:sums}(b) with $N=Z_1$ and (II) with $N=Z_{n-1}$, $H=f$. They are proved directly because the subclones are indexed by daughter \emph{position} (or by word) rather than as ``the $l$-th A daughter'' of Lemma~\ref{lem:sums}; the partition is then over outcomes or configurations instead of over values of $N$, and the steps are otherwise identical to the proof of Lemma~\ref{lem:sums}. Lemmas~A and~B are the branching property; everything else is (F1), (F2) and $s^{a+b}=s^as^b$.
+(I) is Lemma~\ref{lem:sums}(b) with $N=Z^{(k)}_1$ and (II) with $N=Z^{(k)}_{n-1}$, $H=f$. They are proved directly because the subclones are indexed by daughter \emph{position} (or by word) rather than as ``the $l$-th A daughter'' of Lemma~\ref{lem:sums}; the partition is then over outcomes or configurations instead of over values of $N$, and the steps are otherwise identical to the proof of Lemma~\ref{lem:sums}. Lemmas~A and~B are the branching property; everything else is (F1), (F2) and $s^{a+b}=s^as^b$.
 
 \begin{corollary}[Degree bound]\label{cor:degree}
 With at most two daughters per event, $F_{n,k}$ is a polynomial of total degree $\le2^n$; in particular $Z_{n,A},Z_{n,B}\le2^n$.
