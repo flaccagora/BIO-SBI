@@ -12,6 +12,7 @@
 \newtheorem*{auxfacts}{Auxiliary facts}
 \newtheorem*{lemmaA}{Lemma A (subclones are fresh clones)}
 \newtheorem*{lemmaB}{Lemma B (disjoint families are independent)}
+\newtheorem*{rootsfacts}{Roots of unity}
 \theoremstyle{definition}
 \newtheorem{definition}[theorem]{Definition}
 \newtheorem{example}[theorem]{Example}
@@ -364,27 +365,103 @@ The system is non-stiff on the unit circle ($|G|\le1$, rates $\lambda_k=m/\mu_k\
 %======================================================================
 \section{From pgf values to probabilities: DFT, FFT, aliasing}\label{sec:dft}
 \subsection{Inversion on roots of unity}
-Let $\omega_L=e^{2\pi i/L}$.
+\paragraph{Idea.} A pgf is a power series whose coefficients are the probabilities we want. We cannot expand $F_n$ symbolically (degree $2^n$), but we can \emph{evaluate} it cheaply at any point (\S\ref{sec:gw}, \S\ref{sec:bh}). If we evaluate it at $L$ suitably chosen points on a circle, a weighted average of these values isolates one coefficient, because the weights cancel every other coefficient. The suitable points are the roots of unity.
+
+\begin{rootsfacts}
+Fix an integer $L\ge1$ and let $\omega_L:=e^{2\pi i/L}=\cos(2\pi/L)+i\sin(2\pi/L)$. The numbers $\omega_L^0,\omega_L^1,\dots,\omega_L^{L-1}$ are the \emph{$L$-th roots of unity}. For all integers $m,m'$ (negative allowed):
+\begin{enumerate}
+\item[(R1)] $\omega_L^m=e^{2\pi im/L}$, so $|\omega_L^m|=1$ and $\omega_L^m\omega_L^{m'}=\omega_L^{m+m'}$.
+\item[(R2)] $\omega_L^L=1$, and $\omega_L^m$ depends only on $m$ modulo $L$: if $m=qL+\rho$ then $\omega_L^m=\omega_L^\rho$.
+\item[(R3)] $\omega_L^m=1$ if and only if $L$ divides $m$.
+\item[(R4)] $\omega_L^0,\dots,\omega_L^{L-1}$ are $L$ distinct points, and they are exactly the solutions of $z^L=1$.
+\item[(R5)] $\overline{\omega_L^m}=\omega_L^{-m}=1/\omega_L^m$.
+\end{enumerate}
+\end{rootsfacts}
+\begin{proof}
+(R1) is Euler's formula $e^{i\phi}=\cos\phi+i\sin\phi$ together with $e^{z}e^{z'}=e^{z+z'}$ and $|e^{i\phi}|=1$ for real $\phi$. (R2) $\omega_L^L=e^{2\pi i}=1$, and by (R1) $\omega_L^{qL+\rho}=(\omega_L^L)^q\omega_L^\rho=\omega_L^\rho$. (R3) $e^{2\pi im/L}=1$ if and only if $2\pi m/L$ is an integer multiple of $2\pi$, i.e.\ $m/L\in\mathbb Z$. (R4) For $0\le j<j'<L$, $\omega_L^{j'}/\omega_L^{j}=\omega_L^{j'-j}\ne1$ by (R3), since $0<j'-j<L$; so the points are distinct. Each satisfies $(\omega_L^j)^L=(\omega_L^L)^j=1$, and the polynomial $z^L-1$ of degree $L$ has at most $L$ roots, so there are no others. (R5) For $|z|=1$, $\bar z=1/z$; and $1/\omega_L^m=\omega_L^{-m}$ by (R1).
+\end{proof}
+\noindent \emph{Picture.} The roots of unity are $L$ equally spaced points on the unit circle, starting at 1; multiplying by $\omega_L$ rotates the plane by the angle $2\pi/L$ and permutes them cyclically. The scaled points $r\omega_L^j$ ($0<r\le1$) lie on the circle of radius $r$.
+
 \begin{lemma}[Orthogonality]\label{lem:orth}
-$\sum_{j=0}^{L-1}\omega_L^{jm}=L$ if $m\equiv0\pmod L$ and $0$ otherwise.
+For every integer $m$,
+\[
+\sum_{j=0}^{L-1}\omega_L^{jm}=\begin{cases}L,& L\text{ divides }m,\\ 0,&\text{otherwise.}\end{cases}
+\]
+Consequently, for integers $m,m'$ and grid sizes $L_A,L_B$,
+\[
+\frac1{L_AL_B}\sum_{j=0}^{L_A-1}\sum_{l=0}^{L_B-1}\omega_{L_A}^{jm}\,\omega_{L_B}^{lm'}=\mathbf 1[L_A\mid m]\;\mathbf 1[L_B\mid m'] .
+\]
 \end{lemma}
 \begin{proof}
-For $m\not\equiv0$ it is a geometric sum $(1-\omega_L^{Lm})/(1-\omega_L^m)=0$.
-\end{proof}
-\begin{theorem}[DFT inversion with folding]\label{thm:fold}
-Let $G(x,y)=\sum_{a,b}p_{ab}x^ay^b$ and $0<r\le1$. Evaluate on the $L_A\times L_B$ grid $g_{jl}=G(r\omega_{L_A}^j,\,r\omega_{L_B}^l)$. Then
+Put $q:=\omega_L^m$, so that $\omega_L^{jm}=q^j$ by (R1) and the sum is $S:=\sum_{j=0}^{L-1}q^j$.
+
+\emph{Case $L\mid m$.} By (R3), $q=1$, so every term is 1 and $S=L$.
+
+\emph{Case $L\nmid m$.} By (R3), $q\ne1$. Multiply $S$ by $1-q$; the sum telescopes:
 \[
-c_{ab}:=\frac1{L_AL_B}\sum_{j,l}g_{jl}\,\omega_{L_A}^{-ja}\omega_{L_B}^{-lb}=\sum_{s,t\ge0}p_{a+sL_A,\,b+tL_B}\;r^{\,a+sL_A+b+tL_B},
-\qquad 0\le a<L_A,\ 0\le b<L_B .
+(1-q)S=\sum_{j=0}^{L-1}q^j-\sum_{j=0}^{L-1}q^{j+1}=\sum_{j=0}^{L-1}q^j-\sum_{j=1}^{L}q^{j}=q^0-q^L=1-q^L .
 \]
+By (R1)--(R2), $q^L=\omega_L^{mL}=(\omega_L^L)^m=1$, so $(1-q)S=0$. Since $1-q\ne0$, $S=0$.
+
+\emph{Two variables.} The double sum is a product of two finite sums, $\big(\sum_j\omega_{L_A}^{jm}\big)\big(\sum_l\omega_{L_B}^{lm'}\big)$, because each term is a product of a factor depending only on $j$ and a factor depending only on $l$. Apply the one-variable case to each factor and divide by $L_AL_B$.
+\end{proof}
+\noindent \emph{Picture.} If $L\nmid m$, the numbers $\omega_L^{jm}$, $j=0,\dots,L-1$, are equally spaced points on the unit circle (possibly each repeated the same number of times), and their centre of mass is $0$.
+
+\begin{theorem}[DFT inversion with folding]\label{thm:fold}
+Let $G(x,y)=\sum_{a,b\ge0}p_{ab}x^ay^b$ with $p_{ab}\ge0$ and $\sum_{a,b}p_{ab}\le1$ (a pgf, possibly of a sub-probability law), let $0<r\le1$ and $L_A,L_B\ge1$. Evaluate $G$ on the $L_A\times L_B$ grid
+\[
+g_{jl}:=G\big(r\omega_{L_A}^j,\,r\omega_{L_B}^l\big),\qquad 0\le j<L_A,\ 0\le l<L_B .
+\]
+Then for $0\le a<L_A$ and $0\le b<L_B$,
+\[
+c_{ab}:=\frac1{L_AL_B}\sum_{j=0}^{L_A-1}\sum_{l=0}^{L_B-1}g_{jl}\,\omega_{L_A}^{-ja}\omega_{L_B}^{-lb}
+=\sum_{s,t\ge0}p_{a+sL_A,\,b+tL_B}\;r^{\,a+sL_A+b+tL_B}.
+\]
+In words: $c_{ab}$ is $p_{ab}r^{a+b}$ plus the (damped) probabilities of all counts congruent to $(a,b)$ modulo $(L_A,L_B)$; these extra terms are the \emph{aliasing}.
 \end{theorem}
 \begin{proof}
-Substitute the series, exchange sums (absolute convergence), apply Lemma~\ref{lem:orth} in each variable.
+Fix $(a,b)$ with $0\le a<L_A$, $0\le b<L_B$. Write $\omega_A:=\omega_{L_A}$, $\omega_B:=\omega_{L_B}$.
+
+\emph{Step 1 (each grid value is an absolutely convergent series).} For $|x|,|y|\le r\le1$, $\sum_{a',b'}|p_{a'b'}x^{a'}y^{b'}|\le\sum_{a',b'}p_{a'b'}\le1$, so the series defining $G$ converges absolutely at every grid point. By (R1), $(r\omega_A^j)^{a'}=r^{a'}\omega_A^{ja'}$ and $(r\omega_B^l)^{b'}=r^{b'}\omega_B^{lb'}$, hence
+\[
+g_{jl}=\sum_{a',b'\ge0}p_{a'b'}\,r^{a'+b'}\,\omega_A^{ja'}\omega_B^{lb'} .
+\]
+
+\emph{Step 2 (substitute).} Multiplying by $\omega_A^{-ja}\omega_B^{-lb}$ (a constant for fixed $j,l$) term by term, and using (R1) to combine powers,
+\[
+g_{jl}\,\omega_A^{-ja}\omega_B^{-lb}=\sum_{a',b'\ge0}p_{a'b'}\,r^{a'+b'}\,\omega_A^{j(a'-a)}\omega_B^{l(b'-b)} .
+\]
+
+\emph{Step 3 (exchange the finite sum over the grid with the series).} $c_{ab}$ is $1/(L_AL_B)$ times the sum of these $L_AL_B$ convergent series. A finite sum of convergent series is the series of the termwise sums (linearity of limits), so
+\[
+c_{ab}=\sum_{a',b'\ge0}p_{a'b'}\,r^{a'+b'}\;\Bigg[\frac1{L_AL_B}\sum_{j=0}^{L_A-1}\sum_{l=0}^{L_B-1}\omega_A^{j(a'-a)}\omega_B^{l(b'-b)}\Bigg].
+\]
+The resulting series converges absolutely, because the bracket has modulus $\le1$ and $\sum p_{a'b'}r^{a'+b'}\le1$.
+
+\emph{Step 4 (orthogonality).} By Lemma~\ref{lem:orth} with $m=a'-a$ and $m'=b'-b$, the bracket equals $\mathbf 1[L_A\mid a'-a]\,\mathbf 1[L_B\mid b'-b]$. Hence
+\[
+c_{ab}=\sum_{a',b'\ge0}p_{a'b'}\,r^{a'+b'}\,\mathbf 1[L_A\mid a'-a]\,\mathbf 1[L_B\mid b'-b] .
+\]
+
+\emph{Step 5 (which indices survive).} $L_A\mid a'-a$ means $a'=a+sL_A$ for some integer $s$. Since $a'\ge0$ and $a<L_A$, $s\ge0$: indeed $s\le-1$ would give $a'\le a-L_A<0$. Conversely every $s\ge0$ gives an admissible $a'\ge0$. The same holds for $b'=b+tL_B$, $t\ge0$. The map $(s,t)\mapsto(a+sL_A,\,b+tL_B)$ is a bijection from $\mathbb N^2$ onto the surviving index pairs, and the other terms are zero. Dropping zero terms and re-indexing an absolutely convergent series does not change its sum, so
+\[
+c_{ab}=\sum_{s,t\ge0}p_{a+sL_A,\,b+tL_B}\;r^{\,a+sL_A+b+tL_B}.\qedhere
+\]
 \end{proof}
-\begin{corollary}
+
+\begin{corollary}\label{cor:fold}
 (i) \emph{Exact recovery:} if $p_{ab}=0$ whenever $a\ge L_A$ or $b\ge L_B$, then $p_{ab}=c_{ab}r^{-(a+b)}$; with $r=1$, $p_{ab}=c_{ab}$. For GW, $L_A,L_B\ge2^n+1$ is always exact (Corollary~\ref{cor:degree}).
 (ii) \emph{Aliasing error} otherwise: $\big|c_{ab}r^{-(a+b)}-p_{ab}\big|\le\max(r^{L_A},r^{L_B})\;\Prob(Z_A\ge L_A\ \text{or}\ Z_B\ge L_B)$.
 \end{corollary}
+\begin{proof}
+Divide Theorem~\ref{thm:fold} by $r^{a+b}$: $c_{ab}r^{-(a+b)}-p_{ab}=\sum_{(s,t)\ne(0,0)}p_{a+sL_A,\,b+tL_B}\,r^{sL_A+tL_B}$. (i) Under the hypothesis every term with $(s,t)\ne(0,0)$ has an index $\ge L_A$ or $\ge L_B$, so it vanishes. (ii) In every term $s\ge1$ or $t\ge1$, so $r^{sL_A+tL_B}\le\max(r^{L_A},r^{L_B})$ (as $r\le1$); and the indices $(a+sL_A,b+tL_B)$, $(s,t)\ne(0,0)$, are distinct counts with $Z_A\ge L_A$ or $Z_B\ge L_B$, so their probabilities sum to at most $\Prob(Z_A\ge L_A\text{ or }Z_B\ge L_B)$.
+\end{proof}
+
+\paragraph{Example (one variable, aliasing).} Take $G(s)=0.2+0.3s+0.5s^2$ (degree 2) and $r=1$.
+\begin{itemize}
+\item $L=2$: the roots are $\omega_2^0=1$ and $\omega_2^1=-1$; $g_0=G(1)=1$, $g_1=G(-1)=0.4$. Then $c_0=\tfrac12(g_0+g_1)=0.7=p_0+p_2$ and $c_1=\tfrac12(g_0-g_1)=0.3=p_1$: the probability of 2 cells has folded onto 0 cells, exactly as Theorem~\ref{thm:fold} predicts ($a=0$, $s=1$).
+\item $L=3$: the grid is larger than the degree, nothing folds, and $c_0,c_1,c_2=0.2,0.3,0.5$ exactly (Corollary~\ref{cor:fold}(i)).
+\end{itemize}
 The transform $g\mapsto c$ is the 2-D DFT. With numpy's sign convention (\code{fft} uses $e^{-2\pi i\,jk/L}$),
 \[
 p=\mathrm{Re}\big(\code{fft2}(g)\big)/(L_AL_B)\qquad(\text{for }r=1),
