@@ -552,22 +552,69 @@ Examples: GW $n=10$ at the reference truth, $L=384$ reproduces the alias-free $L
 
 %======================================================================
 \section{Exact derivatives}\label{sec:deriv}
-\paragraph{Linearity.} The map from grid values to coefficients is linear and does not depend on $\theta$, so $\partial_\theta p=\mathrm{DFT}(\partial_\theta g)$: differentiate the pgf values, then apply the same FFT.
+\paragraph{Why derivatives are needed.} Maximum likelihood (L-BFGS) and NUTS need the gradient of $\ell(\theta)$; gradient-free alternatives are much slower and less reliable in 10--12 dimensions. The Fisher information $I=\sum_z\tilde p_z\nabla\log\tilde p_z\nabla\log\tilde p_z^\top$ needs the derivative of \emph{every} cell of the probability table, not only of $\ell$. Both follow from two facts: the table is a fixed linear transform (the DFT) of the grid values, and the grid values come from a recursion (GW) or an ODE (BH) that can be differentiated step by step.
 
-\paragraph{GW, forward mode.} For a direction $d$ in parameter space, differentiate the recursion $F_n=f(F_{n-1};\theta)$:
+\paragraph{Directions.} Each probability row lives on a simplex, so a meaningful parameter change moves mass between outcomes. A \emph{direction} is a vector $d$ in the space of the 12 outcome probabilities with $\sum_od_{k,o}=0$ in each row, e.g.\ $d=e_{k,o}-e_{k,\mathrm{death}}$ (``one more outcome $o$, one less death''). We write $\partial_d$ for the derivative along $d$; derivatives in softmax or stick-breaking coordinates follow by one more chain rule at the end.
+
+\begin{proposition}[Differentiation commutes with the DFT]\label{prop:dftderiv}
+Let the grid values $g_{jl}(\theta)$ be differentiable along $d$ and let
 \[
-\dot F_{n,k}=\underbrace{(\partial_\theta f_k)[d](F_{n-1})}_{\text{explicit}}+\partial_xf_k(F_{n-1})\,\dot F_{n-1,A}+\partial_yf_k(F_{n-1})\,\dot F_{n-1,B},\qquad\dot F_0=0 .
+c_{ab}(\theta)=\frac1{L_AL_B}\sum_{j=0}^{L_A-1}\sum_{l=0}^{L_B-1}g_{jl}(\theta)\,\omega_{L_A}^{-ja}\omega_{L_B}^{-lb}.
 \]
-For the direction ``increase $\pi_{k,o}$'' the explicit term is the monomial $x^{a_{ko}}y^{b_{ko}}$ evaluated at $F_{n-1}$ in row $k$, zero in the other row. All 12 directions can be carried in one vectorised pass (\code{law_and_jac} in \code{profile.py}). Simplex constraints are handled afterwards by the chain rule: e.g.\ the direction $e_{k,o}-e_{k,\mathrm{death}}$, or the softmax/stick-breaking Jacobian.
+Then $c_{ab}$ is differentiable along $d$ and $\partial_dc_{ab}=\frac1{L_AL_B}\sum_{j,l}\partial_dg_{jl}\,\omega_{L_A}^{-ja}\omega_{L_B}^{-lb}$, i.e.\ the derivative of the table is the DFT of the derivatives of the grid values. For GW with $L_A,L_B>2^n$, $\partial_dc_{ab}=\partial_dp_{ab}$ exactly.
+\end{proposition}
+\begin{proof}
+$c_{ab}$ is a finite linear combination of the $g_{jl}$ with coefficients $\omega^{-ja}\omega^{-lb}/(L_AL_B)$ that do not depend on $\theta$; the derivative of a finite sum is the sum of the derivatives, and constants factor out. For the second claim: in GW, $F_{n,A}(x,y;\theta)=\sum_{a,b}p_{ab}(\theta)x^ay^b$ is a finite sum (Corollary~\ref{cor:degree}) whose coefficients are polynomials in the outcome probabilities, so $\partial_dF_{n,A}(x,y)=\sum_{a,b}\partial_dp_{ab}\,x^ay^b$ is a polynomial of the same degree bound. Steps 2--5 of the proof of Theorem~\ref{thm:fold} use only the algebra of finite sums and Lemma~\ref{lem:orth}, not positivity, so they apply to this polynomial and give $\partial_dp_{ab}$ exactly when nothing folds.
+\end{proof}
 
-\paragraph{BH, tangent ODE.} Differentiate the right-hand side $R(G;\theta)$ of Theorem~\ref{thm:phase}: $\dot G'=J_R(G)\,\dot G+\partial_\theta R$, integrated with the \emph{same} Runge--Kutta steps alongside $G$. This gives the exact derivative of the \emph{discrete} solution (discretise-then-differentiate), which differs from the derivative of the true solution by the same $O(h^8)$ as the solution itself. For mean lifetimes, $\lambda_k=m/\mu_k$ gives $\partial\lambda_k/\partial\log\mu_k=-\lambda_k$, so $\partial_{\log\mu_k}R$ is minus the type-$k$ rows of $R$.
-
-\paragraph{Conditioning.} For the detected law $\tilde p_z=p_z/(1-p_{00})$:
+\begin{proposition}[Forward mode through the GW recursion]\label{prop:forward}
+At a grid point $(x,y)$ let $g_0=(x,y)$, $g_m=f(g_{m-1};\theta)$ for $m=1,\dots,n$ (so $g_n=F_n(x,y)$, Theorem~\ref{thm:gwcomp}), and define tangents $t_0=(0,0)$ and
 \[
-\partial\log\tilde p_z=\frac{\partial p_z}{p_z}+\frac{\partial p_{00}}{1-p_{00}}\qquad(z\neq0).
+t_{m,k}=\underbrace{(\partial_df_k)(g_{m-1})}_{\text{direct effect at step }m}+\underbrace{\partial_xf_k(g_{m-1})\,t_{m-1,A}+\partial_yf_k(g_{m-1})\,t_{m-1,B}}_{\text{effect passed on from earlier steps}},\qquad k\in\{A,B\}.
+\]
+Then $t_m=\partial_dg_m$ for every $m$; in particular $t_n=\partial_dF_n(x,y)$. Here $(\partial_df_k)(u,v)=\sum_od_{k,o}u^{a_{ko}}v^{b_{ko}}$; for $d=e_{k,o}-e_{k,\mathrm{death}}$ it is $u^{a_{ko}}v^{b_{ko}}-1$ in row $k$ and $0$ in the other row.
+\end{proposition}
+\begin{proof}
+Induction on $m$. For $m=0$, $g_0=(x,y)$ does not depend on $\theta$, so $\partial_dg_0=0=t_0$. Suppose $\partial_dg_{m-1}=t_{m-1}$. The map $(u,v,\theta)\mapsto f_k(u,v;\theta)=\sum_o\pi_{k,o}u^{a_{ko}}v^{b_{ko}}$ is a polynomial in $u,v$ and in the probabilities $\pi$, and $g_{m-1}$ is a differentiable complex-valued function of $\theta$. By the chain rule for a function of several arguments (valid for complex-valued polynomials, since it reduces to the sum and product rules),
+\[
+\partial_d\big[f_k(g_{m-1};\theta)\big]=(\partial_df_k)(g_{m-1})+\partial_uf_k(g_{m-1})\,\partial_dg_{m-1,A}+\partial_vf_k(g_{m-1})\,\partial_dg_{m-1,B}.
+\]
+The first term differentiates the explicit dependence of $f_k$ on $\pi$ (linear, so its derivative along $d$ is $\sum_od_{k,o}u^{a_{ko}}v^{b_{ko}}$); the others differentiate through the arguments. Substituting the induction hypothesis gives $t_m$.
+\end{proof}
+\noindent In code, the pair $(g,t)$ is updated together, both from the \emph{previous} $g$; one tangent per direction, so $D$ directions cost about $(1+D)$ times one table (all 12 in one vectorised pass: \code{law_and_jac} in \code{profile.py}). Combining Propositions~\ref{prop:dftderiv} and~\ref{prop:forward}: \emph{iterate values and tangents on the grid, then apply the same FFT to both.}
+
+\paragraph{Worked example (continuing \S\ref{sec:dftexample}).} One type, $f(s)=\pi_0+ps+qs^2$ with death probability $\pi_0=1-p-q$, $p=0.3$, $q=0.5$, $n=2$, $L=5$; direction ``increase $q$, decrease death'', so $(\partial_qf)(u)=u^2-1$ and $f'(u)=p+2qu=0.3+u$. Iterating $(g,t)\leftarrow\big(f(g),\ (g^2-1)+(0.3+g)\,t\big)$ twice from $(s,0)$ at the five roots of unity and applying the DFT to $t$ gives
+\begin{center}\small
+\begin{tabular}{@{}lccccc@{}}\toprule
+$k$ cells & 0 & 1 & 2 & 3 & 4\\\midrule
+$\Prob(Z_2=k)$ & 0.280 & 0.150 & 0.295 & 0.150 & 0.125\\
+$\partial_q\Prob(Z_2=k)$, forward mode + DFT & $-1.46$ & $-0.18$ & $0.29$ & $0.60$ & $0.75$\\\bottomrule
+\end{tabular}
+\end{center}
+\begin{itemize}
+\item Symbolic differentiation of the expanded polynomial gives the same row (largest difference $2\times10^{-16}$, round-off); central finite differences ($h=10^{-6}$) agree to $2.5\times10^{-11}$.
+\item By hand: $\Prob(Z_2=0)=\pi_0+p\pi_0+q\pi_0^2$; with $\partial_q\pi_0=-1$ and $\pi_0=0.2$, $\partial_q\Prob(Z_2=0)=-1-0.3+0.04-0.2=-1.46$.
+\item The derivatives sum to 0, as they must since the probabilities always sum to 1.
+\item Gradient of the log-likelihood of the sizes $1,2,2,4,1,3$ (conditioning formula below): $-2.600565$ exact, $-2.600565$ by finite differences.
+\end{itemize}
+Code: \code{scripts/b_row_theory/demo_exact_derivative.py}.
+
+\paragraph{Why ``exact'' and not just ``accurate''.} Forward mode introduces no approximation beyond floating-point round-off: it computes the derivative of exactly the function being evaluated, so the gradient is consistent with the likelihood the optimiser or sampler sees. Central finite differences have a truncation error of order $h^2$ and a cancellation error of order $\varepsilon/h$, which cannot both be made small (best $\sim10^{-11}$ here, worse for sharper functions), and cost two evaluations per direction. For about 12 directions forward mode is the simplest choice; for hundreds of parameters reverse mode (back-propagation) would be cheaper per gradient but needs to store the whole computation.
+
+\paragraph{BH, tangent ODE.} The same logic in continuous time. The grid values solve $G'=R(G;\theta)$ (Theorem~\ref{thm:phase}); differentiating along $d$ gives the \emph{tangent ODE}
+\[
+\frac{d}{dt}\,\partial_dG=J_R(G)\,\partial_dG+\partial_dR(G;\theta),\qquad\partial_dG(0)=0,
+\]
+the continuous analogue of ``passed on + direct''. It is integrated with the \emph{same} Runge--Kutta steps alongside $G$, which gives the exact derivative of the \emph{computed} solution (discretise-then-differentiate); it differs from the derivative of the true solution by the same $O(h^8)$ as the solution itself. Lifetimes enter through $\lambda_k=m/\mu_k$, so $\partial\lambda_k/\partial\log\mu_k=-\lambda_k$ and $\partial_{\log\mu_k}R$ is minus the type-$k$ components of $R$. Proposition~\ref{prop:dftderiv} then applies unchanged.
+
+\paragraph{Conditioning and the gradient of $\ell$.} For the detected law $\tilde p_z=p_z/(1-p_{00})$, $\log\tilde p_z=\log p_z-\log(1-p_{00})$, so
+\[
+\partial_d\log\tilde p_z=\frac{\partial_dp_z}{p_z}+\frac{\partial_dp_{00}}{1-p_{00}}\qquad(z\neq0),
+\qquad
+\partial_d\ell=\sum_h\sum_zn_h(z)\,\partial_d\log\tilde p_h(z).
 \]
 
-\paragraph{Check.} Always compare with central finite differences: GW $\sim10^{-11}$ relative, BH $6\cdot10^{-12}$--$3\cdot10^{-10}$.
+\paragraph{Check.} Always compare with central finite differences: GW $\sim10^{-11}$ relative, BH $6\cdot10^{-12}$--$3\cdot10^{-10}$; and check that the derivatives of each table sum to 0.
 
 \refs{Forward-mode (tangent) differentiation: Griewank \& Walther [12]; sensitivity equations for ODEs: Hairer, N\o rsett \& Wanner [14].}
 
