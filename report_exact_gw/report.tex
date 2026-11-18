@@ -66,7 +66,7 @@
 {\sffamily\Large\color{inkgray} Method, point estimates, and how much data the full transition model needs (XG2)\par}
 \vspace{1.5cm}
 \begin{tabular}{@{}ll@{}}
-Status of results & 17 November 2026 (XG2 complete: 108 runs; MLE for every run) \\
+Status of results & 18 November 2026 (XG2 108 + 24 runs; flat-\BA{} repeat 108 runs; follow-ups) \\
 Repository & \code{BIO-SBI}, branch \code{worktree-exact-gw-data-size} \\
 Results & \res{results/exact_gw/data_size/} (XG2), \res{results/exact_gw/} (XG) \\
 Companions & \code{report_sequential/report.pdf} (all experiments; \S ``Exact likelihood (XG)'') \\
@@ -94,12 +94,14 @@ Data & synthetic only \\
 \item \textbf{Why} (Section~\ref{sec:why}). The likelihood is flat --- often two-branched --- along ``B switches back to A'' versus ``B is lost'' (divides or dies); the flat Dirichlet prior gives \BA{} a Beta(1,\,5) marginal with mean 1/6, and on a flat ridge that volume pulls the posterior mean down. This holds whether or not the truth sits on the boundary (T3, all entries interior, is as biased as T1). The 95\% \emph{profile-likelihood} interval covered the truth in 8/8 profiled runs, the posterior 95\% interval in 5/8. A likelihood-ratio test of ``B never divides'' picked the right sub-model in 37/37 runs, already at $n$ = 128, and cut the \BA{} error to 0.02--0.06 (posterior mean: 0.28--0.37).
 \end{enumerate}
 
+\textbf{Follow-ups} (\S\ref{sec:fu}). B's switch back reaches an error below 0.05 at 2048--4096 clones per endpoint for T1, T3, T4 (T2 not by 4096), but where B never divides the posterior stays 1--2 sd low at every $n$. A flat prior on \BA{} cuts the \BA{} error of T1--T4 by 1.7--5$\times$ and, at $n$ = 128, up to doubles it for the small-\BA{} truths. Reparametrising B's row helps modestly within a branch (0.8--1.6$\times$); T1's posterior at $n$ = 1024 has a second ``B divides'' branch holding about 17\% of the mass, which single NUTS runs weight anywhere between 2\% and 28\%.
+
 \textbf{Recommendations.}
 \begin{itemize}
 \item \textbf{Report likelihood-based intervals next to posterior intervals} for B's row; where they disagree the prior drives the result. Use the profile likelihood (not the marginal mode) for \BA.
 \item \textbf{Decide whether B divides before estimating \BA}: model comparison (two\_type vs B divisions = 0) works from 128 clones per endpoint; otherwise B's row needs $\gg$\,1024 clones per endpoint (earlier: 4096 on three endpoints gave 0.78 $\pm$ 0.02).
 \item \textbf{Report identifiable combinations} (growth rate, stable type fraction, division mass per row, \BA) rather than individual division types.
-\item \textbf{For the sampler}: use \code{kernel=adjoint}; warm starts across nested $n$ and ESS-based stopping are being benchmarked (Section~\ref{sec:followups}); for bimodal posteriors use tempering/SMC or more chains.
+\item \textbf{For the sampler}: use \code{kernel=adjoint} and the ESS/$\hat R$ stopping rule, warm starts across nested $n$; for B-row posteriors check for a second branch and estimate branch masses by per-branch SMC evidence (\S\ref{sec:fu-sampler}).
 \end{itemize}
 
 % ====================================================================== model
@@ -345,6 +347,89 @@ A dedicated analysis (\res{docs/xg2_mle_vs_posterior/README.md}; profiles of \BA
 \fig{p3_ridge}{0.9}{P3, $n$ = 1024: posterior draws of the mixed divisions of A and B (left) and of the symmetric BB divisions (right) for the three datasets; star = truth.}
 For P3 the three datasets at $n$ = 1024 give quite different individual division probabilities (e.g.\ A$\to$AB 0.16 vs 0.34, B$\to$BB 0.10 vs 0.25), yet each run is converged ($\hat R$ 1.02, chains agree) and the identifiable combinations agree closely: growth per generation 1.603 $\pm$ 0.004 vs 1.606 $\pm$ 0.004 (truth 1.609), stable A fraction 0.493 vs 0.495 (0.493), \BA{} 0.23 vs 0.21 (0.27). The posterior correlations of A$\to$AB with B$\to$AB ($-0.98$), A$\to$AA with B$\to$AA ($-0.96$) and A$\to$BB with B$\to$BB ($-0.96$) define a ridge with posterior sd 0.19: a mixed division produces one A and one B whichever cell divided, and with a population that is half A, half B the counts barely distinguish the parent. Each dataset lands at a different point of the same line through the truth (Fig.~\ref{fig:p3_ridge}); differences are $\le 1.5$ combined posterior sd, i.e.\ dataset noise along a weak direction.
 
+% ====================================================================== follow-ups
+\section{Follow-ups: results}\label{sec:fu}
+{\sloppy All follow-up runs use the adjoint kernel and the XG2 datasets (nested, and checked against each run's stored \texttt{reference.npz}). The tables of this section are built by \code{report_exact_gw/make_followups.py}.\par}
+
+\subsection{Where B's row converges: $n$ = 2048 and 4096 (T1--T4)}\label{sec:fu-largen}
+\fig{btoa_large_n}{0.92}{\BA{} from 128 to 4096 clones per endpoint for the four truths whose B row had not converged at 1024: posterior mean $\pm$ sd per dataset (blue) and MLE (orange); dashed = truth. Runs: \texttt{data\_size/<truth>/n2048\_s*}, \texttt{n4096\_s*}.}
+\begin{center}\footnotesize\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}lrrlrrrrr@{}}\toprule
+truth & $n$ & \BA & post.\ mean (sd) & mean $z$ & 90\% cov. & RMSE post. & RMSE MLE & max $\hat R$ \\\midrule
+\tabin{tables/large_n.tex}
+\bottomrule
+\end{tabular}
+
+Means over the 3 datasets; RMSE of the posterior mean and of the MLE over the datasets.
+\end{center}
+\begin{itemize}
+\item \textbf{By absolute error} the posterior mean of \BA{} is within 0.05 of the truth at $n$ = 2048 for T4 (0.037), at 4096 for T1 (0.032) and T3 (0.040); T2 is still 0.069 off at 4096. The MLE gets there one doubling earlier (RMSE at 2048: T1 0.042, T2 0.047, T3 0.029, T4 0.017; T4 already 0.032 at 1024).
+\item \textbf{In posterior-sd units the bias does not vanish} for the truths with B divisions exactly 0 (T1, T2, T4): it shrinks at the rate of the posterior sd, so mean $z$ stays at $-1.2$ to $-2.4$ and T2's 90\% intervals miss in every dataset at every $n$. The posterior keeps 0.04--0.05 of mass on B divisions and compensates with a lower \BA{} --- a boundary effect, not a lack of data. Only T3 (interior) becomes calibrated (mean $z$ $-0.97$, 3/3 covered at 4096).
+\item Cost is small with the adjoint kernel: 0.1--0.4\,h per run at $n$ = 2048--4096. In 2 runs (T2 at 2048 and 4096, dataset 2) the multistart missed the best MLE.
+\end{itemize}
+
+\subsection{A flat prior on \BA}\label{sec:fu-flat}
+All 108 XG2 cells were repeated with \code{prior=flat_btoa}: A's row uniform Dirichlet, B's row Dirichlet with concentration 1 on \BA{} and 0.2 on B's other five outcomes, so that \BA{} $\sim$ Uniform(0,1) (prior mean 0.5 instead of 1/6) and B's other outcomes favour sparse rows (prior mean 0.1 each). Runs used the ESS/$\hat R$ stopping rule (ESS $\ge$ 400, tail ESS $\ge$ 200, $\hat R \le 1.01$, chain means within 0.5 sd; at most 1000 draws per chain). Runs: \res{results/exact_gw/data_size_flat_btoa/}.
+\fig{flat_btoa}{1.0}{\BA{} against $n$ under the uniform Dirichlet (XG2, blue) and the flat-\BA{} prior (orange): mean over datasets of the posterior mean $\pm$ mean posterior sd; dashed = truth.}
+\begin{center}\footnotesize\setlength{\tabcolsep}{2.6pt}
+\begin{tabular}{@{}lllllll@{}}\toprule
+ & \multicolumn{3}{c}{$n$ = 128} & \multicolumn{3}{c}{$n$ = 1024} \\
+truth & RMSE \BA & RMSE all 12 & 90\% coverage & RMSE \BA & RMSE all 12 & 90\% coverage \\\midrule
+\tabin{tables/flat_btoa.tex}
+\bottomrule
+\end{tabular}
+
+Each cell: uniform Dirichlet / flat-\BA{} prior (smaller RMSE in bold). RMSE of the posterior mean over the 3 datasets; coverage over parameters with truth $>0$ and datasets.
+\end{center}
+\begin{itemize}
+\item \textbf{For large \BA{} the flat prior removes most of the bias}: RMSE of \BA{} for T1, T2, T4, T3 drops from 0.33--0.45 to 0.09--0.19 at $n$ = 128 and from 0.07--0.19 to 0.03--0.06 at 1024; over all 12 probabilities the RMSE falls by 25--70\% at $n$ = 128 and roughly halves at 1024, and coverage of the 90\% intervals rises to 81--100\%.
+\item \textbf{For small \BA{} it is the other way round} (T5, P1--P4: \BA{} 0.10--0.27): at $n$ = 128 the error of \BA{} roughly doubles (P1 0.08 $\to$ 0.15, P2 0.10 $\to$ 0.17, P4 0.05 $\to$ 0.12, T5 0.03 $\to$ 0.07; P3 unchanged at 0.05); by 1024 the two priors are within 0.01--0.03. The prior moves the bias; it does not remove it --- at small $n$ the answer for \BA{} is decided by where the prior puts its mass.
+\item \textbf{Sampling caveat.} The stopping rule's targets were met in only 7 of 108 runs (median rank $\hat R$ 1.05, median min bulk / tail ESS 84 / 58, chain-mean spread $>$ 0.5 sd in about half the runs). The parameters that fail are B's small entries (death, persist, divisions): concentration 0.2 makes their prior density unbounded at 0, which the logit-stick sampler handles poorly. \BA{} itself mixes well (median rank $\hat R$ 1.014; 1.004--1.008 for T1, T2, T4; above 1.05 in 23/108 runs, mostly prior draws), so the \BA{} comparison stands, but the small B entries under this prior should not be quoted from these runs.
+\end{itemize}
+
+\subsection{Reruns of the bimodal cells}\label{sec:fu-bimodal}
+The 9 XG2 runs with $\hat R > 1.05$ were rerun with 8 chains, 1000 warmup iterations and 32 initial optimisations (results: \res{data_size_reruns/bimodal/}).
+\begin{center}\footnotesize\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}lrrrlrlll@{}}\toprule
+truth & $n$ & dataset & $\hat R$ (XG2) & \BA{} (XG2) & $\hat R$ (rerun) & \BA{} (rerun) & chain means & truth \\\midrule
+\tabin{tables/bimodal.tex}
+\bottomrule
+\end{tabular}
+\end{center}
+Six of nine now mix ($\hat R \le 1.03$) with essentially unchanged posteriors: they were slow, not bimodal. Three stay bimodal --- T1 at 256 ($\hat R$ 1.91; chain means of \BA{} 0.12--0.70), T1 at 1024 (1.11) and P2 at 1024 (1.22): more chains do not fix two branches.
+
+\subsection{Sampler noise vs dataset noise}\label{sec:fu-noise}
+For T1, T3 and P3 at $n$ = 1024, dataset 0 was rerun with sampler seeds 1 and 2 (\res{data_size_reruns/sampler_noise/}); the spread of posterior means across the three sampler seeds is compared with the spread across the three datasets.
+\begin{center}\footnotesize
+\begin{tabular}{@{}llrrrr@{}}\toprule
+truth & parameter & sd over sampler seeds & sd over datasets & mean posterior sd & sampler sd / posterior sd \\\midrule
+\tabin{tables/sampler_noise.tex}
+\bottomrule
+\end{tabular}
+\end{center}
+For unimodal posteriors (T3, P3) sampler noise is 1--16\% of the posterior sd and far below the dataset spread. For T1 it is a third of the posterior sd for \BA{} and B$\to$BB (0.059 vs dataset spread 0.108): with two branches, how much each run finds of the second branch is itself random (\S\ref{sec:fu-sampler}).
+
+\subsection{Sampler options: warm start, stopping rule, reparametrisation, SMC}\label{sec:fu-sampler}
+Four opt-in options were added to \code{inference=exact_gw} (defaults unchanged, draws bit-identical when off) and benchmarked on XG2 datasets:
+\begin{itemize}
+\item \textbf{Warm start} from the posterior at $n/2$ (chains started at k-means representatives of the previous draws, within-chain covariance scaled by $n_{\rm prev}/n$, 150 warmup iterations): 0.57$\times$ (T1) and 0.75$\times$ (T5) of the gradient evaluations of a cold start over $n$ = 256--1024, posteriors within 2.3 MC standard errors. Without the stopping rule it once produced a poorly mixed run; use the two together.
+\item \textbf{ESS/$\hat R$ stopping rule}: draws in blocks until bulk ESS $\ge$ 400, tail ESS $\ge$ 200, rank $\hat R \le 1.01$ and chain means agree, or a cap. On T1 at $n$ = 1024 it refused to stop where four cold chains looked converged ($\hat R$ 1.02) but had missed a second branch.
+\item \textbf{Reparametrisation} (\code{reparam}: \code{probit} sticks; \code{brow}: B's row broken as \BA{} first, then persist, then ``B is lost'' split into death and divisions; both exact, prior unchanged) and a \textbf{tempered SMC start}.
+\end{itemize}
+\begin{center}\scriptsize\setlength{\tabcolsep}{2.5pt}
+\begin{tabular}{@{}llrrrrrr@{}}\toprule
+cell & option & grad.\ ev. & ESS bulk/tail & ESS/1k ev. & max $\hat R$ & div. & low branch \\\midrule
+\tabin{tables/reparam.tex}
+\bottomrule
+\end{tabular}
+
+Stopping rule on (at most 1000 draws per chain). Low branch: share of draws with \BA{} $<$ 0.45 (meaningful for T1 only). Results: \res{results/exact_gw/reparam_bench/}.
+\end{center}
+\begin{itemize}
+\item \textbf{Within a branch} \code{brow+probit} is a modest, cell-dependent gain: 1.6$\times$ ESS per evaluation on P3, 1.06$\times$ on T3, 0.8$\times$ on T5. Its 3.4$\times$ on T1 (seed 0) came from staying in one branch (2\% of draws); with sampler seed 1 it reached the second branch (21\%) and mixed as badly as everything else (ESS 16).
+\item \textbf{T1 at $n$ = 1024 has a second branch} (``B divides'': \BA{} $\approx$ 0.27, B$\to$AA/AB/BB $\approx$ 0.16/0.16/0.24) whose mass, by per-branch SMC evidence, is 17\% (8--25\% across replicates; importance sampling: 16\%). Single NUTS runs put 2--28\% of their draws there, depending on the start; only the strong SMC start with \code{brow+probit} matched (16\%). The branch-weighted posterior gives \BA{} = 0.57--0.60 $\pm$ 0.15--0.16, not 0.65 $\pm$ 0.09.
+\end{itemize}
+
 % ====================================================================== conclusions
 \section{Conclusions}\label{sec:conclusions}
 \begin{enumerate}
@@ -352,16 +437,16 @@ For P3 the three datasets at $n$ = 1024 give quite different individual division
 \item With all transitions free, 1024 clones per endpoint on generations 4--10 are \emph{not} enough for B's row when \BA{} is large: the posterior is biased toward ``B is lost'' by 1--2 sd and prior-sensitive. A's row and the growth/composition summaries converge from 256--512 clones per endpoint.
 \item The answer depends on the truth: large clones (T5) and truths near the prior's bulk converge fast; the reference biology (B switches back, never divides) converges slowest.
 \item The limiting factor is information along two directions --- switch back vs loss of B, and which parent made a mixed division --- combined, for the first, with the flat prior's volume. More NUTS budget cannot change it (Monte Carlo error $\approx$\,0.05 sd).
+\item \textbf{Follow-ups} (\S\ref{sec:fu}): B's switch back reaches an absolute error below 0.05 at 2048--4096 clones per endpoint (T2 not by 4096), but where B never divides the posterior stays 1--2 sd low at every $n$. A flat prior on \BA{} removes most of that bias for large \BA{} and adds some for small \BA: at small $n$ the prior decides. Some B-row posteriors have two branches whose weights NUTS cannot be trusted to get right (T1: 17\% on ``B divides'' by SMC evidence); report branch masses, not just converged-looking chains.
 \end{enumerate}
 
 \subsection{Follow-ups}\label{sec:followups}
+\textbf{Done} (\S\ref{sec:fu}): $n$ = 2048--4096 for T1--T4; all 108 cells with a flat prior on \BA; 8-chain reruns of the bimodal cells; sampler vs dataset noise; warm start and ESS/$\hat R$ stopping; reparametrisation and SMC start. \textbf{Open}:
 \begin{itemize}
-\item \textbf{In progress}: warm starts across nested $n$ (initial points and mass matrix from the posterior at $n/2$) and stopping on an ESS/$\hat R$ target; expected 1.5--3$\times$ fewer evaluations (warmup is $\approx$\,50\% of a run, 18--23\% of thread time is lost to the slowest chain).
-\item Reruns of the 9 bimodal runs with more chains or tempering (the BH SMC sampler).
+\item A branch-weighted posterior in the pipeline: per-branch SMC evidence for the branch masses, chains seeded in both branches, combined by mass; rerun the bimodal cells (T1 at 256 and 1024, P2 at 1024) with it.
+\item A model-comparison step (``does B divide?'') in the default analysis: it removes the boundary bias of T1, T2, T4 where it applies (\S\ref{sec:why}).
+\item A prior for B's other outcomes that keeps \BA{} flat without unbounded densities (e.g.\ concentration 1 for every B outcome except a flat \BA), and a rerun of the flat-\BA{} cells with it: the 0.2 concentrations made B's small entries unsampleable.
 \item Prior sensitivity by NUTS where reweighting is unreliable (203 (run, prior) pairs; at least the wrong prior at $n \ge 512$).
-\item $n$ = 2048--4096 for T1--T4 to locate the $n$ at which B's row converges (cheap with the new kernel and warm starts).
-\item Reparametrisation along the two weak directions (as for Bellman--Harris) and a model-comparison step (``does B divide?'') in the default analysis.
-\item Separate dataset noise from sampler noise explicitly (fix \code{data_seed}, vary \code{seed}).
 \end{itemize}
 
 % ====================================================================== appendix
@@ -370,7 +455,8 @@ For P3 the three datasets at $n$ = 1024 give quite different individual division
 \begin{itemize}
 \item \textbf{Code}: branch \code{worktree-exact-gw-data-size} (XG2 preset, analysis, MLE, report), merged \code{gw-speedup} (adjoint kernel; via \code{sgd-mle} and the PSO branch) and \code{xg2-mle-vs-posterior} (identifiability analysis).
 \item \textbf{XG2}: \code{bio-sbi -m +experiment=exact_gw_data_size} (preset \code{src/bio_sbi/conf/experiment/exact_gw_data_size.yaml}; T5 added on the command line as \code{+truths.T5_C7={...}}); launchers \code{scripts/run_xg2.sh}, \code{scripts/run_xg2_adjoint.sh}; analysis \code{uv run python scripts/analyse_exact_gw_data_size.py results/exact_gw/data_size}; MLE \code{uv run python scripts/exact_gw_mle.py results/exact_gw/data_size --workers 16}.
-\item \textbf{This report}: \code{uv run python report_exact_gw/make_figures.py --results <repo>/results}, then \code{tectonic report.tex} inside \code{report_exact_gw/}.
+\item \textbf{This report}: \code{uv run python report_exact_gw/make_figures.py --results <repo>/results} and \code{report_exact_gw/make_followups.py --results <repo>/results}, then \code{tectonic report.tex} inside \code{report_exact_gw/}.
+\item \textbf{Follow-ups}: scheduler \code{scripts/run_exact_gw_cells.sh} with job lists in \code{scripts/jobs/}; results in \res{results/exact_gw/data_size_flat_btoa/}, \res{data_size_reruns/}, \res{reparam_bench/}; sampler options on branches \code{exact-gw-warmstart-ess-stop} (merged) and \code{reparam-exact-gw} (not merged).
 \item \textbf{Layout}: \res{results/exact_gw/data_size/<truth>/n<n>_s<dataset>/} (one folder per run; \res{runs_index.csv} lists kernel and original sweep folder); sweep logs in \res{_sweeps/}.
 \end{itemize}
 
