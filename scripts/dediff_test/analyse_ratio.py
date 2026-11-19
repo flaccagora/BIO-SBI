@@ -51,6 +51,12 @@ NULL_SERIES = {("N1", "bA0.01"): ("#2a78d6", "o", "-"), ("N1", "bA0.02"): ("#eb6
                ("N2", "bA0.02"): ("#eb6834", "s", "--"),
                ("N2", "sym0.02"): ("#1baf7a", "^", "--")}  # fmt: skip
 ROUTE_LABEL = {"mixed": "mixed", "toA": "switch only"}
+KEYS = ["cell", "base", "route", "m", "typing", "seed", "n"]
+
+
+def mlabel(m: float) -> str:
+    """Table label of an effect size (kept as text by the markdown writer)."""
+    return "H0" if m == 0 else f"m={m:g}"
 
 
 def wilson(k: float, n: float, z: float = 1.96) -> tuple[float, float]:
@@ -115,6 +121,7 @@ def mc_crits(root: Path) -> dict:
 def add_decisions(df: pd.DataFrame, crit: dict) -> pd.DataFrame:
     """Rejection at 5% with the MC and the per-dataset chi-bar critical values."""
     df = df.copy()
+    df["route"] = df.route.fillna("-")
     df["crit_mc"] = [crit[(b, int(n))] for b, n in zip(df.base, df.n, strict=True)]
     df["rej_mc"] = df.lam > df.crit_mc
     df["rej_chibar"] = df.p_chibar < ALPHA
@@ -185,16 +192,16 @@ def robust(df: pd.DataFrame) -> pd.DataFrame:
     rows = []
     for name, (lo, hi) in INTERVALS.items():
         s = d[(d.ratio >= lo - 1e-9) & (d.ratio <= hi + 1e-9)]
-        g = s.groupby(["cell", "base", "route", "m", "typing", "seed", "n"], dropna=False)
+        g = s.groupby(KEYS)
         agg = g.agg(lam_min=("lam", "min"), p_max=("p_chibar", "max"),
                     rej_mc=("rej_mc", "all"), rej_chibar=("rej_chibar", "all"),
                     k=("ratio", "size"))  # fmt: skip
-        # ties (e.g. Lambda = 0 everywhere) resolve to the largest ratio
-        rev = s.sort_values("ratio", ascending=False)
-        gr = rev.groupby(["cell", "base", "route", "m", "typing", "seed", "n"], dropna=False)
-        agg["r_at_lam_min"] = s.ratio.loc[gr.lam.idxmin()].to_numpy()
-        agg["r_at_p_max"] = s.ratio.loc[gr.p_chibar.idxmax()].to_numpy()
-        agg = agg.reset_index()
+        # decision of the plain test at the upper end of the interval, for comparison
+        top = s[np.isclose(s.ratio, hi)].set_index(KEYS)[["rej_mc", "rej_chibar"]]
+        agg = agg.join(top.add_suffix("_hi"))
+        # complete datasets only (every grid ratio of the interval analysed)
+        need = len(set(np.round(s.ratio, 6)))
+        agg = agg[agg.k == need].reset_index()
         agg["interval"] = name
         agg["lo"], agg["hi"] = lo, hi
         rows.append(agg)
@@ -204,12 +211,12 @@ def robust(df: pd.DataFrame) -> pd.DataFrame:
 def robust_table(rb: pd.DataFrame) -> pd.DataFrame:
     """Robust-test rejection rates per interval, cell and n."""
     rows = []
-    for k, g in rb.groupby(["interval", "base", "route", "m", "typing", "n"], dropna=False):
+    for k, g in rb.groupby(["interval", "base", "route", "m", "typing", "n"]):
         row = dict(zip(["interval", "base", "route", "m", "typing", "n"], k, strict=True))
         row.update({"datasets": len(g), "grid_points": int(g.k.median()),
                     "rate_mc": float(g.rej_mc.mean()), "rate_chibar": float(g.rej_chibar.mean()),
-                    "frac_min_at_hi": float(np.mean(np.isclose(g.r_at_lam_min, g.hi))),
-                    "frac_pmax_at_hi": float(np.mean(np.isclose(g.r_at_p_max, g.hi)))})  # fmt: skip
+                    "same_as_hi_mc": float(np.mean(g.rej_mc == g.rej_mc_hi)),
+                    "same_as_hi_chibar": float(np.mean(g.rej_chibar == g.rej_chibar_hi))})  # fmt: skip
         rows.append(row)
     return pd.DataFrame(rows)
 
@@ -242,7 +249,7 @@ def fig_fpr(ft: pd.DataFrame, out: Path) -> None:
             ax.axhline(ALPHA, color="#555555", lw=0.8, ls=":")
             ax.axhline(FPR_MAX, color="#999999", lw=0.6, ls="--")
             _ratio_axis(ax)
-            ax.set_ylim(-0.01, 0.6)
+            ax.set_ylim(-0.01, 1.02)
             if i == 0:
                 ax.set_title(f"n = {n} clones / endpoint", fontsize=9)
             if i == 1:
@@ -268,7 +275,7 @@ def fig_power(pt: pd.DataFrame, typing: str, out: Path, crit: str = "mc") -> Non
         for j, n in enumerate(NS):
             ax = axes[i, j]
             for (base, route), (col, mk, ls) in SERIES.items():
-                g = pt[(pt.base == base) & (pt.route == route) & (pt.m == m) & (pt.n == n)
+                g = pt[(pt.base == base) & (pt.route == route) & np.isclose(pt.m, m) & (pt.n == n)
                        & (pt.typing == typing)].sort_values("ratio")  # fmt: skip
                 if len(g):
                     ax.plot(g.ratio, g[f"rate_{crit}"], color=col, marker=mk, ls=ls, lw=1.6,
@@ -316,7 +323,7 @@ def fig_robust(rt: pd.DataFrame, out: Path, crit: str = "mc") -> None:
             ax = axes[i, 1 + j]
             for m, a in zip((0.005, 0.01, 0.05, 0.1), (0.4, 0.6, 0.8, 1.0), strict=True):
                 for (base, route), (col, mk, ls) in SERIES.items():
-                    g = rt[(rt.m == m) & (rt.base == base) & (rt.route == route) &
+                    g = rt[np.isclose(rt.m, m) & (rt.base == base) & (rt.route == route) &
                            (rt.typing == typ) & (rt.n == n)]  # fmt: skip
                     if not len(g):
                         continue
@@ -351,6 +358,8 @@ def md(df: pd.DataFrame, floatfmt: str = ".3f") -> str:
 
 def pivot_pct(df: pd.DataFrame, index: list[str], col: str) -> pd.DataFrame:
     """Percent table with ratios as columns."""
+    if "m" in df:
+        df = df.assign(m=df.m.map(mlabel))
     t = df.pivot_table(index=index, columns="ratio", values=col).mul(100).round(0)
     t.columns = [f"r={c:g}" for c in t.columns]
     return t.reset_index()
@@ -410,21 +419,25 @@ def main() -> None:
     rt = robust_table(rb)
     rt.to_csv(out / "robust.csv", index=False)
     for c in ("mc", "chibar"):
-        t = rt.pivot_table(index=["typing", "m", "base", "route", "n"], columns="interval",
-                           values=f"rate_{c}", dropna=False).mul(100).round(0)  # fmt: skip
+        t = rt.assign(m=rt.m.map(mlabel)).pivot_table(
+            index=["typing", "m", "base", "route", "n"], columns="interval",
+            values=f"rate_{c}").mul(100).round(0)  # fmt: skip
         t = t[[k for k in INTERVALS if k in t.columns]].reset_index()
         report.append(f"## Robust test: rejection rate (%), {c} critical value\n\n"
                       + md(t, ".0f"))  # fmt: skip
         fig_robust(rt, FIG / f"ratio_robust{'' if c == 'mc' else '_chibar'}.png", c)
-    report.append("## Robust test: where the most conservative rate lies (fraction at the upper "
-                  "end of the interval)\n\n"
-                  + md(rt.groupby(["interval"]).agg(lam_min_at_hi=("frac_min_at_hi", "mean"),
-                                                    p_max_at_hi=("frac_pmax_at_hi", "mean"))
+    report.append("## Robust test: fraction of datasets where it decides like the plain test "
+                  "at the upper end of the interval\n\n"
+                  + md(rt.groupby(["interval"]).agg(mc=("same_as_hi_mc", "mean"),
+                                                    chibar=("same_as_hi_chibar", "mean"))
                        .reset_index()))  # fmt: skip
-    diag = df[df.ratio == 1.0].agg(missed0=("missed0", lambda x: int((x > 1e-3).sum())),
-                                   missed1=("missed1", lambda x: int((x > 1e-3).sum())))  # fmt: skip
-    report.append(f"## Optimisation diagnostics (r = 1, truth-started fits better by > 1e-3 nats)"
-                  f"\n\n{diag.to_string()}\n\nmean seconds per LRT: {df.seconds.mean():.1f}")
+    r1 = df[df.ratio == 1.0]
+    report.append(f"## Optimisation diagnostics\n\nr = 1 fits ({len(r1)} LRTs) where a fit "
+                  f"started at the truth beat the multistart by > 1e-3 nats: H0 "
+                  f"{int((r1.missed0 > 1e-3).sum())}, full {int((r1.missed1 > 1e-3).sum())} "
+                  f"(max {r1.missed0.max():.2g} / {r1.missed1.max():.2g}); H0 fit improved by a "
+                  f"full-model start in {int((df.h0_improved > 1e-6).sum())} of {len(df)} LRTs;"
+                  f" mean seconds per LRT {df.seconds.mean():.1f}")
     (out / "tables.md").write_text("\n\n".join(report) + "\n")
     print("\n\n".join(report))
 
