@@ -434,59 +434,97 @@ Stopping rule on (at most 1000 draws per chain). Low branch: share of draws with
 
 % ====================================================================== dedifferentiation test
 \section{Testing for dedifferentiation: can B give rise to A?}\label{sec:dediff}
-\textbf{Question for the wet lab.} Estimating \BA{} is hard (Sections~\ref{sec:xg2results}--\ref{sec:fu}). Deciding whether KRT20$^+$ cells give rise to LGR5$^+$ cells \emph{at all}, by any route, is a different and easier question: a test, not an estimate. Code: \code{src/bio_sbi/inference/dediff_lrt.py}, scripts \code{scripts/dediff_test/}, note \res{docs/dediff_test/README.md}; results \res{results/exact_gw/dediff_test/}.
+\begin{keybox}
+\textbf{In short.} Instead of estimating how often KRT20$^+$ cells (B) switch back to LGR5$^+$ (A) --- which the previous sections show is hard --- we ask the yes/no question: \emph{do B cells ever give rise to A cells, by any route?} A likelihood-ratio test on organoid endpoint counts answers it. In simulation it is well calibrated and extremely sensitive: with correct cell typing it detects a few dozen dedifferentiation events among thousands of B cells. But a mis-scoring rate of KRT20$^+$ cells as LGR5$^+$ of only 0.5\% produces a signal of the same size, so \textbf{the cell-typing error must be measured and put into the model before the test can be trusted}.
+\end{keybox}
+Code: \code{src/bio_sbi/inference/dediff_lrt.py}; scripts \code{scripts/dediff_test/}; note \res{docs/dediff_test/README.md}; results \res{results/exact_gw/dediff_test/}.
 
-\subsection{The test}
+\subsection{The question and the idea}
+In the model a B cell can produce an A cell in three ways:
+\begin{center}\footnotesize
+\begin{tabular}{@{}lll@{}}\toprule
+route & what happens to one B cell in a generation & A cells produced \\\midrule
+switch (\BA) & the B cell becomes an A cell & 1 \\
+asymmetric division (B$\to$AB) & it divides into one A and one B cell & 1 \\
+symmetric division (B$\to$AA) & it divides into two A cells & 2 \\\bottomrule
+\end{tabular}
+\end{center}
+``Dedifferentiation'' here means any of the three. Its size is measured by
+\[ m_{BA} = \text{B}{\to}\text{A} + 2\,\text{B}{\to}\text{AA} + \text{B}{\to}\text{AB}, \]
+the average number of A cells one B cell produces per generation. $m_{BA} = 0.003$ means three A cells per thousand B-cell generations.
+
+The test compares two explanations of the same organoids:
 \begin{itemize}
-\item \textbf{H0 (no dedifferentiation):} \BA{} = B$\to$AA = B$\to$AB = 0 (B may die, persist, or divide into B+B). \textbf{H1:} at least one $>0$. Effect size $m_{BA}$ = \BA{} + 2\,B$\to$AA + B$\to$AB, the A cells produced by one B cell per generation (an entry of the mean offspring matrix).
-\item \textbf{Statistic:} $\Lambda = 2[\ell(\hat\theta_{\rm full}) - \ell(\hat\theta_0)] \ge 0$, both maximised on the exact likelihood by multistart (including $\hat\theta_0$, small steps along each route, pinned \BA{} starts and warm starts from the next smaller $n$). The full model is reparametrised so that its first B stick is the total dedifferentiation mass; H0 is exactly the face where it is 0.
-\item \textbf{Calibration:} H0 puts three parameters on the boundary, so $\Lambda$ is not $\chi^2$: it is 0 in a sizeable share of datasets and otherwise a mixture. Three calibrations are compared: a Monte-Carlo null (known H0 truth), the parametric bootstrap from $\hat\theta_0$ (what one does with real data), and the boundary $\bar\chi^2$ mixture with weights from the observed information at $\hat\theta_0$; also the textbook weights (critical value 5.43) and plain $\chi^2_3$ (7.81).
-\item \textbf{Study:} A row = reference; null B rows N1 (death .2, persist .8), N2 (death .1, persist .5, B$\to$BB .4), N3 (death .5, persist .5), N4 (death .2, persist .3, B$\to$BB .5); alternatives on N1 and N2 with $m_{BA}$ from 0.0025 to 0.4 by three routes (switch only, B$\to$AB only, mixed); generations \{4,6,8,10\}, $n$ = 128--1024 clones per endpoint (nested). 200 datasets per null cell, 50 per alternative (10 for $m_{BA} \ge 0.1$), 100 per mis-typing cell; bootstrap on 15 datasets $\times$ 100 replicates per null at $n$ = 128 and 1024.
+\item \textbf{H0, no dedifferentiation}: B cells can die, stay, or divide into B+B, but never produce A. Every A cell in a clone descends from A cells.
+\item \textbf{H1, dedifferentiation}: the same, plus at least one of the three routes.
 \end{itemize}
+Each explanation is fitted to the data by maximum likelihood (exact likelihood of the A and B counts of every organoid, all other probabilities free). If B never produces A, some combinations of A and B counts become nearly impossible: in the simulations, for example, a clone with a single A cell and no B cell at generation 8 has probability about $e^{-15} \approx 3\times10^{-7}$ under H0, while with dedifferentiation it is merely rare. The test asks whether the data contain more such clones than H0 can account for.
 
-\subsection{Calibration}
+\subsection{How the test decides}
+The statistic is the likelihood ratio
+\[ \Lambda = 2\,[\ell(\text{best H1 fit}) - \ell(\text{best H0 fit})] \ge 0 . \]
+H0 is H1 with three probabilities set to zero, so the best H1 fit is always at least as good: $\Lambda$ is never negative. Even without any dedifferentiation, letting three extra probabilities move lets H1 fit chance features of the data a little better. The question is therefore whether $\Lambda$ is \emph{larger than chance alone produces}. That threshold (the critical value) is the 95th percentile of $\Lambda$ over datasets in which H0 is true: above it, a false positive happens in only 5\% of experiments without dedifferentiation.
+
+The textbook rule for likelihood ratios ($\chi^2$ with 3 degrees of freedom, threshold 7.8) does not apply here, because the three tested probabilities cannot go below zero. When the data happen to favour ``less than zero'', the best H1 fit simply sits at zero and $\Lambda = 0$ exactly --- which in our simulations happened in 25--77\% of datasets without dedifferentiation. The correct reference is a mixture of $\chi^2$ distributions (``$\bar\chi^2$'') whose weights depend on the dataset. We obtain the threshold in three ways and compare them:
+\begin{itemize}
+\item \textbf{Monte Carlo}: simulate many datasets from a known truth without dedifferentiation and take the 95th percentile of $\Lambda$ (possible only in simulation).
+\item \textbf{Parametric bootstrap}: the same, but simulating from the H0 fit of the dataset at hand (what one does with real data).
+\item \textbf{$\bar\chi^2$ from the fit}: the boundary mixture with weights computed from the curvature of the likelihood at the H0 fit (fast; no simulation).
+\end{itemize}
+\fig{null_distributions}{0.82}{Distribution of $\Lambda$ when there is no dedifferentiation (probability that $\Lambda$ exceeds $x$, log scale), for four null truths (rows) and four sizes (columns). Black: Monte Carlo over 200 datasets; orange: $\bar\chi^2$ with weights from the fit; purple dashed: textbook $\bar\chi^2$ weights; green dotted: $\chi^2_3$; pink: parametric bootstrap pooled over 15 datasets. A threshold is where a curve crosses 0.05 (thin horizontal line); curves further right give higher thresholds and fewer false positives.}
+
+\subsection{How the test was checked}
+Simulated organoids, generations \{4, 6, 8, 10\}, $n$ = 128--1024 clones per endpoint, each clone from one A cell; A's row as in the reference truth. Four null truths without dedifferentiation, covering how B cells behave: N1 (B dies 20\%, stays 80\%), N2 (dies 10\%, stays 50\%, divides B+B 40\%), N3 (dies 50\%, stays 50\%), N4 (dies 20\%, stays 30\%, divides B+B 50\%). Dedifferentiation was added to N1 and N2 with $m_{BA}$ from 0.0025 to 0.4 by each route alone and mixed. 200 datasets per null cell, 50 per alternative (10 for $m_{BA} \ge 0.1$), 100 per mis-typing setting.
+
+\subsection{Is the threshold right?}
 \begin{center}\footnotesize\setlength{\tabcolsep}{3pt}
 \begin{tabular}{@{}lllllll@{}}\toprule
-null & 95\% crit.\ value (MC) & $\bar\chi^2$ crit.\ (obs.\ inform.) & size, $\bar\chi^2$ & size, textbook weights & size, $\chi^2_3$ & share $\Lambda = 0$ \\\midrule
+null & \multicolumn{2}{c}{95\% threshold} & \multicolumn{3}{c}{false-positive rate at nominal 5\% using} & $\Lambda = 0$ \\
+ & Monte Carlo & $\bar\chi^2$ from fit & $\bar\chi^2$ from fit & textbook $\bar\chi^2$ (5.43) & $\chi^2_3$ (7.81) & \\\midrule
 N1 & 1.9--3.4 & 3.3--3.5 & 1.0--5.5\% & 0--3.5\% & 0--2.5\% & 65--77\% \\
 N2 & 3.0--4.1 & 3.7--3.9 & 3.5--6.0\% & 1.0--3.0\% & 0.5--1.0\% & 48--59\% \\
 N3 & 4.1--4.8 & 3.8--4.2 & 5.0--6.5\% & 1.0--3.5\% & 0--1.5\% & 25--36\% \\
 N4 & 2.3--3.6 & 3.6--3.9 & 2.5--5.5\% & 1.5--2.5\% & 0.5--1.5\% & 44--52\% \\\bottomrule
 \end{tabular}
 
-Ranges over $n$ = 128--1024; size = false-positive rate at nominal 5\% over 200 null datasets per cell.
+Ranges over $n$ = 128--1024 (200 datasets each). A good calibration gives about 5\%; lower is safe but wastes power, higher means too many false alarms.
 \end{center}
 \begin{itemize}
-\item The $\bar\chi^2$ mixture with weights from the dataset's own observed information is close to nominal (1--6.5\%); the textbook weights and $\chi^2_3$ are conservative.
-\item The null distribution \textbf{depends on B's other outcomes}: using another null row's Monte-Carlo critical value gives up to 16\% false positives. Calibrate per dataset ($\bar\chi^2$ from the fit, or bootstrap), not with one fixed number.
-\item The parametric bootstrap gives median critical values 1.5--4.0, close to the Monte-Carlo ones except N1 at 1024 (2.3 vs 3.4) and N3 at 128 (3.2 vs 4.5); its size is 5--11\%, a little liberal at small $n$. No missed optimum in 3200 null fits.
+\item \textbf{The $\bar\chi^2$ threshold from the fit works}: 1--6.5\% false positives. The textbook thresholds are safe but too strict.
+\item \textbf{The right threshold depends on how B cells behave} (1.9 for N1 vs 4.8 for N3). Using the threshold of another null gives up to 16\% false positives: the threshold must come from the dataset's own fit (bootstrap or $\bar\chi^2$), not from a table.
+\item \textbf{The bootstrap} reproduces the Monte-Carlo thresholds roughly (5--11\% false positives; a little permissive at small $n$).
+\item The fits are reliable: in 3200 null analyses no better optimum was ever missed.
 \end{itemize}
 
-\subsection{Power}
-\fig{power_mc}{0.98}{Power at 5\% (Monte-Carlo critical value of the base null) against $m_{BA}$, by route (columns) and null B row (rows), for $n$ = 128--1024 clones per endpoint; bands: binomial 90\% intervals (wider at $m_{BA} \ge 0.1$: 10 datasets).}
-With perfect typing the test is extremely sensitive: the smallest $m_{BA}$ detected with 80\% power is $\le$ 0.0025--0.004 for every route already at $n$ = 128 (N1), and $\le$ 0.0025 for $n \ge 256$ and for N2 at every $n$. At $m_{BA}$ = 0.05, $\Lambda \approx$ 80 at $n$ = 128 and $\approx$ 670 at 1024. The evidence comes from rare clones that are almost impossible without dedifferentiation (e.g.\ a clone with a single A cell and no B cell at generation 8: $\log p \approx -15$ under H0), so the score contributions are extremely heavy-tailed.
+\subsection{How small an effect can it see?}
+\fig{power_mc}{0.98}{Probability of detecting dedifferentiation (power, at 5\% false positives) against its size $m_{BA}$, for each route (columns) and two null backgrounds (rows), at 128--1024 clones per endpoint. Bands: 90\% intervals over the simulated datasets (wider at $m_{BA} \ge 0.1$, where only 10 datasets were run).}
+\textbf{Very small effects are detected.} With correct typing the smallest $m_{BA}$ found in 80\% of experiments is 0.0025--0.004 at 128 clones per endpoint and below 0.0025 from 256 on, for every route. In cells: with 128 clones per endpoint at generations 4, 6, 8, 10, the experiment observes about 2\,900 B cells (N1; 11\,600 for N2), which together have lived about 8\,800 B-cell generations (23\,000 for N2). At $m_{BA} = 0.003$ that is only \textbf{about 26 dedifferentiation events in the whole experiment} (69 for N2) --- yet each leaves a recognisable footprint, an A cell in a clone where H0 can hardly put one, so a few dozen events are enough.
 
-\subsection{Mis-typing}
-\fig{mistyping}{0.80}{False-positive rate under H0 when the data contain LGR5/KRT20 classification errors (bA = B read as A, sym = symmetric; 0.5--5\%): errors ignored (top), modelled with half the true rate (middle), true confusion matrix modelled (bottom); dotted: 5\%.}
+\subsection{Why cell-typing errors dominate}
+\fig{mistyping}{0.80}{False-positive rate when there is \emph{no} dedifferentiation but some cells are mis-scored (bA: KRT20$^+$ read as LGR5$^+$; sym: both directions; 0.5--5\% of cells). Top: errors ignored in the analysis; middle: the analysis assumes half the true error rate; bottom: the true error rate is in the model. Dotted line: the intended 5\%.}
 \begin{center}\footnotesize
 \begin{tabular}{@{}ll@{}}\toprule
-typing errors in the analysis & false-positive rate at 5\% (errors 0.5--5\%, $n$ = 128--1024) \\\midrule
-ignored & \textbf{75--100\%} (already 75--100\% at 0.5\% ``B read as A'') \\
+how typing errors enter the analysis & false-positive rate (errors 0.5--5\%, $n$ = 128--1024) \\\midrule
+ignored & \textbf{75--100\%} (already at 0.5\% KRT20$^+$ read as LGR5$^+$) \\
 modelled with half the true rate & \textbf{21--100\%} \\
-true confusion matrix modelled & 1--13\% (3--11\% from $n$ = 256) \\\bottomrule
+modelled with the true rate & 1--13\% (3--11\% from $n$ = 256) \\\bottomrule
 \end{tabular}
 \end{center}
-A single mis-typed B cell creates exactly the ``impossible'' clones that give the test its power. The detectable effects ($m_{BA} \approx 0.003$) are far below any realistic typing error, so \textbf{the test is only as good as the model of typing errors}.
+A B cell scored as A looks exactly like a B cell that turned into A. With 0.5\% of B cells mis-scored, the experiment above contains \textbf{about 15 misread cells} (128 clones per endpoint, N1; 58 for N2) --- the same order as the 26 true events the test can detect. Ignored, these errors are read as dedifferentiation in nearly every experiment; even assuming half the true rate leaves most of them unexplained. Only with the correct error rate in the model does the test behave. \textbf{The sensitivity that makes the test powerful also makes it fragile: it is only as good as the model of cell typing.}
 
-\textbf{Real data.} On the CRC0322 2D counts (days 6/10 = generations 6/10, 165 + 101 organoids) $\Lambda$ = 45.1 with bootstrap $p$ = 0.005 (the smallest possible with 200 replicates), with an implausible full-model fit ($\hat m_{BA}$ = 1.35). This is \emph{not} evidence of dedifferentiation: typing errors are not modelled, and the real organoids showed fate heterogeneity and density dependence that the homogeneous model lacks.
+\subsection{The real organoids}
+On the CRC0322 2D counts (days 6 and 10 taken as generations 6 and 10; 165 and 101 organoids) the test gives $\Lambda = 45.1$ with bootstrap $p = 0.005$ (the smallest possible with 200 bootstrap samples), and an implausible fitted dedifferentiation ($\hat m_{BA} = 1.35$). \textbf{This is not evidence of dedifferentiation}: typing errors are not modelled, and these organoids differ from each other in fate and slow their growth as they get larger --- features the homogeneous model lacks and which, like typing errors, could produce ``impossible'' clones.
 
-\subsection{Implications for the wet lab}
+\subsection{What this means for the lab}
 \begin{enumerate}
-\item \textbf{Measure the LGR5/KRT20 confusion matrix} on the same assay --- above all the probability that a KRT20$^+$ cell is scored LGR5$^+$ (sorted pure populations, double staining) --- to well within a factor of 2, and include it in the model.
-\item \textbf{Organoid numbers are not the bottleneck}: with correct typing a few hundred clones per endpoint detect $m_{BA} \approx 0.005$.
-\item \textbf{A direct experiment is more robust}: organoids founded by sorted single KRT20$^+$ cells, followed at early times; any validated LGR5$^+$ progeny is direct evidence (the exact GW supports B founders for sizing it).
-\item Before testing real data, check robustness to organoid-level fate heterogeneity, which could create ``impossible'' clones the way mis-typing does (untested).
+\item \textbf{Measure the cell-typing error on the same assay}, above all the probability that a KRT20$^+$ cell is scored LGR5$^+$ (e.g.\ on sorted pure populations or with double staining), precisely --- an error of a factor 2 in this rate is already too much --- and include it in the analysis.
+\item \textbf{Organoid numbers are not the bottleneck}: with correct typing, a few hundred organoids per time point detect $m_{BA}$ of a few per thousand.
+\item \textbf{The most direct experiment}: grow organoids from single sorted KRT20$^+$ cells and look early; any validated LGR5$^+$ cell in them is direct evidence. The same exact likelihood can size this design.
+\item \textbf{Before using the test on real data}, check that organoid-to-organoid differences in fate do not create false positives (not yet tested).
 \end{enumerate}
+
+\subsection{How to run it}
+\code{uv run python scripts/dediff_test/run.py data counts.csv --reps 200} with columns \code{horizon,A,B} (horizon in generations); add \code{--confusion 0.02 --typing-kind b_as_a} to include a typing error. It prints $\Lambda$, the fitted $m_{BA}$, and $p$-values from the $\bar\chi^2$ mixture (from the fit), the textbook mixture, $\chi^2_3$, and the parametric bootstrap. Use the bootstrap or the $\bar\chi^2$-from-fit $p$-value.
 
 % ====================================================================== conclusions
 \section{Conclusions}\label{sec:conclusions}
