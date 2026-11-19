@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Ratio study (assumed / true mis-typing rate), 16 single-threaded workers, staged so that
 # partial results cover every cell: H0 seeds 0-49, H1 seeds 0-24, H0 50-99, H1 25-49.
-# Logs: results/exact_gw/dediff_test/logs/ratio_*.log. Resumable (finished analyses kept).
+# Logs: results/exact_gw/dediff_test/typing_ratio/logs/. Resumable (finished analyses kept).
 #   nohup bash scripts/dediff_test/queue_ratio.sh > /dev/null 2>&1 &
 set -u
 cd "$(dirname "$0")/../.."
-LOG=/home/matteo/BIO-SBI/results/exact_gw/dediff_test/logs
+LOG=/home/matteo/BIO-SBI/results/exact_gw/dediff_test/typing_ratio/logs
 mkdir -p "$LOG"
 W=${WORKERS:-16}
 run() { uv run python scripts/dediff_test/run.py ratio "$@" --workers "$W"; }
