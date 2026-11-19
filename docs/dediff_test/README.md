@@ -66,7 +66,7 @@ per null cell, 50 per alternative cell (10 for m ≥ 0.1), 100 per mis-typing ce
 |---|---|
 | errors ignored | **75–100%** (already 75–100% at 0.5% "B read as A") |
 | model assumes half the true error rate | **21–100%** |
-| true confusion matrix in the model | 1–13% (≈ nominal from n = 256) |
+| true confusion matrix in the model | 1–13% (3–11% from n = 256; nominal 5%) |
 
 The same rare clones that give the test its power are created by a single mis-typed cell
 (one B read as A turns a common clone into an "impossible" one). **The detectable effects
