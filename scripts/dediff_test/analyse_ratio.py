@@ -13,8 +13,11 @@ Critical values at nominal 5%:
           same null row and n (summary/calibration.csv; as in the main study)
   chibar  per-dataset chi-bar critical value from the H0 fit of that analysis
 
-Tolerance window (per n, m_BA, data typing, null row and route): the grid ratios r with
-false-positive rate <= 7% and power >= 80% (or >= the power at r = 1 minus 10 points).
+Tolerance window (per n, m_BA, data typing, null row and route) [r_min, r_max]: r_min is
+the smallest grid ratio from which on the false-positive rate is <= 7% (at r_min and every
+larger grid ratio; it need not be <= 1); r_max the largest grid ratio >= r_min up to which
+power stays >= 80% (variant "rel": >= the power at r = 1 minus 10 points). Empty if no
+grid ratio qualifies.
 Robust test: for an interval [lo, hi] of ratios, reject only if the test rejects at every
 grid ratio inside it (smallest Lambda > MC critical value; largest chi-bar p < 5%).
 """
@@ -146,18 +149,29 @@ def rate_table(df: pd.DataFrame, keys: list[str]) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def window(ratios: np.ndarray, ok: np.ndarray) -> tuple[float, float]:
-    """Return the contiguous block of grid ratios containing r = 1 where ``ok`` holds."""
-    ratios, ok = np.asarray(ratios), np.asarray(ok, dtype=bool)
-    if 1.0 not in ratios or not ok[list(ratios).index(1.0)]:
-        return (np.nan, np.nan)
-    i = list(ratios).index(1.0)
-    lo = hi = i
-    while lo > 0 and ok[lo - 1]:
-        lo -= 1
-    while hi < len(ratios) - 1 and ok[hi + 1]:
-        hi += 1
-    return (float(ratios[lo]), float(ratios[hi]))
+def r_min(ratios: np.ndarray, fpr: np.ndarray, cap: float = FPR_MAX) -> float:
+    """Smallest grid ratio with false-positive rate <= cap there and at all larger ratios."""
+    ok = np.asarray(fpr) <= cap
+    out = np.nan
+    for r, k in zip(ratios[::-1], ok[::-1], strict=True):
+        if not k:
+            break
+        out = float(r)
+    return out
+
+
+def r_max(ratios: np.ndarray, power: np.ndarray, lo: float, floor: float) -> float:
+    """Largest grid ratio >= lo up to which power stays >= floor (nan if not at lo)."""
+    out = np.nan
+    if np.isnan(lo):
+        return out
+    for r, p in zip(ratios, power, strict=True):
+        if r < lo - 1e-9:
+            continue
+        if p < floor:
+            break
+        out = float(r)
+    return out
 
 
 def tolerance(fpr: pd.DataFrame, pw: pd.DataFrame) -> pd.DataFrame:
@@ -169,20 +183,15 @@ def tolerance(fpr: pd.DataFrame, pw: pd.DataFrame) -> pd.DataFrame:
             ff = f.set_index("ratio")[f"rate_{c}"]
             pp = g.set_index("ratio")[f"rate_{c}"]
             r = np.array(sorted(set(ff.index) & set(pp.index)))
-            fok = ff.loc[r].to_numpy() <= FPR_MAX
+            p = pp.loc[r].to_numpy()
             p1 = float(pp.loc[1.0]) if 1.0 in pp.index else np.nan
-            pok80 = pp.loc[r].to_numpy() >= POWER_MIN
-            pokrel = pp.loc[r].to_numpy() >= p1 - POWER_DROP
-            fw = window(r, fok)
+            lo = r_min(r, ff.loc[r].to_numpy())
             rows.append({"base": base, "route": route, "m": m, "typing": typing, "n": n,
-                         "crit": c, "fpr_r1": float(ff.get(1.0, np.nan)), "power_r1": p1,
-                         "fpr_lo": fw[0],
-                         "fpr_lo_first": float(r[fok][0]) if fok.any() else np.nan,
-                         "win80_lo": window(r, fok & pok80)[0],
-                         "win80_hi": window(r, fok & pok80)[1],
-                         "winrel_lo": window(r, fok & pokrel)[0],
-                         "winrel_hi": window(r, fok & pokrel)[1],
-                         "power_hi": window(r, pok80)[1]})  # fmt: skip
+                         "crit": c, "datasets": int(g.datasets.min()),
+                         "fpr_r1": float(ff.get(1.0, np.nan)), "power_r1": p1,
+                         "power_r2": float(pp.get(2.0, np.nan)), "r_min": lo,
+                         "r_max80": r_max(r, p, lo, POWER_MIN),
+                         "r_max_rel": r_max(r, p, lo, p1 - POWER_DROP)})  # fmt: skip
     return pd.DataFrame(rows)
 
 
@@ -408,13 +417,27 @@ def main() -> None:
                                          f"rate_{c}"), ".0f"))  # fmt: skip
         if len(perf):
             report.append("## Power (%) with perfect typing (same clones)\n\n"
-                          + md(pp.pivot_table(index=["m", "base", "route"], columns="n",
+                          + md(pp.assign(m=pp.m.map(mlabel)).pivot_table(index=["m", "base", "route"], columns="n",
                                               values="rate_mc").mul(100).round(0).reset_index(),
                                ".0f"))  # fmt: skip
         tol = tolerance(ft, pt)
         tol.to_csv(out / "tolerance.csv", index=False)
-        report.append("## Tolerance windows (grid ratios r around 1 with FPR <= 7% and power "
-                      ">= 80% [win80] or >= power(r=1) - 10 points [winrel])\n\n" + md(tol))
+        tol = tol.assign(m=tol.m.map(mlabel))
+        report.append("## Tolerance windows [r_min, r_max] (FPR <= 7% for all r >= r_min; "
+                      "power >= 80% [r_max80] or >= power(r=1) - 10 points [r_max_rel] for "
+                      "r_min <= r <= r_max)\n\n" + md(tol))
+        worst = tol.groupby(["crit", "typing", "m", "n"]).agg(
+            r_min=("r_min", lambda x: x.max() if x.notna().all() else np.nan),
+            r_max80=("r_max80", lambda x: x.min() if x.notna().all() else np.nan),
+            r_max_rel=("r_max_rel", lambda x: x.min() if x.notna().all() else np.nan),
+            power_r1_min=("power_r1", "min"), power_r2_min=("power_r2", "min")).reset_index()
+        for k in ("r_max80", "r_max_rel"):  # intersection over rows: empty if lo > hi
+            worst[k] = worst[k].where(worst[k] >= worst.r_min)
+        worst["window80"] = [f"[{a:g}, {b:g}]" if np.isfinite(b) else "empty"
+                             for a, b in zip(worst.r_min, worst.r_max80, strict=True)]  # fmt: skip
+        worst.to_csv(out / "tolerance_worst.csv", index=False)
+        report.append("## Tolerance windows, most restrictive over null rows N1/N2 and routes"
+                      "\n\n" + md(worst, ".2f"))
     rb = robust(df)
     rt = robust_table(rb)
     rt.to_csv(out / "robust.csv", index=False)
