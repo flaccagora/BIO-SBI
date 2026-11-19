@@ -48,7 +48,7 @@
   left=5pt,right=5pt,top=3pt,bottom=3pt,fontupper=\small}
 \newtcolorbox{caveat}{colback=pendbg,colframe=corange,boxrule=0.6pt,arc=2pt,
   left=5pt,right=5pt,top=3pt,bottom=3pt,fontupper=\small}
-\graphicspath{{figures/}}
+\graphicspath{{figures/}{../docs/dediff_test/figures/}}
 \makeatletter\newcommand{\tabin}[1]{\@@input #1 }\makeatother  % expandable \input for table rows
 \newcommand{\fig}[3]{\begin{figure}[H]\centering\includegraphics[width=#2\linewidth]{#1}\caption{#3}\label{fig:#1}\end{figure}}
 \hypersetup{pdftitle={BIO-SBI: exact likelihood for Galton-Watson and the XG2 experiment},pdfauthor={BIO-SBI}}
@@ -66,7 +66,7 @@
 {\sffamily\Large\color{inkgray} Method, point estimates, and how much data the full transition model needs (XG2)\par}
 \vspace{1.5cm}
 \begin{tabular}{@{}ll@{}}
-Status of results & 18 November 2026 (XG2 108 + 24 runs; flat-\BA{} repeat 108 runs; follow-ups) \\
+Status of results & 19 November 2026 (XG2, follow-ups, dedifferentiation test) \\
 Repository & \code{BIO-SBI}, branch \code{worktree-exact-gw-data-size} \\
 Results & \res{results/exact_gw/data_size/} (XG2), \res{results/exact_gw/} (XG) \\
 Companions & \code{report_sequential/report.pdf} (all experiments; \S ``Exact likelihood (XG)'') \\
@@ -95,6 +95,8 @@ Data & synthetic only \\
 \end{enumerate}
 
 \textbf{Follow-ups} (\S\ref{sec:fu}). B's switch back reaches an error below 0.05 at 2048--4096 clones per endpoint for T1, T3, T4 (T2 not by 4096), but where B never divides the posterior stays 1--2 sd low at every $n$. A flat prior on \BA{} cuts the \BA{} error of T1--T4 by 1.7--5$\times$ and, at $n$ = 128, up to doubles it for the small-\BA{} truths. Reparametrising B's row helps modestly within a branch (0.8--1.6$\times$); T1's posterior at $n$ = 1024 has a second ``B divides'' branch holding about 17\% of the mass, which single NUTS runs weight anywhere between 2\% and 28\%.
+
+\textbf{Dedifferentiation test} (\S\ref{sec:dediff}). A likelihood-ratio test of ``B never gives rise to A'' is well calibrated with per-dataset boundary ($\bar\chi^2$) critical values (1--6.5\% false positives) and, with perfect typing, detects $m_{BA} \approx 0.003$ A cells per B cell per generation already at 128 clones per endpoint. But 0.5\% of KRT20$^+$ cells mis-scored as LGR5$^+$, if not modelled, gives 75--100\% false positives (half the true rate modelled: 21--100\%): measure the typing error before testing.
 
 \textbf{Recommendations.}
 \begin{itemize}
@@ -430,6 +432,62 @@ Stopping rule on (at most 1000 draws per chain). Low branch: share of draws with
 \item \textbf{T1 at $n$ = 1024 has a second branch} (``B divides'': \BA{} $\approx$ 0.27, B$\to$AA/AB/BB $\approx$ 0.16/0.16/0.24) whose mass, by per-branch SMC evidence, is 17\% (8--25\% across replicates; importance sampling: 16\%). Single NUTS runs put 2--28\% of their draws there, depending on the start; only the strong SMC start with \code{brow+probit} matched (16\%). The branch-weighted posterior gives \BA{} = 0.57--0.60 $\pm$ 0.15--0.16, not 0.65 $\pm$ 0.09.
 \end{itemize}
 
+% ====================================================================== dedifferentiation test
+\section{Testing for dedifferentiation: can B give rise to A?}\label{sec:dediff}
+\textbf{Question for the wet lab.} Estimating \BA{} is hard (Sections~\ref{sec:xg2results}--\ref{sec:fu}). Deciding whether KRT20$^+$ cells give rise to LGR5$^+$ cells \emph{at all}, by any route, is a different and easier question: a test, not an estimate. Code: \code{src/bio_sbi/inference/dediff_lrt.py}, scripts \code{scripts/dediff_test/}, note \res{docs/dediff_test/README.md}; results \res{results/exact_gw/dediff_test/}.
+
+\subsection{The test}
+\begin{itemize}
+\item \textbf{H0 (no dedifferentiation):} \BA{} = B$\to$AA = B$\to$AB = 0 (B may die, persist, or divide into B+B). \textbf{H1:} at least one $>0$. Effect size $m_{BA}$ = \BA{} + 2\,B$\to$AA + B$\to$AB, the A cells produced by one B cell per generation (an entry of the mean offspring matrix).
+\item \textbf{Statistic:} $\Lambda = 2[\ell(\hat\theta_{\rm full}) - \ell(\hat\theta_0)] \ge 0$, both maximised on the exact likelihood by multistart (including $\hat\theta_0$, small steps along each route, pinned \BA{} starts and warm starts from the next smaller $n$). The full model is reparametrised so that its first B stick is the total dedifferentiation mass; H0 is exactly the face where it is 0.
+\item \textbf{Calibration:} H0 puts three parameters on the boundary, so $\Lambda$ is not $\chi^2$: it is 0 in a sizeable share of datasets and otherwise a mixture. Three calibrations are compared: a Monte-Carlo null (known H0 truth), the parametric bootstrap from $\hat\theta_0$ (what one does with real data), and the boundary $\bar\chi^2$ mixture with weights from the observed information at $\hat\theta_0$; also the textbook weights (critical value 5.43) and plain $\chi^2_3$ (7.81).
+\item \textbf{Study:} A row = reference; null B rows N1 (death .2, persist .8), N2 (death .1, persist .5, B$\to$BB .4), N3 (death .5, persist .5), N4 (death .2, persist .3, B$\to$BB .5); alternatives on N1 and N2 with $m_{BA}$ from 0.0025 to 0.4 by three routes (switch only, B$\to$AB only, mixed); generations \{4,6,8,10\}, $n$ = 128--1024 clones per endpoint (nested). 200 datasets per null cell, 50 per alternative (10 for $m_{BA} \ge 0.1$), 100 per mis-typing cell; bootstrap on 15 datasets $\times$ 100 replicates per null at $n$ = 128 and 1024.
+\end{itemize}
+
+\subsection{Calibration}
+\begin{center}\footnotesize\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}lllllll@{}}\toprule
+null & 95\% crit.\ value (MC) & $\bar\chi^2$ crit.\ (obs.\ inform.) & size, $\bar\chi^2$ & size, textbook weights & size, $\chi^2_3$ & share $\Lambda = 0$ \\\midrule
+N1 & 1.9--3.4 & 3.3--3.5 & 1.0--5.5\% & 0--3.5\% & 0--2.5\% & 65--77\% \\
+N2 & 3.0--4.1 & 3.7--3.9 & 3.5--6.0\% & 1.0--3.0\% & 0.5--1.0\% & 48--59\% \\
+N3 & 4.1--4.8 & 3.8--4.2 & 5.0--6.5\% & 1.0--3.5\% & 0--1.5\% & 25--36\% \\
+N4 & 2.3--3.6 & 3.6--3.9 & 2.5--5.5\% & 1.5--2.5\% & 0.5--1.5\% & 44--52\% \\\bottomrule
+\end{tabular}
+
+Ranges over $n$ = 128--1024; size = false-positive rate at nominal 5\% over 200 null datasets per cell.
+\end{center}
+\begin{itemize}
+\item The $\bar\chi^2$ mixture with weights from the dataset's own observed information is close to nominal (1--6.5\%); the textbook weights and $\chi^2_3$ are conservative.
+\item The null distribution \textbf{depends on B's other outcomes}: using another null row's Monte-Carlo critical value gives up to 16\% false positives. Calibrate per dataset ($\bar\chi^2$ from the fit, or bootstrap), not with one fixed number.
+\item The parametric bootstrap gives median critical values 1.5--4.0, close to the Monte-Carlo ones except N1 at 1024 (2.3 vs 3.4) and N3 at 128 (3.2 vs 4.5); its size is 5--11\%, a little liberal at small $n$. No missed optimum in 3200 null fits.
+\end{itemize}
+
+\subsection{Power}
+\fig{power_mc}{0.98}{Power at 5\% (Monte-Carlo critical value of the base null) against $m_{BA}$, by route (columns) and null B row (rows), for $n$ = 128--1024 clones per endpoint; bands: binomial 90\% intervals (wider at $m_{BA} \ge 0.1$: 10 datasets).}
+With perfect typing the test is extremely sensitive: the smallest $m_{BA}$ detected with 80\% power is $\le$ 0.0025--0.004 for every route already at $n$ = 128 (N1), and $\le$ 0.0025 for $n \ge 256$ and for N2 at every $n$. At $m_{BA}$ = 0.05, $\Lambda \approx$ 80 at $n$ = 128 and $\approx$ 670 at 1024. The evidence comes from rare clones that are almost impossible without dedifferentiation (e.g.\ a clone with a single A cell and no B cell at generation 8: $\log p \approx -15$ under H0), so the score contributions are extremely heavy-tailed.
+
+\subsection{Mis-typing}
+\fig{mistyping}{0.80}{False-positive rate under H0 when the data contain LGR5/KRT20 classification errors (bA = B read as A, sym = symmetric; 0.5--5\%): errors ignored (top), modelled with half the true rate (middle), true confusion matrix modelled (bottom); dotted: 5\%.}
+\begin{center}\footnotesize
+\begin{tabular}{@{}ll@{}}\toprule
+typing errors in the analysis & false-positive rate at 5\% (errors 0.5--5\%, $n$ = 128--1024) \\\midrule
+ignored & \textbf{75--100\%} (already 75--100\% at 0.5\% ``B read as A'') \\
+modelled with half the true rate & \textbf{21--100\%} \\
+true confusion matrix modelled & 1--13\% (3--11\% from $n$ = 256) \\\bottomrule
+\end{tabular}
+\end{center}
+A single mis-typed B cell creates exactly the ``impossible'' clones that give the test its power. The detectable effects ($m_{BA} \approx 0.003$) are far below any realistic typing error, so \textbf{the test is only as good as the model of typing errors}.
+
+\textbf{Real data.} On the CRC0322 2D counts (days 6/10 = generations 6/10, 165 + 101 organoids) $\Lambda$ = 45.1 with bootstrap $p$ = 0.005 (the smallest possible with 200 replicates), with an implausible full-model fit ($\hat m_{BA}$ = 1.35). This is \emph{not} evidence of dedifferentiation: typing errors are not modelled, and the real organoids showed fate heterogeneity and density dependence that the homogeneous model lacks.
+
+\subsection{Implications for the wet lab}
+\begin{enumerate}
+\item \textbf{Measure the LGR5/KRT20 confusion matrix} on the same assay --- above all the probability that a KRT20$^+$ cell is scored LGR5$^+$ (sorted pure populations, double staining) --- to well within a factor of 2, and include it in the model.
+\item \textbf{Organoid numbers are not the bottleneck}: with correct typing a few hundred clones per endpoint detect $m_{BA} \approx 0.005$.
+\item \textbf{A direct experiment is more robust}: organoids founded by sorted single KRT20$^+$ cells, followed at early times; any validated LGR5$^+$ progeny is direct evidence (the exact GW supports B founders for sizing it).
+\item Before testing real data, check robustness to organoid-level fate heterogeneity, which could create ``impossible'' clones the way mis-typing does (untested).
+\end{enumerate}
+
 % ====================================================================== conclusions
 \section{Conclusions}\label{sec:conclusions}
 \begin{enumerate}
@@ -438,6 +496,7 @@ Stopping rule on (at most 1000 draws per chain). Low branch: share of draws with
 \item The answer depends on the truth: large clones (T5) and truths near the prior's bulk converge fast; the reference biology (B switches back, never divides) converges slowest.
 \item The limiting factor is information along two directions --- switch back vs loss of B, and which parent made a mixed division --- combined, for the first, with the flat prior's volume. More NUTS budget cannot change it (Monte Carlo error $\approx$\,0.05 sd).
 \item \textbf{Follow-ups} (\S\ref{sec:fu}): B's switch back reaches an absolute error below 0.05 at 2048--4096 clones per endpoint (T2 not by 4096), but where B never divides the posterior stays 1--2 sd low at every $n$. A flat prior on \BA{} removes most of that bias for large \BA{} and adds some for small \BA: at small $n$ the prior decides. Some B-row posteriors have two branches whose weights NUTS cannot be trusted to get right (T1: 17\% on ``B divides'' by SMC evidence); report branch masses, not just converged-looking chains.
+\item \textbf{Whether B gives rise to A at all} is testable from endpoint counts with very small effects (\S\ref{sec:dediff}), but the test is dominated by cell-typing errors: the KRT20$\to$LGR5 mis-scoring rate must be measured and modelled, or the question settled directly with organoids founded by KRT20$^+$ cells.
 \end{enumerate}
 
 \subsection{Follow-ups}\label{sec:followups}
@@ -447,6 +506,7 @@ Stopping rule on (at most 1000 draws per chain). Low branch: share of draws with
 \item A model-comparison step (``does B divide?'') in the default analysis: it removes the boundary bias of T1, T2, T4 where it applies (\S\ref{sec:why}).
 \item A prior for B's other outcomes that keeps \BA{} flat without unbounded densities (e.g.\ concentration 1 for every B outcome except a flat \BA), and a rerun of the flat-\BA{} cells with it: the 0.2 concentrations made B's small entries unsampleable.
 \item Prior sensitivity by NUTS where reweighting is unreliable (203 (run, prior) pairs; at least the wrong prior at $n \ge 512$).
+\item Dedifferentiation test (\S\ref{sec:dediff}): how precisely the typing error must be known (between half and exact rate); robustness to organoid fate heterogeneity; sizing the B-founder design.
 \end{itemize}
 
 % ====================================================================== appendix
