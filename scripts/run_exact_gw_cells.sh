@@ -6,6 +6,8 @@
 # whose folder or log already exists are skipped (restart-safe).
 #   setsid nohup scripts/run_exact_gw_cells.sh <jobs file> [results root] [budget] [max jobs] [extra overrides...] &
 # Jobs file: one "gt n seed" per line (# comments allowed). T5_C7 gets its CLI truth.
+# WARM_ROOT=<root> (env, optional): warm-start each cell from <root>/<gt>/n<n>_s<seed> (same
+# dataset, earlier run under another prior) when that run has a posterior.pt.
 set -uo pipefail
 JOBS_FILE=$1
 ROOT=${2:-results/exact_gw/data_size}
@@ -33,6 +35,8 @@ grep -v '^\s*#' "$JOBS_FILE" | while read -r gt n seed; do
   done
   extra=()
   [ "$gt" = T5_C7 ] && extra=("$T5")
+  warm="${WARM_ROOT:-}/$gt/n${n}_s${seed}"
+  [ -n "${WARM_ROOT:-}" ] && [ -e "$warm/posterior.pt" ] && extra+=("inference.method.warm_start=$warm")
   setsid nohup .venv/bin/bio-sbi -m +experiment=exact_gw_data_size "${extra[@]}" "gt=$gt" \
     "design.clones=$n" "seed=$seed" inference.method.kernel=adjoint "${EXTRA[@]}" \
     hydra.sweep.dir="$ROOT/$gt" "hydra.sweep.subdir=n${n}_s${seed}" \
