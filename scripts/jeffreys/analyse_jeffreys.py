@@ -295,10 +295,104 @@ def figures(df: pd.DataFrame, t: dict) -> None:
     plt.close(fig)
 
 
+def _wide(t: pd.DataFrame, index, value: str, digits: int = 3) -> pd.DataFrame:
+    w = t.pivot_table(index=index, columns="arm", values=value)
+    return w[[a for a in ARMS if a in w.columns]].rename(columns=LABEL).round(digits)
+
+
+def psis_table() -> pd.DataFrame:
+    """Per cell: Pareto k of the PSIS step and, where rerun, of the rerun's correction."""
+    rows = []
+    for f in sorted((JEFF / "jeffreys").glob("*/n*_s*/summary.json")):
+        d = json.loads(f.read_text())
+        gt, cell = f.parent.parent.name, f.parent.name
+        n, s = (int(x) for x in cell[1:].split("_s"))
+        r = JEFF / "jeffreys_rerun" / gt / cell / "summary.json"
+        rr = json.loads(r.read_text()) if r.exists() else {}
+        rows.append({"gt": gt, "n": n, "seed": s, "k_psis": d["pareto_k"],
+                     "ess_psis": d["ess"], "draws": d["draws"], "log_w_sd": d["log_w_sd"],
+                     "rerun": bool(rr), "rerun_iteration": rr.get("iteration"),
+                     "k_rerun": rr.get("pareto_k"), "ess_rerun": rr.get("ess"),
+                     "rerun_stop": rr.get("stop"), "rerun_rhat": rr.get("max_rank_rhat"),
+                     "rerun_ess_bulk": rr.get("min_ess_bulk"),
+                     "rerun_minutes": rr.get("seconds", np.nan) / 60})  # fmt: skip
+    return pd.DataFrame(rows)
+
+
+def markdown(t: dict, diag: pd.DataFrame, mix: pd.DataFrame, ps: pd.DataFrame) -> str:
+    """Markdown tables for docs/jeffreys/README.md."""
+    out = []
+
+    def add(title, frame):
+        out.append(f"### {title}\n\n{frame.to_markdown()}\n")
+
+    add(
+        "B.to_A by n (9 truths x 3 datasets): RMSE of the posterior mean / MLE",
+        _wide(t["btoa_by_n"], "n", "rmse"),
+    )
+    add("B.to_A by n: mean bias (estimate - truth)", _wide(t["btoa_by_n"], "n", "bias"))
+    add("B.to_A by n: mean posterior sd (MLE: Wald se)", _wide(t["btoa_by_n"], "n", "sd"))
+    add("B.to_A by n: 90% coverage", _wide(t["btoa_by_n"], "n", "coverage", 2))
+    add("All 12 probabilities by n: RMSE", _wide(t["allparams_by_n"], "n", "rmse"))
+    add(
+        "All 12 probabilities by n: 90% coverage (MLE: where a Wald interval exists)",
+        _wide(t["allparams_by_n"], "n", "coverage", 2),
+    )
+    add("B's division mass B.div by n: RMSE", _wide(t["bdiv_by_n"], "n", "rmse"))
+    add(
+        "B.to_A per truth and n: mean over the 3 datasets of the estimate",
+        _wide(t["btoa"], ["gt", "n"], "mean", 2).join(
+            t["btoa"].groupby(["gt", "n"])["truth"].first().round(2)
+        ),
+    )
+    add("B.to_A per truth and n: RMSE over the 3 datasets", _wide(t["btoa"], ["gt", "n"], "rmse"))
+    add("B.to_A per truth and n: coverage (of 3)", _wide(t["btoa"], ["gt", "n"], "coverage", 2))
+    ag = t["agreement"].pivot(index="n", columns="pair",
+                              values=["btoa_median_shift", "all_frac_cells_lt_0.25"])  # fmt: skip
+    add(
+        "Agreement between priors: median |shift| of the B.to_A mean in posterior sd, and "
+        "fraction of cells where every parameter moves < 0.25 sd",
+        ag.round(2),
+    )
+    g = diag.groupby(["arm", "n"])
+    dsum = pd.DataFrame({
+        "cells": g.size(), "stop_met": g["met"].apply(lambda m: (m == True).mean()),  # noqa: E712
+        "median_max_rank_rhat": g["max_rank_rhat"].median(),
+        "frac_rhat_gt_1.05": g["max_rank_rhat"].apply(lambda r: (r > 1.05).mean()),
+        "median_min_ess_bulk": g["min_ess_bulk"].median(),
+        "median_min_ess_tail": g["min_ess_tail"].median(),
+        "median_divergences": g["divergences"].median(), "median_minutes": g["minutes"].median(),
+    })  # fmt: skip
+    add("Sampler diagnostics (flat: fixed 500 draws/chain, no stopping rule)", dsum.round(3))
+    mg = mix[mix["arm"] != "flat"].groupby(["parameter", "arm"])
+    msum = pd.DataFrame({
+        "rhat_gt_1.01": mg["rank_rhat"].apply(lambda r: (r > 1.01).mean()),
+        "ess_bulk_lt_400": mg["ess_bulk"].apply(lambda e: (e < 400).mean()),
+        "ess_tail_lt_200": mg["ess_tail"].apply(lambda e: (e < 200).mean()),
+    }).unstack("arm")  # fmt: skip
+    add(
+        "Which parameters fail to mix: fraction of the 108 cells failing each criterion",
+        msum.round(2),
+    )
+    pg = ps.groupby("n")
+    psum = pd.DataFrame({
+        "cells": pg.size(), "median_k_psis": pg["k_psis"].median(),
+        "k_psis_gt_0.7": pg["k_psis"].apply(lambda k: int((k > 0.7).sum())),
+        "reruns": pg["rerun"].sum(), "max_k_rerun": pg["k_rerun"].max(),
+    })  # fmt: skip
+    add("Exact Jeffreys: PSIS from Dirichlet(1/2) and reruns", psum.round(2))
+    return "\n".join(out)
+
+
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     df = collect()
     df.to_csv(OUT / "cells.csv", index=False)
+    # tables and figures on the cells every arm has (same datasets in every column)
+    have = df.groupby(["gt", "n", "seed"])["arm"].nunique()
+    common = have[have == len(ARMS)].index
+    df = df.set_index(["gt", "n", "seed"]).loc[common].reset_index()
+    print(f"{len(common)} cells with all {len(ARMS)} arms")
     t = tables(df)
     for k, v in t.items():
         v.to_csv(OUT / f"{k}.csv", index=False)
@@ -306,6 +400,9 @@ def main() -> None:
     diag.to_csv(OUT / "diagnostics.csv", index=False)
     mix.to_csv(OUT / "mixing.csv", index=False)
     figures(df, t)
+    ps = psis_table()
+    ps.to_csv(OUT / "psis.csv", index=False)
+    (OUT / "tables.md").write_text(markdown(t, diag, mix, ps))
     pd.set_option("display.width", 200)
     print(t["btoa_by_n"].pivot(index="n", columns="arm", values=["rmse", "coverage"]).round(3))
     print(t["allparams_by_n"].pivot(index="n", columns="arm", values=["rmse", "coverage"]).round(3))

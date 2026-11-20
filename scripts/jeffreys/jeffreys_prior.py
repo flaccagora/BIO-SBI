@@ -164,9 +164,115 @@ def run_summary(tag: str, seed: int) -> None:
     print(json.dumps(info, indent=1))
 
 
+def implied(sim, phys: np.ndarray, model=None) -> dict[str, np.ndarray]:
+    """Derived quantities per draw: B division mass, growth rate, mean cells at gen 10."""
+    names = list(sim.parameter_names)
+    off = np.asarray(sim.law.offspring, float)  # (2, O, 2)
+    P = np.stack(
+        [phys[:, [names.index(f"{t}.{e}") for e in sim.law.outcomes[t]]] for t in ("A", "B")], 1
+    )  # fmt: skip  (outcome order = offspring order)
+    M = np.einsum("nko,koj->nkj", P[:, :, : off.shape[1]], off)  # mean offspring matrix
+    growth = np.abs(np.linalg.eigvals(M)).max(1)
+    m10 = np.array([np.linalg.matrix_power(m, 10)[0].sum() for m in M])
+    bdiv = sum(phys[:, names.index(f"B.{e}")] for e in ("div_AA", "div_AB", "div_BB"))
+    out = {"B.div": bdiv, "growth": growth, "log10_mean_cells10": np.log10(m10 + 1e-300)}
+    if model is not None:  # P(clone detected at generation 10)
+        from bio_sbi.inference.gw_exact import detection_and_grad
+
+        z = np.zeros((0, P.shape[2]))
+        r = np.zeros(0, np.int64)
+        q = [detection_and_grad(model, np.ascontiguousarray(p), z, r, 10)[0] for p in P]
+        out["log10_detect10"] = np.log10(np.maximum(q, 1e-300))
+    return out
+
+
+def run_report(burn: float, thin: int) -> None:
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import pandas as pd
+    from scipy.special import expit
+
+    from bio_sbi.inference.smc import ess_bulk, rhat
+
+    prior = jeffreys_prior()
+    sim = prior.lik.sim
+    z = np.load(OUT / "mcmc.npz")
+    U = z["U"]  # (iters + 1, chains, d)
+    start = int(burn * len(U))
+    kept = U[start::thin]  # (draws, chains, d)
+    theta = expit(kept)
+    names = list(sim.parameter_names)
+    chains = np.transpose(theta, (1, 0, 2))  # (chains, draws, d)
+    diag = {"iterations": int(len(U) - 1), "burn": start, "thin": thin,
+            "acceptance": float(z["acc"][start:].mean()),
+            "max_rhat": float(max(rhat(chains[..., i]) for i in range(theta.shape[2]))),
+            "min_ess_bulk": float(min(ess_bulk(chains[..., i]) for i in range(theta.shape[2]))),
+            "log_pj_quantiles": np.percentile(z["log_pj"][start:], [1, 50, 99]).tolist()}  # fmt: skip
+    flat = theta.reshape(-1, theta.shape[2])
+    phys_j = np.array([sim.decode(t) for t in flat])
+    rng = np.random.default_rng(1)
+    arms = {"jeffreys": phys_j}
+    for alpha, key in ((1.0, "flat"), (0.5, "dir_half")):
+        a, b = prior.stick_beta(alpha)
+        th = np.clip(rng.beta(a, b, size=(len(flat), len(a))), 1e-15, 1 - 1e-15)
+        arms[key] = np.array([sim.decode(t) for t in th])
+    # flat-B->A: A row flat, B row Dirichlet(to_A 1, others 0.2)
+    alpha_b = np.array([0.2 if e != "to_A" else 1.0 for e in
+                        ("death", "to_A", "persist", "div_AA", "div_AB", "div_BB")])  # fmt: skip
+    pb = rng.dirichlet(alpha_b, len(flat))
+    fb = arms["flat"].copy()
+    for j, e in enumerate(("death", "to_A", "persist", "div_AA", "div_AB", "div_BB")):
+        fb[:, names.index(f"B.{e}")] = pb[:, j]
+    arms["flat_btoa"] = fb
+    free = list(sim.space.free_names)
+    rows = []
+    vals = {}
+    for arm, ph in arms.items():
+        d = {n: ph[:, names.index(n)] for n in free}
+        d.update(implied(sim, ph, prior.model))
+        vals[arm] = d
+        for k, x in d.items():
+            q = np.percentile(x, [5, 50, 95])
+            rows.append({"arm": arm, "quantity": k, "mean": float(np.mean(x)),
+                         "q05": q[0], "median": q[1], "q95": q[2]})  # fmt: skip
+    tab = pd.DataFrame(rows)
+    ld = vals["jeffreys"]["log10_detect10"]
+    diag["jeffreys_frac_detect10_below"] = {
+        f"1e{e}": float(np.mean(ld < e)) for e in (-2, -3, -4, -5)
+    }
+    tab.to_csv(OUT / "prior_marginals.csv", index=False)
+    pd.DataFrame(phys_j, columns=names).to_csv(OUT / "jeffreys_prior_draws.csv.gz", index=False)
+    (OUT / "mcmc_diagnostics.json").write_text(json.dumps(diag, indent=1))
+    print(json.dumps(diag, indent=1))
+    print(tab.pivot(index="quantity", columns="arm", values="median").round(3))
+    show = ["B.to_A", "B.div", "B.div_BB", "B.death", "A.death", "A.div_AA", "A.to_B",
+            "growth", "log10_mean_cells10", "log10_detect10"]  # fmt: skip
+    colors = {"flat": "#4C72B0", "flat_btoa": "#DD8452", "dir_half": "#55A868",
+              "jeffreys": "#C44E52"}  # fmt: skip
+    label = {"flat": "flat Dirichlet(1)", "flat_btoa": "flat-B→A", "dir_half": "Dirichlet(1/2)",
+             "jeffreys": "exact Jeffreys"}  # fmt: skip
+    fig, axes = plt.subplots(2, 5, figsize=(18, 6.5))
+    for ax, k in zip(axes.flat, show, strict=True):
+        lo = min(np.percentile(vals[a][k], 0.5) for a in vals)
+        hi = max(np.percentile(vals[a][k], 99.5) for a in vals)
+        bins = np.linspace(lo, hi, 41)
+        for arm in ("flat", "flat_btoa", "dir_half", "jeffreys"):
+            ax.hist(vals[arm][k], bins=bins, density=True, histtype="step", lw=1.6,
+                    color=colors[arm], label=label[arm])  # fmt: skip
+        ax.set_title(k)
+    axes[0, 0].legend(fontsize=8)
+    fig.suptitle("Prior marginals (exact Jeffreys: DE-MCMC draws)")
+    fig.tight_layout()
+    fig.savefig(OUT / "prior_marginals.png", dpi=130)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("cmd", choices=["is", "profiles", "summary"])
+    ap.add_argument("cmd", choices=["is", "profiles", "summary", "report"])
+    ap.add_argument("--burn", type=float, default=0.33)
+    ap.add_argument("--thin", type=int, default=5)
     ap.add_argument("--n", type=int, default=8192)
     ap.add_argument("--alpha", type=float, default=0.5)
     ap.add_argument("--seed", type=int, default=0)
@@ -176,6 +282,8 @@ def main() -> None:
         run_is(args.n, args.alpha, args.seed, args.chunk)
     elif args.cmd == "profiles":
         run_profiles()
+    elif args.cmd == "report":
+        run_report(args.burn, args.thin)
     else:
         run_summary(f"is_dir{args.alpha:g}_s{args.seed}", args.seed)
 
