@@ -38,6 +38,13 @@ TYPINGS = {
     "bA0.005": (0.005, "b_as_a"), "bA0.01": (0.01, "b_as_a"),
 }
 TYPING_BASES = ("N1", "N2")
+#: Ratio study (how precisely the error rate must be known): data mis-typed at rate e,
+#: analysed with the confusion matrix at the assumed rate r * e.
+RATIOS = (0.5, 0.75, 0.8, 0.9, 1.0, 1.1, 1.25, 1.5, 2.0)
+RATIO_TYPINGS_NULL = ("bA0.01", "bA0.02", "sym0.02")
+RATIO_TYPINGS_ALT = ("bA0.01", "bA0.02")
+RATIO_ROUTES = ("mixed", "toA")
+RATIO_M = (0.005, 0.01, 0.05, 0.1)
 
 
 def alt_row(base: str, route: str, m: float) -> dict:
@@ -56,22 +63,25 @@ def alt_row(base: str, route: str, m: float) -> dict:
 def cell(name: str) -> dict:
     """Truth ``P``, data confusion and description of a cell name.
 
-    ``N1`` (null), ``N1_toA_m0.05`` (alternative), ``N1_bA0.05`` (null data, mis-typed).
+    ``N1`` (null), ``N1_toA_m0.05`` (alternative), ``N1_bA0.05`` (null data, mis-typed),
+    ``N1_toA_m0.05_bA0.02`` (alternative data, mis-typed). ``rate`` / ``kind``: the
+    data's mis-typing (0 / None if perfect).
     """
     parts = name.split("_")
     base = parts[0]
     if base not in NULLS:
         raise ValueError(f"unknown base {base}")
     out = {"name": name, "base": base, "route": None, "m": 0.0, "typing": None,
-           "confusion": None}  # fmt: skip
+           "confusion": None, "rate": 0.0, "kind": None}  # fmt: skip
     B = dict(NULLS[base])
-    if len(parts) == 3:
+    if len(parts) in (3, 4):
         route, m = parts[1], float(parts[2][1:])
         B = alt_row(base, route, m)
         out.update(route=route, m=m)
-    elif len(parts) == 2:
-        rate, kind = TYPINGS[parts[1]]
-        out.update(typing=parts[1], confusion=D.confusion_matrix(rate, kind),
+    if len(parts) in (2, 4):
+        rate, kind = TYPINGS[parts[-1]]
+        out.update(typing=parts[-1], rate=rate, kind=kind,
+                   confusion=D.confusion_matrix(rate, kind),
                    confusion_half=D.confusion_matrix(rate / 2, kind))  # fmt: skip
     out["P"] = D.P_from_rows(A_ROW, B)
     assert abs(D.m_ba(out["P"]) - out["m"]) < 1e-12
@@ -86,6 +96,11 @@ def study_cells(study: str) -> list[str]:
         return [f"{b}_{r}_m{m:g}" for b in ALT_BASES for r in ROUTES for m in M_VALUES]
     if study == "typing":
         return [f"{b}_{t}" for b in TYPING_BASES for t in TYPINGS]
+    if study == "ratio_null":
+        return [f"{b}_{t}" for b in TYPING_BASES for t in RATIO_TYPINGS_NULL]
+    if study == "ratio_alt":
+        return [f"{b}_{r}_m{m:g}_{t}" for b in ALT_BASES for r in RATIO_ROUTES
+                for m in RATIO_M for t in RATIO_TYPINGS_ALT]  # fmt: skip
     raise ValueError(study)
 
 

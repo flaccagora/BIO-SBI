@@ -32,6 +32,10 @@ local probability coordinates) and :func:`chibar_null` (Monte-Carlo asymptotic n
 Lambda: difference of the projections of N(0, I^-1) onto the H0 and H1 cones, with
 nuisance entries estimated at 0 treated as boundary in both), :func:`chibar_pvalue` for
 mixtures of chi-squares, and :func:`simulate_counts` for (bootstrap) datasets.
+
+Uncertain typing error: :func:`robust_test` runs the test at a grid of assumed
+mis-typing rates over an interval (:func:`confusion_grid`) and keeps the most
+conservative result (:func:`robust_combine`).
 """
 
 from __future__ import annotations
@@ -47,7 +51,7 @@ from scipy import stats
 from scipy.optimize import minimize
 
 from ..observation import ObservationModel
-from ..rng import rng_for
+from ..rng import rng_for, seed_for
 from ..summaries import Cohort
 
 TYPES = ("A", "B")
@@ -715,3 +719,72 @@ def run_test(lik, rng: np.random.Generator, settings: FitSettings | None = None,
         out["p_chibar"] = float((1 + np.sum(cb["draws"] >= lam)) / (1 + len(cb["draws"])))
         out["p_chibar_weights"] = chibar_pvalue(lam, cb["weights"])
     return out
+
+
+# ---------------------------------------------------------------------- uncertain typing
+def confusion_grid(lo: float, hi: float, points: int = 5) -> np.ndarray:
+    """Return ``points`` equally spaced mis-typing rates over ``[lo, hi]`` (both included)."""
+    lo, hi = float(lo), float(hi)
+    if not 0.0 <= lo <= hi < 1.0:
+        raise ValueError(f"need 0 <= lo <= hi < 1, got [{lo}, {hi}]")
+    if lo == hi or points <= 1:
+        return np.array([hi])
+    return np.linspace(lo, hi, int(points))
+
+
+def robust_combine(records: list[dict], rates, crit: float | None = None) -> dict:
+    """Most conservative result over tests run at several assumed mis-typing rates.
+
+    ``records``: :func:`run_test` outputs, one per rate in ``rates``. Returned: the
+    largest p-value of each kind present in all records (``p_chibar``,
+    ``p_chibar_weights``, ``p_binomial``, ``p_chi2_3``, ``p_boot``) with the rate where
+    it occurs, the smallest Lambda, and the smallest excess of Lambda over its own chi-bar
+    95% critical value. With a fixed critical value ``crit`` (e.g. Monte Carlo) the test
+    rejects iff the smallest Lambda exceeds it (``reject_crit``). Rejecting only when
+    every rate in the interval rejects is a valid level-alpha test whenever the true rate
+    is in the interval (intersection-union).
+    """
+    rates = [float(r) for r in rates]
+    if len(records) != len(rates) or not records:
+        raise ValueError("one record per rate needed")
+    lam = np.array([r["lambda"] for r in records])
+    i = int(np.argmin(lam))
+    out = {"rates": rates, "lambda": [float(v) for v in lam], "lambda_min": float(lam[i]),
+           "rate_lambda_min": rates[i]}  # fmt: skip
+    for key in ("p_chibar", "p_chibar_weights", "p_binomial", "p_chi2_3", "p_boot"):
+        if all(r.get(key) is not None for r in records):
+            p = np.array([r[key] for r in records], dtype=float)
+            j = int(np.argmax(p))
+            out[key] = float(p[j])
+            out[f"rate_{key}"] = rates[j]
+    if all(r.get("chibar") for r in records):
+        exc = lam - np.array([r["chibar"]["crit95"] for r in records])
+        out["excess_chibar_min"] = float(exc.min())
+        out["rate_excess_chibar_min"] = rates[int(np.argmin(exc))]
+    if crit is not None:
+        out["crit"] = float(crit)
+        out["reject_crit"] = bool(lam[i] > crit)
+    return out
+
+
+def robust_test(sim, cohorts: list[Cohort], rates, kind: str = "b_as_a", seed: int = 0,
+                key: tuple = (), settings: FitSettings | None = None,
+                **kwargs) -> dict:  # fmt: skip
+    """LRT under each assumed mis-typing rate in ``rates``; most conservative result.
+
+    For a measured error rate known only to lie in an interval: run the test with the
+    confusion matrix ``confusion_matrix(rate, kind)`` at a grid of rates over the
+    interval (:func:`confusion_grid`) and report the largest p-value
+    (:func:`robust_combine`). Starts of rate ``r`` use ``rng_for(seed, "starts", *key,
+    "rate", r)``; ``kwargs`` go to :func:`run_test`.
+    """
+    recs = []
+    for r in rates:
+        lik = likelihood(sim, cohorts, confusion_matrix(r, kind))
+        rec = run_test(lik, rng_for(seed, "starts", *key, "rate", float(r)), settings,
+                       chibar_seed=seed_for(seed, "chibar", *key, "rate", float(r)),
+                       **kwargs)  # fmt: skip
+        rec["rate"] = float(r)
+        rec["kind"] = kind
+        recs.append(rec)
+    return {"per_rate": recs, "robust": robust_combine(recs, rates)}
