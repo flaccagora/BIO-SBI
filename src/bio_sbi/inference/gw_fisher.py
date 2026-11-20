@@ -22,9 +22,12 @@ founder size times largest number of daughters to the ``h``); its exact law is a
 FFT (:func:`total_count_law`). The square grid ``L x L`` is the smallest FFT-friendly size
 with ``P(N >= L | detected) <= tail_tol`` (capped at the full support), so the mass the
 grid misses - and any aliased mass - is at most ``tail_tol``; no damping (``r = 1``), so
-probabilities carry absolute round-off ~1e-16. Cells with ``p~ <= threshold`` are left out
-of the sum (their mass, reported as ``omitted_mass``, is negligible and their ratio
-``dp / p`` is round-off dominated).
+probabilities carry absolute round-off ~1e-16. Cells with ``p~ <= threshold`` or
+unconditional ``p <= floor`` (1e-13, well above round-off) are left out of the sum (their
+mass, reported as ``omitted_mass``, is negligible and their ratio ``dp / p`` is round-off
+dominated). Where detection is below ``min_detection`` (1e-6, the floor of the exact
+likelihood) the conditional law is round-off dominated: the information is undefined (NaN,
+``log p_J = -inf``), i.e. the prior is restricted to ``P(detected) >= 1e-6`` at every horizon.
 """
 
 from __future__ import annotations
@@ -106,7 +109,8 @@ class HorizonInformation:
 
 def horizon_information(model: GWModel, P: np.ndarray, dP: np.ndarray, rows: np.ndarray,
                         generations: int, tail_tol: float = 1e-12, threshold: float = 1e-14,
-                        grid: int | None = None) -> HorizonInformation:  # fmt: skip
+                        grid: int | None = None, floor: float = 1e-13,
+                        min_detection: float = 1e-6) -> HorizonInformation:  # fmt: skip
     """Return the expected Fisher information ``(D, D)`` of one clone at ``generations``.
 
     ``dP``/``rows`` as for :func:`~bio_sbi.inference.gw_exact.law_and_jac` (one direction
@@ -125,11 +129,13 @@ def horizon_information(model: GWModel, P: np.ndarray, dP: np.ndarray, rows: np.
     else:
         q, dq = 1.0, np.zeros(D)
     pc = p / q
-    keep = pc > threshold
+    keep = (pc > threshold) & (p > floor)
     w = pc[keep]
     s = dp[:, keep] / p[keep][None, :] - (dq / q)[:, None]
     info = (s * w[None, :]) @ s.T
     info = 0.5 * (info + info.T)
+    if q < min_detection:
+        info = np.full_like(info, np.nan)
     return HorizonInformation(int(generations), info, float(q), L, tail,
                               float(max(1.0 - w.sum(), 0.0)), int(keep.sum()))  # fmt: skip
 
@@ -144,12 +150,16 @@ class Information:
     @property
     def logdet(self) -> float:
         """``log det info`` (``-inf`` if singular or not positive definite)."""
+        if not np.all(np.isfinite(self.info)):
+            return -math.inf
         sign, ld = np.linalg.slogdet(self.info)
         return float(ld) if sign > 0 else -math.inf
 
     @property
     def min_eigenvalue(self) -> float:
         """Smallest eigenvalue of the (symmetrised) information."""
+        if not np.all(np.isfinite(self.info)):
+            return math.nan
         return float(np.linalg.eigvalsh(self.info)[0])
 
 
@@ -168,10 +178,13 @@ class JeffreysPrior:
         weights: Relative clone numbers per horizon (default 1 each).
         tail_tol: Mass of ``N`` allowed beyond the grid (:func:`grid_size`).
         threshold: Conditional cell probability below which cells are left out.
+        floor: Unconditional cell probability below which cells are left out.
+        min_detection: Smallest detection probability (any horizon) with a defined prior.
     """
 
     def __init__(self, simulator, observation, horizons, weights=None, tail_tol: float = 1e-12,
-                 threshold: float = 1e-14) -> None:  # fmt: skip
+                 threshold: float = 1e-14, floor: float = 1e-13,
+                 min_detection: float = 1e-6) -> None:  # fmt: skip
         from ..summaries import Cohort
         from .exact_gw import ExactLikelihood
 
@@ -183,12 +196,14 @@ class JeffreysPrior:
         self.generations = [h.generations for h in self.lik.data]
         self.weights = np.ones(len(horizons)) if weights is None else np.asarray(weights, float)
         self.tail_tol, self.threshold = float(tail_tol), float(threshold)
+        self.floor, self.min_detection = float(floor), float(min_detection)
         self.dim = self.lik.dim
 
     def information(self, theta: np.ndarray) -> Information:
         """Return the summed Fisher information at ``theta`` (with per-horizon diagnostics)."""
         P, dP, rows = self.lik.jacobian(np.asarray(theta, dtype=float))
-        parts = [horizon_information(self.model, P, dP, rows, g, self.tail_tol, self.threshold)
+        parts = [horizon_information(self.model, P, dP, rows, g, self.tail_tol, self.threshold,
+                                     floor=self.floor, min_detection=self.min_detection)
                  for g in self.generations]  # fmt: skip
         info = sum(w * h.info for w, h in zip(self.weights, parts, strict=True))
         return Information(np.asarray(info), parts)
@@ -444,11 +459,14 @@ def batch_information(prior: JeffreysPrior, thetas: np.ndarray, device: str = "c
         order = np.argsort([s[0] for s in sizes], kind="stable")
         i = 0
         while i < len(order):
-            L = sizes[order[i]][0]
-            nb = max(1, min(max_batch, int(max_elements // (prior.dim * L * L))))
-            idx = list(order[i : i + nb])
+            # ascending grid sizes: the batch's grid is that of its last member
+            e = i + 1
+            while (e < len(order) and e - i < max_batch
+                   and (e - i + 1) * prior.dim * sizes[order[e]][0] ** 2 <= max_elements):  # fmt: skip
+                e += 1
+            idx = list(order[i:e])
             L = max(sizes[j][0] for j in idx)
-            i += len(idx)
+            i = e
             CdC = [poly_coefficients(mono[2], len(mono[0]), *jacs[j]) for j in idx]
             rows = jacs[idx[0]][2]
             C = np.stack([c for c, _ in CdC])
@@ -457,19 +475,28 @@ def batch_information(prior: JeffreysPrior, thetas: np.ndarray, device: str = "c
                    else (1.0, np.zeros(prior.dim)) for j in idx]  # fmt: skip
             with torch.no_grad():
                 p, dp = law(model, C, dC, rows, mono, g, L, device)
+                p_dev = p.device
                 q = torch.as_tensor([d[0] for d in det], device=p.device)[:, None, None]
-                dqq = torch.as_tensor(np.stack([d[1] / d[0] for d in det]), device=p.device)
+                with np.errstate(divide="ignore", invalid="ignore"):  # q = 0: info NaN
+                    dqq = np.stack([d[1] / d[0] for d in det])
+                dqq = torch.as_tensor(dqq, device=p.device)
                 if model.detected:
                     p[:, 0, 0] = 0.0
                 pc = p / q
-                keep = pc > prior.threshold
+                keep = (pc > prior.threshold) & (p > prior.floor)
                 w = torch.where(keep, pc, 0.0)
                 inv = torch.where(keep, 1.0 / torch.where(keep, p, 1.0), 0.0)
                 s = (dp * inv[:, None] - dqq[:, :, None, None]).flatten(2)
-                info = torch.einsum("bdc,bec->bde", s * w.flatten(1)[:, None], s).cpu().numpy()
+                s.mul_(w.flatten(1).sqrt()[:, None])  # in place: s sqrt(w)
+                info = torch.bmm(s, s.transpose(1, 2)).cpu().numpy()
+                for bi in range(len(idx)):
+                    if model.detected and det[bi][0] < prior.min_detection:
+                        info[bi] = np.nan
                 mass = w.flatten(1).sum(1).cpu().numpy()
                 cells = keep.flatten(1).sum(1).cpu().numpy()
                 del p, dp, s, pc, keep, w, inv
+                if p_dev.type == "cuda":
+                    torch.cuda.empty_cache()  # share the device with other processes
             for bi, j in enumerate(idx):
                 tail = sizes[j][1] if L == sizes[j][0] else float("nan")
                 out_parts[j][hi] = HorizonInformation(

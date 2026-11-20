@@ -182,3 +182,14 @@ def test_batched_torch_matches_numba():
     res = batch_information(prior, ts, device="cpu", backend="torch")
     for t, r in zip(ts, res, strict=True):
         np.testing.assert_allclose(r.info, prior.information(t).info, rtol=1e-9, atol=1e-12)
+
+
+def test_undetectable_clones_have_no_prior_density():
+    """P(detected) below min_detection: the conditional law is round-off, log p_J = -inf."""
+    sim, prior, _ = _setup([3])
+    rest = dict.fromkeys(("persist", "to_B", "div_AA", "div_AB", "div_BB"), 2e-10)
+    almost_dead = {**DISTINCT, "A": {"death": 1 - 1e-9, **rest}}
+    theta = np.clip(sim.encode(sim.physical_from_mapping(almost_dead)), 1e-15, 1 - 1e-15)
+    res = prior.information(theta)
+    assert res.horizons[0].detection < 1e-6
+    assert prior.log_density(theta) == -np.inf
