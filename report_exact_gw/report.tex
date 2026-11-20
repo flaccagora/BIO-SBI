@@ -96,7 +96,7 @@ Data & synthetic only \\
 
 \textbf{Follow-ups} (\S\ref{sec:fu}). B's switch back reaches an error below 0.05 at 2048--4096 clones per endpoint for T1, T3, T4 (T2 not by 4096), but where B never divides the posterior stays 1--2 sd low at every $n$. A flat prior on \BA{} cuts the \BA{} error of T1--T4 by 1.7--5$\times$ and, at $n$ = 128, up to doubles it for the small-\BA{} truths. Reparametrising B's row helps modestly within a branch (0.8--1.6$\times$); T1's posterior at $n$ = 1024 has a second ``B divides'' branch holding about 17\% of the mass, which single NUTS runs weight anywhere between 2\% and 28\%.
 
-\textbf{Dedifferentiation test} (\S\ref{sec:dediff}). A likelihood-ratio test of ``B never gives rise to A'' is well calibrated with per-dataset boundary ($\bar\chi^2$) critical values (1--6.5\% false positives) and, with perfect typing, detects $m_{BA} \approx 0.003$ A cells per B cell per generation already at 128 clones per endpoint. But 0.5\% of KRT20$^+$ cells mis-scored as LGR5$^+$, if not modelled, gives 75--100\% false positives (half the true rate modelled: 21--100\%): measure the typing error before testing.
+\textbf{Dedifferentiation test} (\S\ref{sec:dediff}). A likelihood-ratio test of ``B never gives rise to A'' is well calibrated with per-dataset boundary ($\bar\chi^2$) critical values (1--6.5\% false positives) and, with perfect typing, detects $m_{BA} \approx 0.003$ A cells per B cell per generation already at 128 clones per endpoint. But 0.5\% of KRT20$^+$ cells mis-scored as LGR5$^+$, if not modelled, gives 75--100\% false positives, and assuming a rate only 10--20\% too low can still give most of them; assuming it 50--100\% too high costs little power. Measure an upper limit of the typing error ($\pm$25\% is enough) and test at that limit.
 
 \textbf{Recommendations.}
 \begin{itemize}
@@ -512,12 +512,47 @@ modelled with the true rate & 1--13\% (3--11\% from $n$ = 256) \\\bottomrule
 \end{center}
 A B cell scored as A looks exactly like a B cell that turned into A. With 0.5\% of B cells mis-scored, the experiment above contains \textbf{about 15 misread cells} (128 clones per endpoint, N1; 58 for N2) --- the same order as the 26 true events the test can detect. Ignored, these errors are read as dedifferentiation in nearly every experiment; even assuming half the true rate leaves most of them unexplained. Only with the correct error rate in the model does the test behave. \textbf{The sensitivity that makes the test powerful also makes it fragile: it is only as good as the model of cell typing.}
 
+\subsection{How precisely must the typing error be known?}\label{sec:dediff-ratio}
+The previous subsection compared three extremes (errors ignored, half the true rate, the true rate). In practice the rate is measured with some uncertainty, so we asked what happens when the analysis assumes $r$ times the true rate, for $r$ from 0.5 to 2. Data: KRT20$^+$ cells read as LGR5$^+$ at 1\% or 2\% (and both directions at 2\%), null rows N1 and N2 (100 datasets per setting) and dedifferentiation $m_{BA}$ = 0.005--0.1 on N1 and N2 by the mixed and switch-only routes (50 datasets per setting); generations \{4,6,8,10\}, $n$ = 128--1024 (81\,600 tests; results \res{results/exact_gw/dediff_test/typing_ratio/}).
+
+\fig{ratio_fpr}{1.0}{False-positive rate (no dedifferentiation, data mis-typed) against the assumed / true error rate $r$, for $n$ = 128--1024 (columns), with the Monte-Carlo threshold of the perfectly typed null (top) and the per-dataset $\bar\chi^2$ threshold (bottom). Solid: N1 (B cells die or stay); dashed: N2 (B cells also divide into B+B). Dotted 5\%, dashed 7\%.}
+\begin{center}\footnotesize\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}lrrrrrrrrrr@{}}\toprule
+assumed / true rate $r$ & 0 & 0.5 & 0.75 & 0.8 & 0.9 & \textbf{1} & 1.1 & 1.25 & 1.5 & 2 \\\midrule
+N1 (B dies or stays) & 92--100 & 8--53 & 3--11 & 2--7 & 2--6 & \textbf{1--5} & 1--4 & 1--4 & 1--3 & 1--4 \\
+N2 (B also self-renews) & 100 & 69--100 & 18--99 & 13--93 & 9--42 & \textbf{6--10} & 1--6 & 0--4 & 0--3 & 0--2 \\\bottomrule
+\end{tabular}
+
+False-positive rate (\%) at nominal 5\%, $\bar\chi^2$ threshold; range over the three error settings and $n$ = 128--1024. $r = 0$: errors ignored.
+\end{center}
+\textbf{Under-estimating the rate is dangerous.} When B cells self-renew (N2) the misread cells sit in large B clones and are counted as dedifferentiation: a rate assumed 10\% too low already gives 9--42\% false positives, 20\% too low up to 93\%. Even the exact rate is slightly permissive there (6--10\%); assuming 10\% more brings it back to 1--6\%.
+
+\fig{ratio_power_bA0.02_chibar}{0.70}{Power to detect dedifferentiation (rows: $m_{BA}$ = 0.005, 0.01, 0.05, 0.1) against $r$, when 2\% of KRT20$^+$ cells are read as LGR5$^+$; columns $n$ = 128--1024; $\bar\chi^2$ threshold; dashed: 80\%.}
+\textbf{Over-estimating the rate is cheap.} Assuming too many typing errors makes the test explain some real dedifferentiation away, but slowly: at 1\% error and $m_{BA} = 0.005$, power is 76/92/96/100\% at $n$ = 128/256/512/1024 with the exact rate and 66/88/96/100\% at twice the rate. Only the smallest effect at 2\% error suffers at $r = 2$ (30/36/70/82\%). For $m_{BA} \ge 0.05$ power is 100\% at every $r$ and $n$.
+
+\textbf{Tolerance window.} False positives $\le$ 7\% and power $\ge$ 80\%, worst case over N1/N2 and routes: the assumed rate may be at most about \textbf{0--10\% too low} but \textbf{50--100\% too high} ($m_{BA} \ge 0.01$, $n \ge 256$). No window exists for $m_{BA}$ = 0.005 at $n$ = 128 (power only 70--76\% even at the exact rate).
+
+\textbf{A robust version} (\code{--confusion-interval lo hi}): given a measured interval for the rate, the test is run across it and rejects only if it rejects at every rate. It makes the same decision as the plain test at the upper end of the interval in $\ge$ 99.9\% of datasets.
+\begin{center}\footnotesize
+\begin{tabular}{@{}lll@{}}\toprule
+measured interval & worst false-positive rate ($n$ = 128/256/512/1024) & power, $m_{BA}$ = 0.005 at 2\% error \\\midrule
+exact rate & 7 / 10 / 8 / 8\% & 70 / 92 / 96 / 100\% \\
+$\pm$10\% & 5 / 5 / 6 / 3\% & 70 / 90 / 96 / 100\% \\
+$\pm$25\% & 4 / 3 / 4 / 3\% & 68 / 84 / 96 / 100\% \\
+$\pm$50\% & 3 / 2 / 2 / 2\% & 48 / 80 / 96 / 100\% \\
+factor 2 (0.5--2) & 2 / 2 / 1 / 1\% & 30 / 36 / 70 / 82\% \\\bottomrule
+\end{tabular}
+
+$\bar\chi^2$ threshold. For $m_{BA} \ge 0.05$ power is 100\% for every interval.
+\end{center}
+\textbf{What the calibration experiment needs.} An upper confidence limit for the KRT20$^+$$\to$LGR5$^+$ mis-scoring rate, to about $\pm$25\%: then false positives stay $\le$ 4\% and, with 256 clones per endpoint, $m_{BA}$ = 0.005 is detected with $\ge$ 84\% power and $m_{BA} \ge 0.01$ with $\ge$ 96\%. A relative precision of $\pm$25\% needs about 60 mis-scored cells observed --- about 3\,000 scored KRT20$^+$ cells of known identity at a 2\% error rate (6\,000 at 1\%); $\pm$50\% needs about 15. This assumes the error has the modelled form (a fixed per-cell probability) and only its rate is uncertain; errors that depend on clone size or density are untested.
+
 \subsection{The real organoids}
 On the CRC0322 2D counts (days 6 and 10 taken as generations 6 and 10; 165 and 101 organoids) the test gives $\Lambda = 45.1$ with bootstrap $p = 0.005$ (the smallest possible with 200 bootstrap samples), and an implausible fitted dedifferentiation ($\hat m_{BA} = 1.35$). \textbf{This is not evidence of dedifferentiation}: typing errors are not modelled, and these organoids differ from each other in fate and slow their growth as they get larger --- features the homogeneous model lacks and which, like typing errors, could produce ``impossible'' clones.
 
 \subsection{What this means for the lab}
 \begin{enumerate}
-\item \textbf{Measure the cell-typing error on the same assay}, above all the probability that a KRT20$^+$ cell is scored LGR5$^+$ (e.g.\ on sorted pure populations or with double staining), precisely --- an error of a factor 2 in this rate is already too much --- and include it in the analysis.
+\item \textbf{Measure the cell-typing error on the same assay}, above all the probability that a KRT20$^+$ cell is scored LGR5$^+$ (e.g.\ on sorted pure populations or with double staining). What matters is an \emph{upper} limit: aim for $\pm$25\% relative precision (about 3\,000 KRT20$^+$ cells of known identity at a 2\% error rate) and run the test at the upper end of the interval (\S\ref{sec:dediff-ratio}). Under-estimating the rate by 10--20\% can make most experiments look positive; over-estimating it by 50\% costs little.
 \item \textbf{Organoid numbers are not the bottleneck}: with correct typing, a few hundred organoids per time point detect $m_{BA}$ of a few per thousand.
 \item \textbf{The most direct experiment}: grow organoids from single sorted KRT20$^+$ cells and look early; any validated LGR5$^+$ cell in them is direct evidence. The same exact likelihood can size this design.
 \item \textbf{Before using the test on real data}, check that organoid-to-organoid differences in fate do not create false positives (not yet tested).
@@ -544,7 +579,7 @@ On the CRC0322 2D counts (days 6 and 10 taken as generations 6 and 10; 165 and 1
 \item A model-comparison step (``does B divide?'') in the default analysis: it removes the boundary bias of T1, T2, T4 where it applies (\S\ref{sec:why}).
 \item A prior for B's other outcomes that keeps \BA{} flat without unbounded densities (e.g.\ concentration 1 for every B outcome except a flat \BA), and a rerun of the flat-\BA{} cells with it: the 0.2 concentrations made B's small entries unsampleable.
 \item Prior sensitivity by NUTS where reweighting is unreliable (203 (run, prior) pairs; at least the wrong prior at $n \ge 512$).
-\item Dedifferentiation test (\S\ref{sec:dediff}): how precisely the typing error must be known (between half and exact rate); robustness to organoid fate heterogeneity; sizing the B-founder design.
+\item Dedifferentiation test (\S\ref{sec:dediff}): robustness to organoid fate heterogeneity and to typing errors that depend on clone size; sizing the B-founder design.
 \end{itemize}
 
 % ====================================================================== appendix

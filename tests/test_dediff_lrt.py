@@ -169,3 +169,47 @@ def test_local_information_positive_definite_at_null(null_lik):
     loc = D.local_information(null_lik, r["P0"])
     assert loc.info.shape == (10, 10) and np.allclose(loc.info, loc.info.T)
     assert [loc.names[c] for c in loc.dediff] == ["B.to_A", "B.div_AA", "B.div_AB"]
+
+
+def test_confusion_grid():
+    assert np.allclose(D.confusion_grid(0.01, 0.03, 3), [0.01, 0.02, 0.03])
+    assert np.allclose(D.confusion_grid(0.02, 0.02, 5), [0.02])
+    with pytest.raises(ValueError):
+        D.confusion_grid(0.03, 0.01)
+    with pytest.raises(ValueError):
+        D.confusion_grid(-0.01, 0.01)
+
+
+def test_robust_combine_takes_most_conservative():
+    recs = [
+        {"lambda": 9.0, "p_chibar": 0.004, "p_chi2_3": 0.03, "chibar": {"crit95": 3.0}},
+        {"lambda": 4.0, "p_chibar": 0.04, "p_chi2_3": 0.26, "chibar": {"crit95": 3.5}},
+        {"lambda": 5.0, "p_chibar": 0.06, "p_chi2_3": 0.17, "chibar": {"crit95": 5.5}},
+    ]
+    out = D.robust_combine(recs, [0.01, 0.015, 0.02], crit=3.8)
+    assert out["lambda_min"] == 4.0 and out["rate_lambda_min"] == 0.015
+    assert out["p_chibar"] == 0.06 and out["rate_p_chibar"] == 0.02
+    assert out["p_chi2_3"] == 0.26 and "p_boot" not in out
+    assert out["excess_chibar_min"] == pytest.approx(-0.5)
+    assert out["reject_crit"] is True  # smallest Lambda 4.0 > 3.8
+    assert D.robust_combine(recs, [0.01, 0.015, 0.02], crit=4.5)["reject_crit"] is False
+    with pytest.raises(ValueError):
+        D.robust_combine(recs, [0.01, 0.02])
+
+
+def test_robust_test_runs_each_rate(sim):
+    conf = D.confusion_matrix(0.05, "b_as_a")
+    data = D.simulate_counts(sim, NULL, HORIZONS, 48, 1, ("reference",), conf)
+    rates = D.confusion_grid(0.025, 0.1, 2)
+    res = D.robust_test(sim, data, rates, "b_as_a", 3, ("t",), FAST, chibar_draws=2000)
+    assert [r["rate"] for r in res["per_rate"]] == list(rates)
+    # each rate is the plain test with that confusion matrix and its own starts
+    r1 = float(rates[1])
+    one = D.run_test(D.likelihood(sim, data, D.confusion_matrix(r1, "b_as_a")),
+                     D.rng_for(3, "starts", "t", "rate", r1), FAST, chibar_draws=2000,
+                     chibar_seed=D.seed_for(3, "chibar", "t", "rate", r1))  # fmt: skip
+    assert one["lambda"] == res["per_rate"][1]["lambda"]
+    assert one["p_chibar"] == res["per_rate"][1]["p_chibar"]
+    rob = res["robust"]
+    assert rob["p_chibar"] == max(r["p_chibar"] for r in res["per_rate"])
+    assert rob["lambda_min"] == min(r["lambda"] for r in res["per_rate"])

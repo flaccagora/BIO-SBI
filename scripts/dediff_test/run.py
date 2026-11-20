@@ -13,6 +13,12 @@ Studies (one JSON per dataset under results/exact_gw/dediff_test/<study>/<cell>/
           analysed assuming perfect typing ("ignored"), with the known confusion matrix
           ("modelled") and with half the true rate ("half"); the clones are those of the
           null datasets with the same seed
+  ratio   how precisely the error rate must be known: data mis-typed at rate e (cells
+          N1_bA0.02 under H0, N1_mixed_m0.01_bA0.02 under H1; cells.py RATIOS ...)
+          analysed with the confusion matrix at the assumed rate r * e for every r in
+          --ratios (analyses "r0.5", "r1.1", ...); same clones as the null / alt datasets
+          with the same seed; results/.../typing_ratio/<cell>/s<seed>.json (resumable per
+          analysis: missing ratios are added to an existing file)
   boot    per-dataset parametric bootstrap of null datasets (simulate from theta_0,
           refit both models); n<n>_s<seed>.json
   data    a measured CSV (columns horizon,A,B; horizons in generations): LRT, asymptotic
@@ -26,6 +32,10 @@ Studies (one JSON per dataset under results/exact_gw/dediff_test/<study>/<cell>/
       --seeds 0:10 --reps 100
   uv run python scripts/dediff_test/run.py data data/real/crc0322_2d_gw.csv --reps 200 \
       [--confusion 0.02 --typing-kind b_as_a] [--out DIR]
+  uv run python scripts/dediff_test/run.py data data/real/crc0322_2d_gw.csv --reps 200 \
+      --confusion-interval 0.015 0.025 [--interval-points 5]   # uncertain error rate
+  uv run python scripts/dediff_test/run.py ratio --cells ratio_null --seeds 0:100
+  uv run python scripts/dediff_test/run.py ratio --cells ratio_alt --seeds 0:50
 
 Datasets: seed s uses the pipeline's reference stream (data_seed = s), so N1 seed 3 is
 the reference dataset of `data_seed=3` with this truth. Existing outputs are skipped
@@ -142,6 +152,74 @@ def sim_task(study: str, name: str, seed: int, settings: str, ns: tuple, out: st
             "lambda": [r["lambda"] for r in next(iter(results.values()))]}  # fmt: skip
 
 
+# ---------------------------------------------------------------------- ratio task
+def ratio_key(r: float) -> str:
+    """Analysis name of the assumed-rate ratio ``r``."""
+    return f"r{r:g}"
+
+
+def ratio_task(name: str, seed: int, ratios: tuple, settings: str, ns: tuple, out: str,
+               truth_check: bool) -> dict:  # fmt: skip
+    """Mis-typed dataset (name, seed) analysed at assumed rates r * e, r in ``ratios``.
+
+    Every ratio is a chain over ``ns`` (warm starts from the next smaller n, as in
+    sim_task). Analyses already in ``out`` are kept; the file is rewritten after each
+    ratio, so an interrupted task resumes where it stopped.
+    """
+    t0 = time.perf_counter()
+    sim = D.make_simulator()
+    c = C.cell(name)
+    if c["typing"] is None:
+        raise ValueError(f"{name}: the ratio study needs mis-typed data")
+    path = Path(out)
+    old = json.loads(path.read_text()) if path.exists() else {}
+    results = dict(old.get("results", {}))
+    data = D.simulate_counts(sim, c["P"], C.HORIZONS, max(ns), seed, ("reference",),
+                             c["confusion"])  # fmt: skip
+    for ratio in ratios:
+        an = ratio_key(ratio)
+        if an in results and {r["n"] for r in results[an]} >= set(ns):
+            continue
+        rate = ratio * c["rate"]
+        conf = D.confusion_matrix(rate, c["kind"])
+        warm, recs = None, []
+        for n in ns:
+            sub = D.subset(data, n)
+            lik = D.likelihood(sim, sub, conf)
+            rng = rng_for(seed, "starts", name, an, n)
+            rec = D.run_test(lik, rng, SETTINGS[settings], warm,
+                             chibar_seed=seed_for(seed, "chibar", name, an, n))  # fmt: skip
+            rec.update(n=n, ratio=ratio, assumed_rate=rate)
+            if truth_check and ratio == 1.0:
+                tc = _truth_check(lik, c["P"])
+                rec["truth_ll0"], rec["truth_ll1"] = tc["ll0"], tc["ll1"]
+                rec["missed0"] = tc["ll0"] - rec["ll0"]
+                rec["missed1"] = tc["ll1"] - rec["ll1"]
+            rec["data"] = _counts_summary(sub)
+            recs.append(rec)
+            warm = {"h0": [np.array(rec["P0"])], "full": [np.array(rec["P1"])]}
+        results[an] = recs
+        payload = {"study": "ratio", "cell": name, "seed": seed, "settings": settings,
+                   "truth": D.P_to_dict(c["P"]), "m_ba": c["m"], "route": c["route"],
+                   "base": c["base"], "typing": c["typing"], "rate": c["rate"],
+                   "kind": c["kind"], "confusion": c["confusion"],
+                   "horizons": list(C.HORIZONS), "results": results,
+                   "seconds": old.get("seconds", 0.0) + time.perf_counter() - t0}  # fmt: skip
+        _write(path, payload)
+    lam = {an: recs[-1]["lambda"] for an, recs in results.items()}
+    return {"out": out, "seconds": time.perf_counter() - t0,
+            "lambda": [lam[ratio_key(r)] for r in ratios if ratio_key(r) in lam]}  # fmt: skip
+
+
+def ratio_done(path: Path, ratios: tuple, ns: tuple) -> bool:
+    """True if ``path`` holds every ratio analysis at every n."""
+    if not path.exists():
+        return False
+    res = json.loads(path.read_text()).get("results", {})
+    return all(ratio_key(r) in res and {x["n"] for x in res[ratio_key(r)]} >= set(ns)
+               for r in ratios)  # fmt: skip
+
+
 # ---------------------------------------------------------------------- bootstrap task
 def boot_task(name: str, seed: int, n: int, reps: int, out: str, null_file: str) -> dict:
     """Parametric bootstrap of the null dataset (name, seed) at n clones per endpoint."""
@@ -192,7 +270,54 @@ def _boot_rep(P0, horizons, ns, conf, seed, b) -> dict:
                                   conf, SETTINGS["boot"])[0]  # fmt: skip
 
 
+def data_interval_mode(args) -> None:
+    """Data mode with an uncertain error rate: test at a grid over the interval, keep the
+    most conservative result (largest p-value)."""
+    path = Path(args.csv)
+    cohorts = _read_csv(path)
+    horizons = [int(c.horizon) for c in cohorts]
+    ns = [len(c.counts) for c in cohorts]
+    lo, hi = args.confusion_interval
+    rates = D.confusion_grid(lo, hi, args.interval_points)
+    out = Path(args.out) if args.out else ROOT / "data" / f"{path.stem}_interval"
+    sim = D.make_simulator()
+    print(f"{path}: horizons {horizons}, clones {ns}; assumed {args.typing_kind} rates "
+          f"{', '.join(f'{r:.4g}' for r in rates)}", flush=True)  # fmt: skip
+    res = D.robust_test(sim, cohorts, rates, args.typing_kind, args.seed, (path.stem,),
+                        SETTINGS[args.data_settings])  # fmt: skip
+    for rec in res["per_rate"]:
+        print(f"  rate {rec['rate']:.4g}: Lambda = {rec['lambda']:.3f} (m_BA_hat "
+              f"{rec['m_ba_hat']:.4f}); p chi-bar {rec['p_chibar']:.4f}, chi-bar 95% "
+              f"critical value {rec['chibar']['crit95']:.3f}", flush=True)  # fmt: skip
+        if args.reps:
+            conf = D.confusion_matrix(rec["rate"], args.typing_kind)
+            with ProcessPoolExecutor(args.workers) as pool:
+                futs = [pool.submit(_boot_rep, rec["P0"], horizons, ns, conf, args.seed, b)
+                        for b in range(args.reps)]  # fmt: skip
+                lam_b = np.array([f.result()["lambda"] for f in futs])
+            rec["p_boot"] = float((1 + np.sum(lam_b >= rec["lambda"])) / (1 + len(lam_b)))
+            rec["crit95_boot"] = float(np.quantile(lam_b, 0.95))
+            rec["boot_lambda"] = lam_b
+            print(f"    bootstrap ({args.reps} reps): p = {rec['p_boot']:.4f}, 95% critical "
+                  f"value {rec['crit95_boot']:.3f}", flush=True)  # fmt: skip
+    rob = D.robust_combine(res["per_rate"], rates)
+    msg = (f"most conservative over [{lo:g}, {hi:g}]: smallest Lambda {rob['lambda_min']:.3f} "
+           f"(rate {rob['rate_lambda_min']:.4g}); largest p chi-bar {rob['p_chibar']:.4f} "
+           f"(rate {rob['rate_p_chibar']:.4g})")  # fmt: skip
+    if "p_boot" in rob:
+        msg += f"; largest bootstrap p {rob['p_boot']:.4f} (rate {rob['rate_p_boot']:.4g})"
+    print(msg, flush=True)
+    payload = {"csv": str(path), "horizons": horizons, "clones": ns, "kind": args.typing_kind,
+               "interval": [lo, hi], "rates": rates, "robust": rob,
+               "per_rate": res["per_rate"], "data": _counts_summary(cohorts)}  # fmt: skip
+    _write(out / "result.json", payload)
+    print(f"wrote {out / 'result.json'}")
+
+
 def data_mode(args) -> None:
+    if args.confusion_interval:
+        data_interval_mode(args)
+        return
     path = Path(args.csv)
     cohorts = _read_csv(path)
     horizons = [int(c.horizon) for c in cohorts]
@@ -203,7 +328,8 @@ def data_mode(args) -> None:
     lik = D.likelihood(sim, cohorts, conf)
     print(f"{path}: horizons {horizons}, clones {ns}; grids "
           f"{[(g.Lx, g.Ly) for g in lik.grids]}", flush=True)  # fmt: skip
-    rec = D.run_test(lik, rng_for(args.seed, "starts", path.stem), SETTINGS["rich"])
+    rec = D.run_test(lik, rng_for(args.seed, "starts", path.stem),
+                     SETTINGS[args.data_settings])  # fmt: skip
     print(f"Lambda = {rec['lambda']:.3f}  (m_BA_hat {rec['m_ba_hat']:.4f}); p chi-bar "
           f"{rec['p_chibar']:.4f}, binomial {rec['p_binomial']:.4f}, chi2_3 "
           f"{rec['p_chi2_3']:.4f}", flush=True)  # fmt: skip
@@ -238,9 +364,13 @@ def _seeds(spec: str) -> list[int]:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("study", choices=["null", "alt", "typing", "boot", "data"])
+    ap.add_argument("study", choices=["null", "alt", "typing", "ratio", "boot", "data"])
     ap.add_argument("csv", nargs="?", help="data mode: CSV with columns horizon,A,B")
-    ap.add_argument("--cells", default=None, help="comma-separated cell names (default: all)")
+    ap.add_argument("--cells", default=None,
+                    help="comma-separated cell names, or ratio_null / ratio_alt "
+                         "(default: all cells of the study)")  # fmt: skip
+    ap.add_argument("--ratios", default=",".join(f"{r:g}" for r in C.RATIOS),
+                    help="ratio: assumed / true mis-typing rate ratios")  # fmt: skip
     ap.add_argument("--m", default=None, help="alt: only these m_BA values (comma-separated)")
     ap.add_argument("--seeds", default="0:10")
     ap.add_argument("--ns", default=",".join(map(str, C.NS)))
@@ -255,14 +385,29 @@ def main() -> None:
     ap.add_argument("--confusion", type=float, default=0.0, help="data mode: mis-typing rate")
     ap.add_argument("--typing-kind", default="b_as_a", help="data mode: symmetric | b_as_a")
     ap.add_argument("--out", default=None, help="data mode: output folder")
+    ap.add_argument("--confusion-interval", type=float, nargs=2, default=None,
+                    metavar=("LO", "HI"),
+                    help="data mode: the mis-typing rate is only known to lie in [LO, HI]; "
+                         "test at --interval-points rates over it and report the most "
+                         "conservative result (largest p-value)")  # fmt: skip
+    ap.add_argument("--interval-points", type=int, default=5)
+    ap.add_argument("--data-settings", default="rich", choices=sorted(SETTINGS),
+                    help="data mode: fit settings")  # fmt: skip
     args = ap.parse_args()
     if args.study == "data":
         data_mode(args)
         return
     ns = tuple(int(n) for n in args.ns.split(","))
     seeds = _seeds(args.seeds)
-    names = args.cells.split(",") if args.cells else C.study_cells(
-        "null" if args.study == "boot" else args.study)  # fmt: skip
+    if args.cells in ("ratio_null", "ratio_alt"):
+        names = C.study_cells(args.cells)
+    elif args.cells:
+        names = args.cells.split(",")
+    elif args.study == "ratio":
+        names = C.study_cells("ratio_null") + C.study_cells("ratio_alt")
+    else:
+        names = C.study_cells("null" if args.study == "boot" else args.study)
+    ratios = tuple(float(r) for r in args.ratios.split(","))
     if args.m:
         keep = {float(v) for v in args.m.split(",")}
         names = [nm for nm in names if C.cell(nm)["m"] in keep]
@@ -276,6 +421,14 @@ def main() -> None:
                         continue
                     null = args.root / "null" / name / f"s{s}.json"
                     jobs.append((boot_task, (name, s, n, args.reps, str(out), str(null))))
+    elif args.study == "ratio":
+        for s in seeds:  # seed-major
+            for name in names:
+                out = args.root / f"typing_ratio{args.tag}" / name / f"s{s}.json"
+                if ratio_done(out, ratios, ns) and not args.force:
+                    continue
+                jobs.append((ratio_task, (name, s, ratios, args.settings, ns, str(out),
+                                          not args.no_truth_check)))  # fmt: skip
     else:
         for s in seeds:  # seed-major: early partial results cover every cell
             for name in names:
