@@ -187,7 +187,7 @@ PSO / Adam alone & 7 / 12 & 4--5\,s \\\bottomrule
 \textbf{Bayesian posterior: NUTS}
 \begin{itemize}\small
 \item 4 chains $\times$ (500 warm-up + 500 draws), dense mass matrix, logit-stick coordinates
-\item started at the best of 16 posterior optima
+\item starts: 16 prior draws $\to$ L-BFGS on the log posterior; chain $c$ starts near the $c$-th best optimum (Laplace draw)
 \item checks: split $\hat R$, ESS, divergences, per-chain means
 \item other priors by Pareto-smoothed importance reweighting
 \end{itemize}
