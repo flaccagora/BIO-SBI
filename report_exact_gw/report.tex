@@ -103,7 +103,7 @@ Data & synthetic only \\
 \item \textbf{Report likelihood-based intervals next to posterior intervals} for B's row; where they disagree the prior drives the result. Use the profile likelihood (not the marginal mode) for \BA.
 \item \textbf{Decide whether B divides before estimating \BA}: model comparison (two\_type vs B divisions = 0) works from 128 clones per endpoint; otherwise B's row needs $\gg$\,1024 clones per endpoint (earlier: 4096 on three endpoints gave 0.78 $\pm$ 0.02).
 \item \textbf{Report identifiable combinations} (growth rate, stable type fraction, division mass per row, \BA) rather than individual division types.
-\item \textbf{Observe early}: the weakly identified directions are all ``which type of parent did it'' (\S\ref{sec:weakdirs}), and the information on them comes from early endpoints. Endpoints at generations 1--4, ideally with clones founded by single A and by single B cells, give 4--20$\times$ more information on the weakest direction than generations 4--10 with the same number of clones.
+\item \textbf{Observe early}: the weakly identified directions are all ``which type of parent did it'' (\S\ref{sec:weakdirs}), and the information on them comes from early endpoints. Endpoints at generations 1--4, ideally with clones founded by single A and by single B cells, give 4--20$\times$ more information on the weakest direction than generations 4--10 with the same number of clones. Theory explains the rule: parent swaps leave the growth rate and stable composition unchanged, and their information per clone falls like $\rho^{-h}$, so each generation later costs a factor $\rho \approx$ 1.4--1.7 in clones.
 \item \textbf{For the sampler}: use \code{kernel=adjoint} and the ESS/$\hat R$ stopping rule, warm starts across nested $n$; for B-row posteriors check for a second branch and estimate branch masses by per-branch SMC evidence (\S\ref{sec:fu-sampler}).
 \end{itemize}
 
@@ -389,6 +389,23 @@ divide & whether A or B cells divide & 30--66 & 22--120 & 8 \\\bottomrule
 Variance of the named direction alone (others free); every average-cell direction is halved by $\le$ 36 clones per endpoint.
 \end{center}
 \fig{named_composition}{0.95}{Composition of the 4 weakest directions of each truth (columns, labelled by $1/\lambda$ in clones per endpoint) in a named basis: five parent swaps (top) and five changes of the average cell (bottom). Nearly all the weight is in the swaps; which swap dominates varies, so the stable object is the weak subspace, not the single eigenvector.}
+\textbf{Why parent swaps: two classical results.} Write each row's outcomes by what they produce (dies, one A daughter, one B daughter, AA, AB, BB), so that both parent types share the same offspring map. The mean offspring matrix $M$ ($M_{ij}$ = expected type-$j$ offspring of one type-$i$ cell per generation) has a growth rate $\rho$ (its Perron root), a second eigenvalue $\lambda_2$ and a stable composition $u$ ($u^\top M = \rho\, u^\top$, $u_A + u_B = 1$).
+\begin{enumerate}
+\item \textbf{A parent swap leaves the growth rate and the stable composition exactly unchanged.} A swap takes an outcome change $d$ (summing to 0) away from A parents with weight $u_B$ and gives it to B parents with weight $u_A$: $\Delta M_A = -u_B\, d^\top O$, $\Delta M_B = +u_A\, d^\top O$, with $O$ the shared offspring map. Then $u^\top \Delta M = -u_A u_B\, d^\top O + u_B u_A\, d^\top O = 0$, so $u^\top M$ and hence $\rho$ and $u$ do not change, for a swap of any size (checked numerically for every truth). Clones that have grown for several generations sit at composition $u$ and grow at rate $\rho$ (Kesten--Stigum theorem), so their counts barely depend on the swaps; the swaps change only $\lambda_2$ and the transient.
+\item \textbf{The information on the swaps per clone falls like $\rho^{-h}$.} For a supercritical multitype process the fluctuations of a clone around $W\rho^h u$ are of order $\rho^{h/2}$ when $\lambda_2^2 < \rho$ (central limit regime of Kesten and Stigum), which holds for every truth here ($|\lambda_2| \le 1.0 < \sqrt\rho$). Heuristically, a clone's composition then carries information on what happened before it reached $u$ only through relative fluctuations of order $\rho^{-h/2}$, i.e.\ information $\propto \rho^{-h}$. The computed information agrees closely; the naive expectation that the transient decays like $(\lambda_2/\rho)^h$ does not:
+\end{enumerate}
+\begin{center}\footnotesize\setlength{\tabcolsep}{3.5pt}
+\begin{tabular}{@{}lrrrrlrrr@{}}\toprule
+ & & & & \multicolumn{2}{c}{decay per generation (gen.\ 4--10)} & \multicolumn{3}{c}{decay from gen.\ 4 to 10, weakest direction} \\
+truth & $\rho$ & $\lambda_2$ & $u_A$ & observed & (range, 4 weakest) & observed & $\rho^6$ & $(\rho/|\lambda_2|)^{12}$ \\\midrule
+\tabin{tables/swap_theory.tex}
+\bottomrule
+\end{tabular}
+
+Observed: log-linear fit of the information per clone (A founder) over generations 4--10 along each of the 4 weakest directions; median and range. Script: \code{report_exact_gw/make_swap_theory.py}.
+\end{center}
+The observed decay per generation is within 11\% of $\rho$ for all nine truths. \textbf{Design rule}: on the weak directions, observing one generation later costs a factor $\rho$ (1.4--1.7) in clones, and observing at generation 10 instead of 4 costs $\rho^6 \approx$ 8--24.
+
 \begin{itemize}
 \item \textbf{The same weak subspace recurs}: the 4 weakest directions span nearly the same subspace within T1--T4 (overlap 0.78--0.97) and within P1--P4 (0.82--0.92; a random subspace gives 0.40); across the two groups 0.58--0.77. Single eigenvectors do not recur, because their eigenvalues are close and they mix 2--3 swaps.
 \item \textbf{The \BA{} ridge is one of them.} For T1--T4 the two weakest directions carry 82--95\% of \BA{}'s posterior variance, and what moves with \BA{} along them reproduces the profiles (\S\ref{sec:why}): B$\to$AA and B$\to$AB for T1 and T4, B dies for T2, B$\to$AB for T3. For P1--P4 \BA{} sits mostly in the 3rd weakest direction; their weakest are ``which parent makes AB'' and ``which type dies'', which hardly involve \BA. This is why \BA{} converges for the prior draws while other entries of B's row do not (\S\ref{sec:fu-largen}).
