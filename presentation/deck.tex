@@ -9,7 +9,7 @@
 \usepackage{amsmath,amssymb}
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta,positioning}
-\graphicspath{{../report_exact_gw/figures/}{../docs/weak_directions/figures/}{../docs/spike_slab/figures/}{../docs/dediff_test/figures/}{../docs/optimal_design/figures/}{../docs/jeffreys/figures/}}
+\graphicspath{{../report_exact_gw/figures/}{../docs/weak_directions/figures/}{../docs/spike_slab/figures/}{../docs/dediff_test/figures/}{../docs/optimal_design/figures/}{../docs/jeffreys/figures/}{../docs/profile_intervals/figures/}{figures/}}
 
 % ------------------------------------------------------------------ look
 \definecolor{cblue}{HTML}{2A78D6}
@@ -288,12 +288,38 @@ T5 post. & .10 & .11 & .09 & .12 & .10 \\\bottomrule
 \end{column}
 \begin{column}{0.45\textwidth}\small
 \begin{itemize}
-\item \BA{} within 0.05 of the truth at \textbf{2048--4096} clones per endpoint (T2 not even at 4096); the MLE one doubling earlier
+\item \BA{} within 0.05 of the truth at \textbf{2048--4096} clones per endpoint for T1, T3, T4 (T2 not even at 4096); the MLE one doubling earlier
 \item but where B never divides, the posterior stays \textbf{1--2 sd low at every $n$}
 \item at 1024 the answer still moves by 0.2--1.2 sd when the prior changes
 \item A's row, growth rate and composition: $n^{-1/2}$ regime from 256--512
 \end{itemize}
-\take{Rule of thumb: A's row needs $\sim$300, B's row needs thousands of clones per endpoint with the current design.}
+\take{Rule of thumb: A's row needs a few hundred, B's row thousands of clones per endpoint with the current design.}
+\end{column}
+\end{columns}
+\end{frame}
+
+\begin{frame}{Every B probability up to 4096 clones per endpoint}
+\begin{columns}[c]
+\begin{column}{0.64\textwidth}
+\includegraphics[width=\textwidth]{row_B_large_n.png}
+{\tiny Posterior mean $\pm$ sd (blue), MLE (orange), truth (dashed); 162 runs, all nine truths.}
+\end{column}
+\begin{column}{0.35\textwidth}
+{\scriptsize\setlength{\tabcolsep}{2.5pt}
+\begin{tabular}{@{}lccc@{}}\toprule
+$n$ for RMSE $\le$ .05 & T1 & T2 & P4 \\\midrule
+B$\to$A & 4096 & -- & 512 \\
+B dies & 128 & 2048 & -- \\
+B persists & 128 & 512 & 4096 \\
+B$\to$AB & 512 & 512 & -- \\\bottomrule
+\end{tabular}}
+
+{\tiny Posterior mean; -- = not by 4096.}
+\begin{itemize}\footnotesize
+\item ``B's row converges'' is \textbf{not one number}: it depends on the truth
+\item prior draws: \BA{} by 512--2048, but \textbf{B dies, persists, B$\to$AB} still off at 4096 (P1, P3, P4) --- the parent swaps
+\item T5 (large clones): everything within 0.05 from 128
+\end{itemize}
 \end{column}
 \end{columns}
 \end{frame}
@@ -308,7 +334,7 @@ T5 post. & .10 & .11 & .09 & .12 & .10 \\\bottomrule
 \item \textbf{Large \BA{}} (T1--T4): MLE error 0.01--0.06, posterior mean 0.07--0.44
 \item \textbf{Prior draws, small $n$}: posterior mean better (MLE jumps between near-equal optima, often exactly 0)
 \item posterior error for B's row is mostly \textbf{bias}: RMSE / posterior sd = 1.5--2.0 at 128, 1.3--1.6 at 1024 $\Rightarrow$ \alert{overconfident}
-\item truth inside the 95\% likelihood region in 107/108 runs
+\item truth inside the 95\% likelihood region in 107/108 runs; profiling found a better MLE in 19/132
 \end{itemize}
 \take{Neither dominates. Report likelihood-based intervals next to posterior ones.}
 \end{column}
@@ -387,9 +413,9 @@ T5 post. & .10 & .11 & .09 & .12 & .10 \\\bottomrule
 \end{itemize}
 \end{column}
 \begin{column}{0.40\textwidth}
-\begin{block}{Coverage of \BA{} (13 profiled runs)}
-\footnotesize 95\% \textbf{profile-likelihood} interval: \textbf{13/13}\\
-95\% posterior interval: \alert{5/13}, every miss on the low side
+\begin{block}{Coverage of \BA{}, 95\% intervals (132 runs)}
+\footnotesize \textbf{profile likelihood}: \textbf{0.95}\\
+flat posterior: \alert{0.67}, misses on the low side
 \end{block}
 {\scriptsize Not only boundary truths: T3 (interior) is as biased as T1.}
 \end{column}
@@ -420,6 +446,36 @@ bias \BA & 128 & $-$.158 & $-$.014 & $-$.096 & $-$.131 & $-$.039 \\
 90\% cov. & 1024 & .63 & .89 & .78 & .67 & .81 \\\bottomrule
 \end{tabular}}
 \take{At $n \le 1024$ no ``uninformative'' prior is neutral about \BA: the estimate moves by more than its sd when the prior changes. Report prior-free quantities (MLE, profile, LR test) or a range over priors.}
+\end{column}
+\end{columns}
+\end{frame}
+
+\begin{frame}{Prior-free intervals work: profile likelihood for all 132 runs}
+\centering
+\includegraphics[width=0.80\textwidth]{forest_btoa_T124.png}
+
+{\tiny 95\% intervals for \BA{} (x axis 0--1), dataset 0, $n$ = 128--4096. Profile: fix \BA, maximise the other 9; interval = drop of 1.92 nats$^\ast$.}
+
+\begin{columns}[T]
+\begin{column}{0.47\textwidth}
+{\scriptsize\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}lrrrrr@{}}\toprule
+95\% coverage & profile & flat & flat-\BA & Dir($\tfrac12$) & Jeffr. \\\midrule
+\BA, $n$=128 & .93 & .59 & .81 & .81 & .74 \\
+\BA, $n$=1024 & .96 & .74 & .89 & .89 & .81 \\
+\BA, all $n$ & \textbf{.95} & \alert{.67} & .85 & .88 & .80 \\
+all 12, all $n$ & .94 & .92 & .93 & .96 & .93 \\\bottomrule
+\end{tabular}}
+
+{\tiny $^\ast$ nat: $\Delta$ nats = likelihood ratio $e^\Delta$ (1.92 nats $\approx 6.8\times$).}
+\end{column}
+\begin{column}{0.50\textwidth}
+\begin{itemize}\scriptsize
+\item \textbf{the only calibrated interval for \BA}, at the same width (0.44 / 0.26 / 0.10 at $n$ = 128 / 512 / 4096)
+\item where profile and flat posterior disagree, the profile is right in \textbf{37 of 38}
+\item weak spot: T2 (0.72), every posterior does worse
+\item profiling found a better MLE in 19 of 132 runs
+\end{itemize}
 \end{column}
 \end{columns}
 \end{frame}
@@ -655,7 +711,8 @@ A's row (6 probabilities) & \textcolor{caqua}{\textbf{yes}} & RMSE $\approx$ 0.0
 growth rate, stable A/B composition & \textcolor{caqua}{\textbf{yes}} & sd $\lesssim$ 0.01; robust to the prior \\
 does B divide? & \textcolor{caqua}{\textbf{yes}} & P(M$_0\mid$data) 0.92--0.97 when B never divides, $\le$ 0.004 otherwise \\
 does B give rise to A? (yes/no) & \textcolor{caqua}{\textbf{yes}}$^\ast$ & $m_{BA} \ge 0.005$ with 96--100\% power --- \emph{if} the typing error is known to $\pm$25\% \\
-\BA, if B never divides & \textcolor{corange}{\textbf{roughly}} & 95\% profile intervals $\approx$ 0.2--0.4 wide (T1 [.61,.88], T2 [.21,.58], T4 [.68,.86]); use the MLE / model average, not the flat posterior \\
+\BA, if B never divides & \textcolor{corange}{\textbf{roughly}} & 95\% profile intervals $\approx$ 0.2--0.4 wide (T1 [.61,.88], T2 [.21,.58], T4 [.68,.86]); use profile / model average, not the flat posterior \\
+\BA: honest uncertainty & \textcolor{caqua}{\textbf{yes}} & profile intervals: 95\% coverage 0.96 at $n$=512, mean width 0.26 (flat posterior: coverage 0.70) \\
 \BA, if B divides & \alert{\textbf{no}} & T3: profile interval [0.01, 0.68]; posterior 0.34 $\pm$ 0.11 (truth 0.60) \\
 B's individual division types & \alert{\textbf{no}} & RMSE 0.06--0.09, prior-sensitive \\
 which parent made a division / died & \alert{\textbf{no}} & needs 70--2\,300 clones per endpoint per weak direction --- and early data \\\bottomrule
@@ -686,7 +743,7 @@ R2: 500 A2, 1250 B2, 250 A10 & .023--.032 & .007--.031 \\\bottomrule
 \item \textbf{Keep the budget, move the endpoints}: most clones after 1--2 divisions, one late endpoint.
 \item \textbf{Sort KRT20$^+$ founders} for about half the clones.
 \item \textbf{Run the typing-error calibration first}: without it the dedifferentiation test cannot be trusted.
-\item \textbf{Analysis}: decide ``does B divide?'' first; report MLE, profile intervals and identifiable combinations; give a range over priors.
+\item \textbf{Analysis}: decide ``does B divide?'' first; report \textbf{profile-likelihood intervals} (calibrated: 95\% coverage) and identifiable combinations; give a range over priors.
 \end{enumerate}
 \end{column}
 \end{columns}
@@ -697,6 +754,7 @@ R2: 500 A2, 1250 B2, 250 A10 & .023--.032 & .007--.031 \\\bottomrule
 \item The exact GW likelihood (pgf + FFT) makes MLE and NUTS on raw organoid counts routine.
 \item A's row, growth and composition are recovered from a few hundred organoids per endpoint.
 \item \textbf{B$\to$A is the hardest parameter}: a flat ridge (``B switches back'' vs ``B is lost'') plus prior volume and the simplex boundary bias it by 1--2 sd, and the bias does not shrink in sd units.
+\item \textbf{Profile-likelihood intervals} need no prior and are the only calibrated intervals for \BA{} (95\% coverage vs 67\% for the flat posterior).
 \item The weak directions are \textbf{parent swaps}: late counts see what the population does, not which cell did it. Information lives in \textbf{early} and \textbf{B-founded} clones.
 \item Whether B gives rise to A is \textbf{testable} with few events --- but only once the \textbf{cell-typing error} is measured.
 \item With 2\,000 organoids, an early, B-founded design measures \BA{} 3--5$\times$ more precisely than the current one.
