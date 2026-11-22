@@ -59,6 +59,7 @@ def main(results: Path) -> pd.DataFrame:
         rows.append({
             "parameter": p,
             "rmse128": rmse(g[g["n"] == 128]["err"]),
+            "rmse512": rmse(g[g["n"] == 512]["err"]),
             "rmse1024": rmse(g1024["err"]),
             "relsd1024": float(np.exp(np.log(g1024["rel_sd"]).mean())),
             "coverage": float(pos["covered"].mean()),
@@ -83,7 +84,8 @@ def main(results: Path) -> pd.DataFrame:
     lines = []
     for i, r in t.iterrows():
         cells = [
-            str(i + 1), PRETTY[r["parameter"]], f"{r['rmse128']:.3f}", f"{r['rmse1024']:.3f}",
+            str(i + 1), PRETTY[r["parameter"]], f"{r['rmse128']:.3f}", f"{r['rmse512']:.3f}",
+            f"{r['rmse1024']:.3f}",
             f"{r['relsd1024']:.2f}", f"{100 * r['coverage']:.0f}\\%", f"{r['absz1024']:.2f}",
             f"{r['prior_shift1024']:.2f}", f"{r['mle_rmse1024']:.3f}",
             f"{TRUTH.get(r['hardest_truth'], r['hardest_truth'])} ({r['hardest_rmse1024']:.2f})",

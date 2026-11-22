@@ -266,9 +266,9 @@ Means over the 3 datasets of the posterior mean, posterior sd and MLE of \BA.
 \subsection{Calibration and contraction}\label{sec:calibration}
 \textbf{Which parameters are hard?} The table ranks the 12 probabilities from hardest to easiest on seven measures (flat prior, all 9 truths $\times$ 3 datasets, $n$ = 128--1024). Every probability has the same flat-prior marginal, Beta(1,\,5) with sd 0.141, so absolute errors are comparable across parameters.
 \begin{center}\scriptsize\setlength{\tabcolsep}{3pt}
-\begin{tabular}{@{}rlrrrrrrrlr@{}}\toprule
- & & \multicolumn{2}{c}{RMSE post.\ mean} & sd / prior sd & 90\% & mean $|z|$ & prior shift & RMSE MLE & hardest truth & mean \\
-rank & parameter & $n$ = 128 & 1024 & 1024 & coverage & 1024 & 1024 (sd) & 1024 & (RMSE 1024) & rank \\\midrule
+\begin{tabular}{@{}rlrrrrrrrrlr@{}}\toprule
+ & & \multicolumn{3}{c}{RMSE post.\ mean} & sd / prior sd & 90\% & mean $|z|$ & prior shift & RMSE MLE & hardest truth & mean \\
+rank & parameter & $n$ = 128 & 512 & 1024 & 1024 & coverage & 1024 & 1024 (sd) & 1024 & (RMSE 1024) & rank \\\midrule
 \tabin{tables/param_rank.tex}
 \bottomrule
 \end{tabular}
@@ -276,7 +276,7 @@ rank & parameter & $n$ = 128 & 1024 & 1024 & coverage & 1024 & 1024 (sd) & 1024 
 Coverage over truth $>0$ and all $n$; mean $|z|$ $\approx$ 0.8 if calibrated. Prior shift: largest reliable shift of the posterior mean under the other symmetric priors (PSIS, $k \le 0.7$), in posterior sd, median over datasets. Rank 12 = hardest on each measure; ``mean rank'' averages the seven. Script: \code{report_exact_gw/make_param_ranking.py}.
 \end{center}
 \begin{itemize}
-\item \textbf{\BA{} is the hardest parameter on six of the seven measures}: largest error at every $n$ (0.26 at $n$ = 128, still 0.095 at 1024), least narrowed, most prior-sensitive, and its 90\% intervals cover the truth in only 60\% of runs (35\% for T1--T4). The exception is the MLE, which estimates it about as well as most parameters (rank 6).
+\item \textbf{\BA{} is the hardest parameter on six of the seven measures}: largest error at every $n$ (RMSE 0.260 / 0.127 / 0.095 at $n$ = 128 / 512 / 1024), least narrowed, most prior-sensitive, and its 90\% intervals cover the truth in only 60\% of runs (35\% for T1--T4). The exception is the MLE, which estimates it about as well as most parameters (rank 6).
 \item \textbf{Next come B's three division types}, then A's B+B division and A's death. All of B's row except ``persists'' is in the hardest seven. The reason is the same weak direction (\S\ref{sec:why}): \BA{} trades off against ``B is lost'' (B dies, or B's divisions replace it), and among divisions the data barely tell which parent produced a mixed one (\S\ref{sec:p3}). For the MLE the mixed divisions (B$\to$AB, A$\to$AB) are the hardest.
 \item \textbf{A's row is easy}: A's switch to B, self-renewal and persistence are recovered within about 0.03 at $n$ = 1024 with near-nominal coverage, because A founds every clone and its offspring dominate the counts.
 \end{itemize}
