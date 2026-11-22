@@ -70,7 +70,7 @@ def jeffreys_draws(gt: str, n: int, s: int, decode) -> tuple[np.ndarray, np.ndar
     if rerun.exists():
         z = np.load(rerun)
         info = json.loads((rerun.parent / "summary.json").read_text())
-        return z["phys"], z["w"], {"source": "rerun", **info}
+        return z["phys"][:, : len(FREE)], z["w"], {"source": "rerun", **info}
     f = JEFF / "jeffreys" / gt / cell / "jeffreys_psis.npz"
     if not f.exists():
         return None
@@ -319,6 +319,26 @@ def psis_table() -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def validation_table() -> pd.DataFrame:
+    """PSIS (Dirichlet(1/2) draws reweighted) vs rerun (surrogate NUTS + exact correction)."""
+    rows = []
+    for r in sorted((JEFF / "jeffreys_rerun").glob("*/n*_s*/summary.json")):
+        gt, cell = r.parent.parent.name, r.parent.name
+        p = JEFF / "jeffreys" / gt / cell / "summary.json"
+        a, b = json.loads(p.read_text()), json.loads(r.read_text())
+        shifts = {k: abs(a["posterior"][k]["mean"] - b["posterior"][k]["mean"])
+                  / b["posterior"][k]["sd"] for k in FREE}  # fmt: skip
+        ratio = {k: a["posterior"][k]["sd"] / b["posterior"][k]["sd"] for k in FREE}
+        rows.append({"cell": f"{gt} {cell}", "k_psis": a["pareto_k"], "k_rerun": b["pareto_k"],
+                     "btoa_psis": a["posterior"]["B.to_A"]["mean"],
+                     "btoa_rerun": b["posterior"]["B.to_A"]["mean"],
+                     "max_shift_sd": max(shifts.values()),
+                     "worst": max(shifts, key=shifts.get),
+                     "sd_ratio_range": f"{min(ratio.values()):.2f}-{max(ratio.values()):.2f}",
+                     "rerun_stop": b.get("stop"), "rerun_rhat": b.get("max_rank_rhat")})  # fmt: skip
+    return pd.DataFrame(rows).set_index("cell")
+
+
 def markdown(t: dict, diag: pd.DataFrame, mix: pd.DataFrame, ps: pd.DataFrame) -> str:
     """Markdown tables for docs/jeffreys/README.md."""
     out = []
@@ -356,7 +376,8 @@ def markdown(t: dict, diag: pd.DataFrame, mix: pd.DataFrame, ps: pd.DataFrame) -
     )
     g = diag.groupby(["arm", "n"])
     dsum = pd.DataFrame({
-        "cells": g.size(), "stop_met": g["met"].apply(lambda m: (m == True).mean()),  # noqa: E712
+        "cells": g.size(), "stop_met": g["met"].apply(
+            lambda m: (m == True).mean() if m.notna().any() else np.nan),  # noqa: E712
         "median_max_rank_rhat": g["max_rank_rhat"].median(),
         "frac_rhat_gt_1.05": g["max_rank_rhat"].apply(lambda r: (r > 1.05).mean()),
         "median_min_ess_bulk": g["min_ess_bulk"].median(),
@@ -378,9 +399,13 @@ def markdown(t: dict, diag: pd.DataFrame, mix: pd.DataFrame, ps: pd.DataFrame) -
     psum = pd.DataFrame({
         "cells": pg.size(), "median_k_psis": pg["k_psis"].median(),
         "k_psis_gt_0.7": pg["k_psis"].apply(lambda k: int((k > 0.7).sum())),
-        "reruns": pg["rerun"].sum(), "max_k_rerun": pg["k_rerun"].max(),
+        "reruns_incl_validation": pg["rerun"].sum(), "max_k_rerun": pg["k_rerun"].max(),
     })  # fmt: skip
     add("Exact Jeffreys: PSIS from Dirichlet(1/2) and reruns", psum.round(2))
+    add(
+        "PSIS vs rerun on the same cell (shift of the mean in rerun posterior sd)",
+        validation_table().round(3),
+    )
     return "\n".join(out)
 
 
