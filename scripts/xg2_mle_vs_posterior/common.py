@@ -30,6 +30,9 @@ LO, HI = 1e-9, 1 - 1e-9
 def run_key(path: Path) -> tuple[str, int, int] | None:
     """(gt, seed, n) of a run folder (T5 runs: gt from ``+truths.T5_*``)."""
     s = path.name
+    flat = re.fullmatch(r"n(\d+)_s(\d+)", s)  # reorganised layout <gt>/n<n>_s<seed>
+    if flat:
+        return path.parent.name, int(flat.group(2)), int(flat.group(1))
     seed = re.search(r"seed=(\d+)", s)
     gt = re.search(r"gt=([A-Za-z0-9_]+)", s) or re.search(r"truths\.(T5_[A-Za-z0-9]+)", s)
     if gt is None:

@@ -70,9 +70,11 @@ within 0.65 nats). The ridge has two branches (figures `profile_*.png`, right pa
 with a jump in the profile optimum around c = 0.35-0.4. On T2 the low side is "B dies"
 instead: at c = 0.05, B.death is 0.52-0.55 and division only 0.24-0.28. So the weak
 direction is "switch back" against "any loss of B" (divide or die), not specifically
-against division. The 95% profile intervals cover the truth in 8/8 runs. The posterior
-95% CrI covers it in only 5/8: it misses in T1 s0 n128 (upper 0.68), T1 s0 n1024 (upper
-0.77) and T2 s0 n1024 (upper 0.496).
+against division. The 95% profile intervals cover the truth in 13/13 runs (8 original + 5 at n = 512,
+added 2026-11-22). The posterior 95% CrI covers it in only 5/13: it misses in T1 s0 n128
+(upper 0.68), T1 s0 n512 (0.79), T1 s0 n1024 (0.77), T2 s0 n128 (0.39), T2 s0 n512 (0.48),
+T2 s0 n1024 (0.496), T3 s0 n512 (0.56) and T3 s0 n1024 (0.57). (Corrected: this note
+previously said 5/8 for the first 8 runs, overlooking T2 n128 and T3 n1024; it is 3/8.)
 
 ![T1 n128](figures/profile_T1_ref_s0_n128.png)
 ![T2 n1024](figures/profile_T2_toA05_s0_n1024.png)
@@ -217,7 +219,7 @@ rest maximised from the 2 best nearby draws, after which the pin is released.
 
 * **Summary**: for B.to_A under the flat prior, neither the mean nor the MLE is safe
   alone. Report the **profile-likelihood interval** next to the posterior interval:
-  the profile interval covered the truth in 8/8 profiled runs, the CrI in 5/8. When the two disagree, the result depends on the prior.
+  the profile interval covered the truth in 13/13 profiled runs, the CrI in 5/13. When the two disagree, the result depends on the prior.
   The median behaves like the mean. The marginal KDE mode is worse than both. If a point
   estimate is needed for prior-typical truths, the posterior mean is better. For a
   high-B.to_A truth, a global MLE is better, provided it really is global (profile or
