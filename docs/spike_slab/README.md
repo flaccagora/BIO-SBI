@@ -32,14 +32,14 @@ Tables: `tables/`. Figures: `figures/`.
   mixture (flat posterior with B.to_A near 0.2, M0 posterior near the truth), its mean
   sits in between (mean z -1.0 at n 128, -0.6 at 256), and its result depends on the
   prior weight: RMSE 0.33 / 0.22 / 0.09 at n 128 for P(M0) = 0.1 / 0.5 / 0.9. From
-  n = 512 on the prior weight no longer matters (RMSE within 0.03).
+  n = 512 on the prior weight matters much less (RMSE within 0.035).
 * **The LRT-selected MLE is as good as the BMA mean for point estimation** (RMSE 0.040
   against 0.046 for BMA with P(M0) = 0.9 and 0.099 with 0.5, on the no-division truths),
   but it gives no interval. The two decisions agree in 134/141 runs; the 7 disagreements
   are T2/T4 at n 128-256, where the LRT keeps M0 by default (p 0.06-0.66) and BMA is
   undecided (P(M0) 0.26-0.48), plus T1 n 2048 seed 2 (LRT rejects at p = 0.016, BMA gives
   P(M0) = 0.82).
-* **It does not help T3_Bdiv**, whose truth is interior: its bias (mean z -2.4 to -1.0)
+* **It does not help T3_Bdiv**, whose truth is interior: its bias (mean z -3.1 to -1.0)
   comes from the ridge plus volume effect, not the boundary, and BMA leaves it unchanged.
 * **No-dedifferentiation face**: P(B never dedifferentiates | y) < 3e-4 in all 141 runs
   (log BF of "B.to_A = B.div_AA = B.div_AB = 0" against M_full at most -8.0, T2 n 128).
