@@ -48,7 +48,7 @@
   left=5pt,right=5pt,top=3pt,bottom=3pt,fontupper=\small}
 \newtcolorbox{caveat}{colback=pendbg,colframe=corange,boxrule=0.6pt,arc=2pt,
   left=5pt,right=5pt,top=3pt,bottom=3pt,fontupper=\small}
-\graphicspath{{figures/}{../docs/dediff_test/figures/}}
+\graphicspath{{figures/}{../docs/dediff_test/figures/}{../docs/jeffreys/figures/}}
 \makeatletter\newcommand{\tabin}[1]{\@@input #1 }\makeatother  % expandable \input for table rows
 \newcommand{\fig}[3]{\begin{figure}[H]\centering\includegraphics[width=#2\linewidth]{#1}\caption{#3}\label{fig:#1}\end{figure}}
 \hypersetup{pdftitle={BIO-SBI: exact likelihood for Galton-Watson and the XG2 experiment},pdfauthor={BIO-SBI}}
@@ -66,7 +66,7 @@
 {\sffamily\Large\color{inkgray} Method, point estimates, and how much data the full transition model needs (XG2)\par}
 \vspace{1.5cm}
 \begin{tabular}{@{}ll@{}}
-Status of results & 19 November 2026 (XG2, follow-ups, dedifferentiation test) \\
+Status of results & 22 November 2026 (XG2, follow-ups, Jeffreys priors, dedifferentiation test) \\
 Repository & \code{BIO-SBI}, branch \code{worktree-exact-gw-data-size} \\
 Results & \res{results/exact_gw/data_size/} (XG2), \res{results/exact_gw/} (XG) \\
 Companions & \code{report_sequential/report.pdf} (all experiments; \S ``Exact likelihood (XG)'') \\
@@ -94,7 +94,7 @@ Data & synthetic only \\
 \item \textbf{Why} (Section~\ref{sec:why}). The likelihood is flat --- often two-branched --- along ``B switches back to A'' versus ``B is lost'' (divides or dies); the flat Dirichlet prior gives \BA{} a Beta(1,\,5) marginal with mean 1/6, and on a flat ridge that volume pulls the posterior mean down. This holds whether or not the truth sits on the boundary (T3, all entries interior, is as biased as T1). The 95\% \emph{profile-likelihood} interval covered the truth in 8/8 profiled runs, the posterior 95\% interval in 5/8. A likelihood-ratio test of ``B never divides'' picked the right sub-model in 37/37 runs, already at $n$ = 128, and cut the \BA{} error to 0.02--0.06 (posterior mean: 0.28--0.37).
 \end{enumerate}
 
-\textbf{Follow-ups} (\S\ref{sec:fu}). B's switch back reaches an error below 0.05 at 2048--4096 clones per endpoint for T1, T3, T4 (T2 not by 4096), but where B never divides the posterior stays 1--2 sd low at every $n$. A flat prior on \BA{} cuts the \BA{} error of T1--T4 by 1.7--5$\times$ and, at $n$ = 128, up to doubles it for the small-\BA{} truths. Reparametrising B's row helps modestly within a branch (0.8--1.6$\times$); T1's posterior at $n$ = 1024 has a second ``B divides'' branch holding about 17\% of the mass, which single NUTS runs weight anywhere between 2\% and 28\%.
+\textbf{Follow-ups} (\S\ref{sec:fu}). B's switch back reaches an error below 0.05 at 2048--4096 clones per endpoint for T1, T3, T4 (T2 not by 4096), but where B never divides the posterior stays 1--2 sd low at every $n$. A flat prior on \BA{} cuts the \BA{} error of T1--T4 by 1.7--5$\times$ and, at $n$ = 128, up to doubles it for the small-\BA{} truths. Reparametrising B's row helps modestly within a branch (0.8--1.6$\times$); T1's posterior at $n$ = 1024 has a second ``B divides'' branch holding about 17\% of the mass, which single NUTS runs weight anywhere between 2\% and 28\%. Two other ``uninformative'' priors do not fix the \BA{} bias either (\S\ref{sec:fu-jeffreys}): the exact Jeffreys prior is proper but concentrates on B self-renewal and \BA{} $\approx$ 0 (bias $-$0.13 at $n$ = 128, $-$0.04 at 1024); Dirichlet(\textonehalf) is the best symmetric prior (RMSE 0.19 $\to$ 0.07), and at 1024 the priors still differ by more than 0.25 posterior sd in most cells.
 
 \textbf{Dedifferentiation test} (\S\ref{sec:dediff}). A likelihood-ratio test of ``B never gives rise to A'' is well calibrated with per-dataset boundary ($\bar\chi^2$) critical values (1--6.5\% false positives) and, with perfect typing, detects $m_{BA} \approx 0.003$ A cells per B cell per generation already at 128 clones per endpoint. But 0.5\% of KRT20$^+$ cells mis-scored as LGR5$^+$, if not modelled, gives 75--100\% false positives, and assuming a rate only 10--20\% too low can still give most of them; assuming it 50--100\% too high costs little power. Measure an upper limit of the typing error ($\pm$25\% is enough) and test at that limit.
 
@@ -432,6 +432,43 @@ Stopping rule on (at most 1000 draws per chain). Low branch: share of draws with
 \item \textbf{T1 at $n$ = 1024 has a second branch} (``B divides'': \BA{} $\approx$ 0.27, B$\to$AA/AB/BB $\approx$ 0.16/0.16/0.24) whose mass, by per-branch SMC evidence, is 17\% (8--25\% across replicates; importance sampling: 16\%). Single NUTS runs put 2--28\% of their draws there, depending on the start; only the strong SMC start with \code{brow+probit} matched (16\%). The branch-weighted posterior gives \BA{} = 0.57--0.60 $\pm$ 0.15--0.16, not 0.65 $\pm$ 0.09.
 \end{itemize}
 
+\subsection{Other ``uninformative'' priors: Dirichlet(\textonehalf) and the exact Jeffreys prior}\label{sec:fu-jeffreys}
+A prior that is uniform on $[0,1]$ for every probability does not exist (each row must sum to 1; independent uniforms would have marginal means summing to 3). The uniform Dirichlet is flat over the row jointly, but each marginal is Beta(1,5) with mean 1/6. We tried two other standard ``uninformative'' choices on all 108 XG2 cells (results \res{results/exact_gw/data_size_jeffreys/}, note \res{docs/jeffreys/README.md}):
+\begin{itemize}
+\item \textbf{Dirichlet(\textonehalf)} on each row: concentration \textonehalf{} for every outcome, the Jeffreys prior of a single multinomial step. It favours sparse rows. NUTS on all 108 cells with the settings of the flat-\BA{} repeat (adjoint kernel, stopping rule, at most 1000 draws per chain), warm-started from the flat XG2 posterior of the same dataset; 3\,939 cell-minutes.
+\item \textbf{The exact Jeffreys prior} of this model, $p_J(\theta) \propto \sqrt{\det I(\theta)}$, where $I$ is the expected Fisher information of one detected clone, summed over generations 4, 6, 8, 10 (it does not depend on $n$; code \code{src/bio_sbi/inference/gw_fisher.py}, checked against the multinomial case, finite differences and Monte Carlo). It is invariant to how the probabilities are parametrised. It is proper as far as can be checked numerically: bounded on all 24 faces of the parameter space, and at every vertex probed it grows no faster than distance$^{-4}$ (integrable needs slower than distance$^{-5}$). Like the likelihood, it is set to 0 where a clone is detected with probability below $10^{-6}$ (under 1\% of its mass). The posterior is obtained by reweighting the Dirichlet(\textonehalf) draws by $p_J / p_{\rm Dir(1/2)}$ (Pareto-smoothed; median $k$ 0.36 at $n$ = 128, 0.08 at 1024). The 4 cells with $k > 0.7$ (all at $n$ = 128) and 5 checks were rerun with NUTS on a smooth surrogate of $p_J$ and corrected exactly; all end at $k \le 0.55$ and agree with the reweighting within 0.3 sd in 8 of 9 (unresolved: T1, $n$ = 128, dataset 1, \BA{} 0.50 by reweighting vs 0.67 by rerun).
+\end{itemize}
+\fig{prior_marginals}{1.0}{Prior marginals implied by the four priors (exact Jeffreys: 32 DE-MCMC chains $\times$ 6000 iterations). B.div: B's total division mass; growth: mean offspring per generation; log10\_mean\_cells10 and log10\_detect10: expected clone size and detection probability at generation 10.}
+\textbf{The Jeffreys prior is not neutral.} It puts its mass where clones carry the most information: B dividing into B+B almost always (B's division mass: median 0.97; B$\to$BB 0.96), fast growth (median 1.94 cells per cell per generation vs 1.35 under the uniform Dirichlet), and \BA{} near 0 (median 0.002, 95th percentile 0.03; uniform Dirichlet 0.13, Dirichlet(\textonehalf) 0.10). ``Uninformative'' here means invariant to reparametrisation, not flat.
+
+\begin{center}\footnotesize\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}llrrrrr@{}}\toprule
+ & $n$ & uniform Dir. & flat-\BA & Dir(\textonehalf) & exact Jeffreys & MLE \\\midrule
+RMSE \BA & 128 & 0.260 & \textbf{0.137} & 0.188 & 0.210 & 0.172 \\
+ & 256 & 0.211 & \textbf{0.122} & 0.158 & 0.190 & 0.157 \\
+ & 512 & 0.127 & 0.085 & 0.102 & 0.099 & \textbf{0.074} \\
+ & 1024 & 0.095 & \textbf{0.043} & 0.071 & 0.075 & 0.055 \\
+bias \BA & 128 & $-$0.158 & $-$0.014 & $-$0.096 & $-$0.131 & $-$0.039 \\
+ & 1024 & $-$0.053 & $-$0.003 & $-$0.035 & $-$0.044 & $-$0.026 \\
+90\% coverage \BA & 128 & 0.59 & 0.74 & 0.70 & 0.59 & 0.61 \\
+ & 1024 & 0.63 & 0.89 & 0.78 & 0.67 & 0.81 \\
+RMSE all 12 & 128 & 0.110 & \textbf{0.082} & 0.094 & 0.101 & 0.116 \\
+ & 512 & 0.065 & 0.060 & 0.064 & \textbf{0.056} & 0.091 \\
+ & 1024 & 0.055 & \textbf{0.046} & 0.055 & 0.050 & 0.060 \\\bottomrule
+\end{tabular}
+
+Over the 9 truths $\times$ 3 datasets. Posterior mean and equal-tailed 90\% interval; MLE with Wald interval (none for 9--22\% of the estimates, which sit on the boundary). Smallest RMSE in bold.
+\end{center}
+\fig{rmse_coverage_by_n}{1.0}{RMSE of \BA{} (left) and of all 12 probabilities (middle), and 90\% coverage (right; solid: all parameters, dotted: \BA) against $n$, for the five estimators (``flat (XG2)'' = uniform Dirichlet).}
+\begin{itemize}
+\item \textbf{The exact Jeffreys prior does not remove the pull on \BA.} Its bias ($-$0.131 at $n$ = 128, $-$0.044 at 1024) lies between those of the uniform Dirichlet and of Dirichlet(\textonehalf), and its \BA{} intervals cover as poorly as the uniform Dirichlet's (59--70\% for nominal 90\%). The pull comes from the flat ridge of the likelihood (\S\ref{sec:why}); every symmetric prior fills that ridge with its own volume, and the Jeffreys volume sits at \BA{} $\approx$ 0.
+\item \textbf{Dirichlet(\textonehalf) is the best of the symmetric priors for \BA} (RMSE 0.188 $\to$ 0.071; coverage 70--78\%), because it favours sparse rows like those of T1--T4, where B never divides. Over all 12 probabilities the three symmetric priors are within 0.01--0.02 RMSE of each other.
+\item \textbf{By truth.} For the large-\BA{} truths every symmetric prior pulls \BA{} down (T1 at $n$ = 128: 0.36 uniform Dirichlet, 0.60 Dirichlet(\textonehalf), 0.59 Jeffreys, 0.75 flat-\BA; truth 0.80). For the small-\BA{} truths Jeffreys pulls down and flat-\BA{} up (P1 at $n$ = 128: 0.05 and 0.21; truth 0.11). T5 (large clones) is within 0.03 of the truth under every prior from $n$ = 256.
+\item \textbf{The priors still disagree at $n$ = 1024.} The median shift of the \BA{} posterior mean is 0.18 posterior sd between Dirichlet(\textonehalf) and Jeffreys, 0.29 between uniform Dirichlet and Dirichlet(\textonehalf), 0.67 between flat-\BA{} and Jeffreys and 1.08 between uniform Dirichlet and flat-\BA. For any pair of priors at most 15\% of cells have all 12 posterior means within 0.25 sd (11\% at $n$ = 1024). The differences shrink with $n$ in absolute terms but not relative to the posterior sd.
+\item \textbf{Sampling.} Dirichlet(\textonehalf) has the same unbounded density at 0 as the flat-\BA{} prior's 0.2 concentrations but mixed much better: max rank $\hat R > 1.05$ in 13 of 108 cells (flat-\BA: 50), median 37 divergences (142), median min bulk ESS 265 (102). The full stopping rule was met in 16 of 108; the parameters that miss $\hat R \le 1.01$ most often are A.persist, A.death and B.death (43--48\% of cells).
+\end{itemize}
+\textbf{Bottom line.} At $n \le 1024$ no ``uninformative'' prior is neutral about \BA: the estimate depends on which one is chosen, by more than its posterior sd. The flat-\BA{} prior is the most accurate for \BA{} (and for all parameters at $n$ = 128, 256 and 1024) on these truths, but only because the large-\BA{} truths dominate the RMSE; the MLE is competitive from $n$ = 512. Quantities that do not depend on a prior (MLE, profile likelihood, the likelihood-ratio test of \S\ref{sec:dediff}) or a stated range over priors should be reported for \BA.
+
 % ====================================================================== dedifferentiation test
 \section{Testing for dedifferentiation: can B give rise to A?}\label{sec:dediff}
 \begin{keybox}
@@ -568,16 +605,17 @@ On the CRC0322 2D counts (days 6 and 10 taken as generations 6 and 10; 165 and 1
 \item With all transitions free, 1024 clones per endpoint on generations 4--10 are \emph{not} enough for B's row when \BA{} is large: the posterior is biased toward ``B is lost'' by 1--2 sd and prior-sensitive. A's row and the growth/composition summaries converge from 256--512 clones per endpoint.
 \item The answer depends on the truth: large clones (T5) and truths near the prior's bulk converge fast; the reference biology (B switches back, never divides) converges slowest.
 \item The limiting factor is information along two directions --- switch back vs loss of B, and which parent made a mixed division --- combined, for the first, with the flat prior's volume. More NUTS budget cannot change it (Monte Carlo error $\approx$\,0.05 sd).
-\item \textbf{Follow-ups} (\S\ref{sec:fu}): B's switch back reaches an absolute error below 0.05 at 2048--4096 clones per endpoint (T2 not by 4096), but where B never divides the posterior stays 1--2 sd low at every $n$. A flat prior on \BA{} removes most of that bias for large \BA{} and adds some for small \BA: at small $n$ the prior decides. Some B-row posteriors have two branches whose weights NUTS cannot be trusted to get right (T1: 17\% on ``B divides'' by SMC evidence); report branch masses, not just converged-looking chains.
+\item \textbf{Follow-ups} (\S\ref{sec:fu}): B's switch back reaches an absolute error below 0.05 at 2048--4096 clones per endpoint (T2 not by 4096), but where B never divides the posterior stays 1--2 sd low at every $n$. A flat prior on \BA{} removes most of that bias for large \BA{} and adds some for small \BA: at small $n$ the prior decides. Some B-row posteriors have two branches whose weights NUTS cannot be trusted to get right (T1: 17\% on ``B divides'' by SMC evidence); report branch masses, not just converged-looking chains. No ``uninformative'' prior is neutral about \BA{} at these $n$: under Dirichlet(\textonehalf) and the exact Jeffreys prior the bias remains (\S\ref{sec:fu-jeffreys}), so report prior-free quantities or a range over priors.
 \item \textbf{Whether B gives rise to A at all} is testable from endpoint counts with very small effects (\S\ref{sec:dediff}), but the test is dominated by cell-typing errors: the KRT20$\to$LGR5 mis-scoring rate must be measured and modelled, or the question settled directly with organoids founded by KRT20$^+$ cells.
 \end{enumerate}
 
 \subsection{Follow-ups}\label{sec:followups}
-\textbf{Done} (\S\ref{sec:fu}): $n$ = 2048--4096 for T1--T4; all 108 cells with a flat prior on \BA; 8-chain reruns of the bimodal cells; sampler vs dataset noise; warm start and ESS/$\hat R$ stopping; reparametrisation and SMC start. \textbf{Open}:
+\textbf{Done} (\S\ref{sec:fu}): $n$ = 2048--4096 for T1--T4; all 108 cells with a flat prior on \BA; 8-chain reruns of the bimodal cells; sampler vs dataset noise; warm start and ESS/$\hat R$ stopping; reparametrisation and SMC start; all 108 cells under Dirichlet(\textonehalf) and the exact Jeffreys prior. \textbf{Open}:
 \begin{itemize}
 \item A branch-weighted posterior in the pipeline: per-branch SMC evidence for the branch masses, chains seeded in both branches, combined by mass; rerun the bimodal cells (T1 at 256 and 1024, P2 at 1024) with it.
 \item A model-comparison step (``does B divide?'') in the default analysis: it removes the boundary bias of T1, T2, T4 where it applies (\S\ref{sec:why}).
 \item A prior for B's other outcomes that keeps \BA{} flat without unbounded densities (e.g.\ concentration 1 for every B outcome except a flat \BA), and a rerun of the flat-\BA{} cells with it: the 0.2 concentrations made B's small entries unsampleable.
+\item The one unresolved Jeffreys cell (T1, $n$ = 128, dataset 1): an exact sampler for $p_J$ times the likelihood that converges.
 \item Prior sensitivity by NUTS where reweighting is unreliable (203 (run, prior) pairs; at least the wrong prior at $n \ge 512$).
 \item Dedifferentiation test (\S\ref{sec:dediff}): robustness to organoid fate heterogeneity and to typing errors that depend on clone size; sizing the B-founder design.
 \end{itemize}
@@ -590,6 +628,7 @@ On the CRC0322 2D counts (days 6 and 10 taken as generations 6 and 10; 165 and 1
 \item \textbf{XG2}: \code{bio-sbi -m +experiment=exact_gw_data_size} (preset \code{src/bio_sbi/conf/experiment/exact_gw_data_size.yaml}; T5 added on the command line as \code{+truths.T5_C7={...}}); launchers \code{scripts/run_xg2.sh}, \code{scripts/run_xg2_adjoint.sh}; analysis \code{uv run python scripts/analyse_exact_gw_data_size.py results/exact_gw/data_size}; MLE \code{uv run python scripts/exact_gw_mle.py results/exact_gw/data_size --workers 16}.
 \item \textbf{This report}: \code{uv run python report_exact_gw/make_figures.py --results <repo>/results} and \code{report_exact_gw/make_followups.py --results <repo>/results}, then \code{tectonic report.tex} inside \code{report_exact_gw/}.
 \item \textbf{Follow-ups}: scheduler \code{scripts/run_exact_gw_cells.sh} with job lists in \code{scripts/jobs/}; results in \res{results/exact_gw/data_size_flat_btoa/}, \res{data_size_reruns/}, \res{reparam_bench/}; sampler options on branches \code{exact-gw-warmstart-ess-stop} (merged) and \code{reparam-exact-gw} (not merged).
+\item \textbf{Dirichlet(\textonehalf) / Jeffreys}: branch \code{jeffreys-prior} (merged); job list \code{scripts/jobs/xg2_jeffreys.txt} with \code{prior=jeffreys} and \code{WARM_ROOT}; prior sampling, reweighting, reruns and analysis in \code{scripts/jeffreys/} (see \res{docs/jeffreys/README.md}); results \res{results/exact_gw/data_size_jeffreys/}.
 \item \textbf{Layout}: \res{results/exact_gw/data_size/<truth>/n<n>_s<dataset>/} (one folder per run; \res{runs_index.csv} lists kernel and original sweep folder); sweep logs in \res{_sweeps/}.
 \end{itemize}
 
