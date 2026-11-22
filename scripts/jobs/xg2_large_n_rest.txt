@@ -1,0 +1,33 @@
+# XG2 extension, part 2: n = 2048 and 4096 for the truths not run in xg2_large_n.txt
+# (P1-P4 prior draws and T5), so that every truth has the full 128-4096 range.
+# Datasets stay nested (first 1024 clones = the XG2 datasets). n = 4096 first.
+P1 4096 0
+P2 4096 0
+P3 4096 0
+P4 4096 0
+T5_C7 4096 0
+P1 4096 1
+P2 4096 1
+P3 4096 1
+P4 4096 1
+T5_C7 4096 1
+P1 4096 2
+P2 4096 2
+P3 4096 2
+P4 4096 2
+T5_C7 4096 2
+P1 2048 0
+P2 2048 0
+P3 2048 0
+P4 2048 0
+T5_C7 2048 0
+P1 2048 1
+P2 2048 1
+P3 2048 1
+P4 2048 1
+T5_C7 2048 1
+P1 2048 2
+P2 2048 2
+P3 2048 2
+P4 2048 2
+T5_C7 2048 2
