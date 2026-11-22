@@ -263,7 +263,25 @@ Means over the 3 datasets of the posterior mean, posterior sd and MLE of \BA.
 \item The MLE tracks the truth for large \BA{} from $n$ = 256 on but jumps between near-equal optima for small \BA{} (several P runs have an MLE of exactly 0).
 \end{itemize}
 
-\subsection{Calibration and contraction}
+\subsection{Calibration and contraction}\label{sec:calibration}
+\textbf{Which parameters are hard?} The table ranks the 12 probabilities from hardest to easiest on seven measures (flat prior, all 9 truths $\times$ 3 datasets, $n$ = 128--1024). Every probability has the same flat-prior marginal, Beta(1,\,5) with sd 0.141, so absolute errors are comparable across parameters.
+\begin{center}\scriptsize\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}rlrrrrrrrlr@{}}\toprule
+ & & \multicolumn{2}{c}{RMSE post.\ mean} & sd / prior sd & 90\% & mean $|z|$ & prior shift & RMSE MLE & hardest truth & mean \\
+rank & parameter & $n$ = 128 & 1024 & 1024 & coverage & 1024 & 1024 (sd) & 1024 & (RMSE 1024) & rank \\\midrule
+\tabin{tables/param_rank.tex}
+\bottomrule
+\end{tabular}
+
+Coverage over truth $>0$ and all $n$; mean $|z|$ $\approx$ 0.8 if calibrated. Prior shift: largest reliable shift of the posterior mean under the other symmetric priors (PSIS, $k \le 0.7$), in posterior sd, median over datasets. Rank 12 = hardest on each measure; ``mean rank'' averages the seven. Script: \code{report_exact_gw/make_param_ranking.py}.
+\end{center}
+\begin{itemize}
+\item \textbf{\BA{} is the hardest parameter on six of the seven measures}: largest error at every $n$ (0.26 at $n$ = 128, still 0.095 at 1024), least narrowed, most prior-sensitive, and its 90\% intervals cover the truth in only 60\% of runs (35\% for T1--T4). The exception is the MLE, which estimates it about as well as most parameters (rank 6).
+\item \textbf{Next come B's three division types}, then A's B+B division and A's death. All of B's row except ``persists'' is in the hardest seven. The reason is the same weak direction (\S\ref{sec:why}): \BA{} trades off against ``B is lost'' (B dies, or B's divisions replace it), and among divisions the data barely tell which parent produced a mixed one (\S\ref{sec:p3}). For the MLE the mixed divisions (B$\to$AB, A$\to$AB) are the hardest.
+\item \textbf{A's row is easy}: A's switch to B, self-renewal and persistence are recovered within about 0.03 at $n$ = 1024 with near-nominal coverage, because A founds every clone and its offspring dominate the counts.
+\end{itemize}
+\textbf{Why the report focuses on \BA.} It is both the hardest parameter and the biological question: whether and how often KRT20$^+$ cells return to the LGR5$^+$ state. The B-row parameters that follow it are hard for the same reason, so what improves \BA{} (more clones, earlier endpoints, B-founded clones, a prior-free analysis) improves them too.
+
 \begin{center}\footnotesize\setlength{\tabcolsep}{3pt}
 \begin{tabular}{@{}lrrrrrrrr@{}}\toprule
  & \multicolumn{4}{c}{worst-parameter contraction} & \multicolumn{2}{c}{$n$ = 128} & \multicolumn{2}{c}{$n$ = 1024} \\
@@ -274,7 +292,7 @@ truth & 128 & 256 & 512 & 1024 & 90\% coverage & mean $|z|$ & 90\% coverage & me
 
 Contraction $= 1 - \mathrm{var}_{\rm post}/\mathrm{var}_{\rm prior}$ of the least contracted parameter (mean over datasets). Coverage and $|z|$ over parameters with truth $>0$ (an equal-tailed interval cannot contain an exact 0) and the 3 datasets.
 \end{center}
-Coverage of the 90\% intervals is 70--85\% for the curated truths (\BA{} is the parameter that misses most: 53\% overall) and 75--100\% for the prior draws and T5. Mean $|z|$ near 0.8 would be expected for a calibrated posterior.
+Coverage of the 90\% intervals is 70--85\% for the curated truths (\BA{} is the parameter that misses most: 60\% over $n$ = 128--1024, 35\% for T1--T4) and 75--100\% for the prior draws and T5. Mean $|z|$ near 0.8 would be expected for a calibrated posterior.
 
 \subsection{Large-sample regime}
 \fig{sd_sqrt_n}{1.0}{Posterior sd $\times \sqrt{n}$ against $n$ (mean over datasets). In the Gaussian (Bernstein--von Mises) regime the curve is flat at the Cram\'er--Rao value.}
