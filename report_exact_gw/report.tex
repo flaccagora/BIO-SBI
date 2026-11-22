@@ -48,7 +48,7 @@
   left=5pt,right=5pt,top=3pt,bottom=3pt,fontupper=\small}
 \newtcolorbox{caveat}{colback=pendbg,colframe=corange,boxrule=0.6pt,arc=2pt,
   left=5pt,right=5pt,top=3pt,bottom=3pt,fontupper=\small}
-\graphicspath{{figures/}{../docs/dediff_test/figures/}{../docs/jeffreys/figures/}{../docs/weak_directions/figures/}{../docs/optimal_design/figures/}}
+\graphicspath{{figures/}{../docs/dediff_test/figures/}{../docs/jeffreys/figures/}{../docs/weak_directions/figures/}{../docs/optimal_design/figures/}{../docs/spike_slab/figures/}}
 \makeatletter\newcommand{\tabin}[1]{\@@input #1 }\makeatother  % expandable \input for table rows
 \newcommand{\fig}[3]{\begin{figure}[H]\centering\includegraphics[width=#2\linewidth]{#1}\caption{#3}\label{fig:#1}\end{figure}}
 \hypersetup{pdftitle={BIO-SBI: exact likelihood for Galton-Watson and the XG2 experiment},pdfauthor={BIO-SBI}}
@@ -101,7 +101,7 @@ Data & synthetic only \\
 \textbf{Recommendations.}
 \begin{itemize}
 \item \textbf{Report likelihood-based intervals next to posterior intervals} for B's row; where they disagree the prior drives the result. Use the profile likelihood (not the marginal mode) for \BA.
-\item \textbf{Decide whether B divides before estimating \BA}: model comparison (two\_type vs B divisions = 0) works from 128 clones per endpoint; otherwise B's row needs $\gg$\,1024 clones per endpoint (earlier: 4096 on three endpoints gave 0.78 $\pm$ 0.02).
+\item \textbf{Decide whether B divides before estimating \BA}, or average over both answers: a prior with probability $\tfrac12$ on ``B never divides'' removes the boundary bias (\BA{} RMSE 0.22 $\to$ 0.10, coverage 0.41 $\to$ 0.89 for T1, T2, T4) at no cost where B divides (\S\ref{sec:spikeslab}). Model comparison (two\_type vs B divisions = 0) works from 128 clones per endpoint; otherwise B's row needs $\gg$\,1024 clones per endpoint (earlier: 4096 on three endpoints gave 0.78 $\pm$ 0.02).
 \item \textbf{Report identifiable combinations} (growth rate, stable type fraction, division mass per row, \BA) rather than individual division types.
 \item \textbf{Observe early}: the weakly identified directions are all ``which type of parent did it'' (\S\ref{sec:weakdirs}), and the information on them comes from early endpoints. Endpoints at generations 1--4, ideally with clones founded by single A and by single B cells, give 4--20$\times$ more information on the weakest direction than generations 4--10 with the same number of clones. Theory explains the rule: parent swaps leave the growth rate and stable composition unchanged, and their information per clone falls like $\rho^{-h}$, so each generation later costs a factor $\rho \approx$ 1.4--1.7 in clones. The optimal design (\S\ref{sec:design}): $\tfrac38$ A-founded clones at generation 2, $\tfrac14$ B-founded at generation 1, $\tfrac14$ B-founded at generation 2 and $\tfrac18$ A-founded at generation 10 needs 6--90$\times$ fewer clones than the current design for the same precision on \BA.
 \item \textbf{For the sampler}: use \code{kernel=adjoint} and the ESS/$\hat R$ stopping rule, warm starts across nested $n$; for B-row posteriors check for a second branch and estimate branch masses by per-branch SMC evidence (\S\ref{sec:fu-sampler}).
@@ -363,6 +363,38 @@ A dedicated analysis (\res{docs/xg2_mle_vs_posterior/README.md}; profiles of \BA
 \textbf{Model selection fixes it where it applies.} A likelihood-ratio test of ``B never divides'' (B$\to$AA = AB = BB = 0; $\bar\chi^2_3$ at 5\%) kept the sub-model in all 19 T1/T2/T4 runs and rejected it in all 18 T3/P runs ($n$ = 128 and 256; 37/37 correct). Taking \BA{} from the sub-model when kept and from the global MLE otherwise gives errors 0.050 (T1), 0.060 (T2), 0.023 (T4) against 0.37, 0.28, 0.32 for the posterior mean. Where B really divides (T3) only more data or prior information help.
 
 \textbf{Correction to the stored MLE.} Pinning \BA{} found better optima on the low branch in 2 of 37 runs (T1 $n$ = 128 dataset 0: global MLE \BA{} = 0.21 by 0.41 nats, not 0.78; P3 $n$ = 128 dataset 0 by 0.27 nats). The MLE columns above are the multistart values; at small $n$ the MLE's advantage for T1 is partly luck of the basin.
+
+\subsection{The Bayesian fix: a prior with mass on ``B never divides''}\label{sec:spikeslab}
+At a face of the simplex the posterior is asymptotically a truncated normal (non-regular Bernstein--von Mises), so its bias stays a fixed number of posterior sd however large $n$ is --- the $z \approx -1.2$ to $-2.4$ of T1, T2, T4 at every $n$ (\S\ref{sec:fu-largen}). The standard remedy is a prior that puts mass on the face itself (``spike-and-slab''): here, probability $\tfrac12$ on M$_0$ (B's three divisions exactly 0, the rest flat) and $\tfrac12$ on the full model, and the posterior averages the two (Bayesian model averaging). Evidences were computed by bridge sampling (NUTS draws for the full model, tempered SMC for M$_0$; stable to 0.1--0.3 nats; checked against Laplace, importance sampling and NUTS on M$_0$), for the 141 runs available (all of XG2 plus 9 of the new large-$n$ runs; note \res{docs/spike_slab/README.md}).
+\fig{btoa_bma_vs_flat}{0.9}{\BA{} under the flat prior (blue) and the model-averaged posterior with P(M$_0$) = $\tfrac12$ (orange): mean and 90\% interval per dataset; crosses: MLE of the model selected by the likelihood-ratio test; dashed: truth.}
+\begin{center}\footnotesize\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}lrrrrrr@{}}\toprule
+ & \multicolumn{6}{c}{P(B never divides $\mid$ data)} \\
+truth & $n$ = 128 & 256 & 512 & 1024 & 2048 & 4096 \\\midrule
+T1 & 0.77 & 0.84 & 0.92 & 0.83 & 0.94 & 0.999 \\
+T2 & 0.38 & 0.81 & 0.97 & 0.99 & 0.97 & 0.998 \\
+T4 & 0.39 & 0.68 & 0.97 & 0.99 & 0.99 & 0.999 \\
+T3, T5, P1--P4 & \multicolumn{6}{c}{$\le$ 0.004 (87 runs)} \\\bottomrule
+\multicolumn{7}{@{}l}{\scriptsize Mean of the 3 datasets; prior probability $\tfrac12$.}\\
+\end{tabular}
+
+\medskip
+\begin{tabular}{@{}lrrr@{}}\toprule
+\BA{} for T1, T2, T4 (54 runs) & RMSE & 95\% coverage & mean $z$ \\\midrule
+flat posterior & 0.218 & 0.41 & $-1.88$ \\
+model average, P(M$_0$) = 0.5 & 0.099 & 0.89 & $-0.39$ \\
+model average, P(M$_0$) = 0.9 & 0.046 & 0.89 & $-0.21$ \\
+MLE of the LRT-selected model & 0.040 & --- & --- \\\bottomrule
+\end{tabular}
+\end{center}
+\begin{itemize}
+\item \textbf{The constant bias disappears.} Mean $z$ of \BA{} for T1, T2, T4 at $n$ = 128, 256, 512, 1024, 2048, 4096: flat $-2.78$, $-2.22$, $-1.49$, $-1.53$, $-1.60$, $-1.67$; model average $-1.01$, $-0.63$, $-0.06$, $-0.12$, $-0.19$, $-0.33$. Over all 12 probabilities the 95\% coverage rises from 0.65 to 0.97 (the flat intervals never contain B's zero divisions; the model average has an atom there).
+\item \textbf{It costs nothing where B divides}: for T3, T5 and P1--P4 the model-averaged mean is within 0.0014 of the flat mean and the \BA{} error and coverage are unchanged.
+\item \textbf{At $n$ = 128--256 the prior weight matters} (\BA{} RMSE 0.33 / 0.22 / 0.09 for P(M$_0$) = 0.1 / 0.5 / 0.9); from $n$ = 512 the three agree within 0.035. Model averaging and the likelihood-ratio test agree in 134 of 141 runs.
+\item \textbf{T3 is not helped}: its truth is interior; its bias comes from the ridge and the prior volume (\S\ref{sec:why}), which only more data or better designs (\S\ref{sec:design}) reduce.
+\item Spreading the prior mass over all 8 ``some B divisions are 0'' faces dilutes the gain and wrongly zeroes small division rates of the prior draws; mass on the single biologically motivated face works best.
+\item \textbf{The same machinery tests dedifferentiation}: with a face ``no dedifferentiation'' (\BA{} = B$\to$AA = B$\to$AB = 0) the posterior probability of dedifferentiation exceeds 0.9997 in every run (log Bayes factor $\le -8$) --- a Bayesian counterpart of the test of \S\ref{sec:dediff}, with the same caveat about typing errors.
+\end{itemize}
 
 \subsection{A second weak direction: which parent made the division (P3)}\label{sec:p3}
 \fig{p3_ridge}{0.9}{P3, $n$ = 1024: posterior draws of the mixed divisions of A and B (left) and of the symmetric BB divisions (right) for the three datasets; star = truth.}
