@@ -374,21 +374,24 @@ T5 post. & .10 & .11 & .09 & .12 & .10 \\\bottomrule
 \section{The bias of B$\to$A}
 
 \begin{frame}{Where the bias comes from: prior volume on a flat ridge}
-\begin{columns}[c]
-\begin{column}{0.42\textwidth}
-\centering\includegraphics[width=0.95\textwidth]{decomposition.png}
-\end{column}
-\begin{column}{0.56\textwidth}\small
+\centering
+\includegraphics[width=0.84\textwidth]{prior_alpha_and_bias.png}
+
+\vspace{-2pt}
+\begin{columns}[T]
+\begin{column}{0.57\textwidth}\footnotesize
 \begin{itemize}
-\item Uniform Dirichlet on 6 outcomes $\Rightarrow$ each marginal is \textbf{Beta(1,\,5)}, mean 1/6.
-\item Along the flat ridge many ``B is lost'' parameter sets fit as well; their \textbf{volume} pulls the posterior mean down.
-\item Decomposition: MLE $\to$ profile-likelihood mean $\to$ posterior mean; the volume step always lowers \BA{} (by 0.06--0.37).
-\item Not only boundary truths: T3 (interior) is as biased as T1.
+\item \textbf{Left}: same data, only the prior changes. Larger $a$ puts more volume at small \BA{} $\Rightarrow$ lower posterior mean (39/39 runs of T1--T4).
+\item \textbf{Right}: for large true \BA{} the posterior mean is \textbf{always too low}, by up to 0.5; the MLE (orange) is mostly closer, and near 0 by $n$=1024.
+\item Flat Dirichlet: \BA{} $\sim$ Beta(1,\,5), mean 1/6. On the flat ridge (``B switches back'' vs ``B is lost'') this volume decides.
 \end{itemize}
-\begin{block}{Interval coverage of \BA{} (13 profiled runs)}
-95\% \textbf{profile-likelihood} interval: \textbf{13/13}\\
-95\% posterior interval: \alert{5/13} (every miss on the low side)
+\end{column}
+\begin{column}{0.40\textwidth}
+\begin{block}{Coverage of \BA{} (13 profiled runs)}
+\footnotesize 95\% \textbf{profile-likelihood} interval: \textbf{13/13}\\
+95\% posterior interval: \alert{5/13}, every miss on the low side
 \end{block}
+{\scriptsize Not only boundary truths: T3 (interior) is as biased as T1.}
 \end{column}
 \end{columns}
 \end{frame}
