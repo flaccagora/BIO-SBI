@@ -37,6 +37,7 @@ def one(key):
         row = {"gt": gt, "n": n, "seed": seed, "model": model,
                "laplace_u": float(z["logZ_laplace"]),
                "laplace_phys": lp["logZ_laplace_phys"], "laplace_trunc": lp["logZ_laplace_trunc"],
+               "laplace_trunc0": lp["logZ_laplace_trunc0"], "trunc0_prob": lp["trunc0_prob"],
                "trunc_prob": lp["trunc_prob"], "grad_term": lp["grad_term"],
                "at_zero": " ".join(a.replace("B.", "").replace("A.", "A:") for a in lp["at_zero"]),
                "is_k4": float(z["logZ_is_k4"]), "pareto_k_k4": float(z["pareto_k_k4"]),
@@ -87,7 +88,7 @@ def main() -> None:
     df.to_csv(tab / "validation_evidence.csv", index=False)
     # differences to the bridge estimate (the reference)
     show = df.copy()
-    for c in ("laplace_u", "laplace_phys", "laplace_trunc", "is_k4", "smc_internal", "bridge_k1",
+    for c in ("laplace_u", "laplace_phys", "laplace_trunc0", "laplace_trunc", "is_k4", "smc_internal", "bridge_k1",
               "bridge_k4", "bridge_nuts"):
         if c in show:
             show[c] = show[c] - show["bridge"]

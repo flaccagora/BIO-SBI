@@ -67,7 +67,12 @@ def load_run(d) -> dict | None:
         if not f.exists():
             continue
         z = np.load(f)
-        out[f"logZ_{m}"] = float(z[LOGZ_KEY])
+        lz = float(z[LOGZ_KEY])
+        out[f"{m}:fallback"] = ""
+        for alt in ("logZ_smc", "logZ_laplace"):  # bridge failed (NaN): next estimate
+            if not np.isfinite(lz) and alt in z.files and np.isfinite(float(z[alt])):
+                lz, out[f"{m}:fallback"] = float(z[alt]), alt
+        out[f"logZ_{m}"] = lz
         out[f"ll_{m}"] = float(z["ll_mle"])
         out[f"mle_{m}"] = np.asarray(z["mle_phys"])[idx]
         for k in z.files:
@@ -104,6 +109,7 @@ def main() -> None:
         for k, v in r.items():
             if ":" in k:
                 base[k] = v
+        assert np.isfinite(lbf), (r["gt"], r["n"], r["seed"])
         rows_run.append(base)
         Nf, w0 = len(r["draws_full"]), np.exp(r["logw_M0"] - r["logw_M0"].max())
         w0 /= w0.sum()
@@ -152,10 +158,11 @@ def _gt_cat(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def agg(g: pd.DataFrame) -> pd.Series:
-    out = {"runs": len(g), "rmse": np.sqrt((g["err"] ** 2).mean()), "bias": g["err"].mean()}
+    out = {"runs": len(g), "rmse": np.sqrt((g["err"] ** 2).mean()), "bias": g["err"].mean(),
+           "cov90": np.nan, "cov95": np.nan, "mean_z": np.nan, "mean_sd": np.nan}
     if g["sd"].notna().any():
-        out.update(cov90=g["cov90"].mean(), cov95=g["cov95"].mean(), mean_z=g["z"].mean(),
-                   mean_sd=g["sd"].mean())  # fmt: skip
+        out.update(cov90=g["cov90"].astype(float).mean(), cov95=g["cov95"].astype(float).mean(),
+                   mean_z=g["z"].mean(), mean_sd=g["sd"].mean())  # fmt: skip
     return pd.Series(out)
 
 
@@ -229,7 +236,7 @@ def figures(run_df: pd.DataFrame, par_df: pd.DataFrame) -> None:
     fig, axes = plt.subplots(3, 3, figsize=(9, 7.5), sharex=True, sharey=True)
     for ax, g in zip(axes.flat, gts, strict=False):
         d = run_df[run_df["gt"] == g]
-        ns = sorted(d["n"].unique())
+        ns = sorted(run_df["n"].unique())
         for p0, ls in ((0.1, ":"), (0.9, "--")):
             m = d.groupby("n")[f"P_M0_pi{p0}"].mean()
             ax.plot(m.index, m.values, ls, color="#8a8984", lw=1.2, label=f"P(M0) = {p0}, mean")
@@ -251,6 +258,26 @@ def figures(run_df: pd.DataFrame, par_df: pd.DataFrame) -> None:
     fig.tight_layout()
     fig.savefig(FIG / "pm0_vs_n.png", dpi=180)
     plt.close(fig)
+    # 1b. log Bayes factor M0 : full, all truths (symmetric log scale)
+    fig, ax = plt.subplots(figsize=(7.2, 4.2))
+    cols = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948",
+            "#52514e"]  # fmt: skip
+    for g, c in zip(gts, cols, strict=False):
+        d = run_df[run_df["gt"] == g]
+        m = d.groupby("n")["log_bf_M0_full"].mean()
+        ax.plot(m.index, m.values, "o-" if g in NO_DIV else "s--", color=c, lw=1.6, ms=4, label=g)
+    ax.axhline(0, color="#0b0b0b", lw=0.8)
+    ax.set_xscale("log", base=2)
+    ax.set_yscale("symlog", linthresh=10)
+    ns = sorted(run_df["n"].unique())
+    ax.set_xticks(ns)
+    ax.set_xticklabels([str(x) for x in ns])
+    ax.set_xlabel("clones per endpoint n")
+    ax.set_ylabel("log Bayes factor, M0 : M_full (mean of 3 datasets)")
+    ax.legend(fontsize=7, loc="center left", bbox_to_anchor=(1.01, 0.5), frameon=False)
+    fig.tight_layout()
+    fig.savefig(FIG / "log_bf_vs_n.png", dpi=180)
+    plt.close(fig)
     # 2. B.to_A: flat vs BMA vs truth
     bt = par_df[par_df["parameter"] == "B.to_A"]
     fig, axes = plt.subplots(3, 3, figsize=(9, 7.5), sharex=True)
@@ -269,7 +296,7 @@ def figures(run_df: pd.DataFrame, par_df: pd.DataFrame) -> None:
                    label="LRT-selected MLE")  # fmt: skip
         truth = bt[bt["gt"] == g]["truth"].iloc[0]
         ax.axhline(truth, color="#0b0b0b", ls="--", lw=1, label="truth")
-        ns = sorted(bt[bt["gt"] == g]["n"].unique())
+        ns = sorted(bt["n"].unique())
         ax.set_xscale("log", base=2)
         ax.set_xticks(ns)
         ax.set_xticklabels([str(x) for x in ns], rotation=45)
@@ -291,16 +318,19 @@ def figures(run_df: pd.DataFrame, par_df: pd.DataFrame) -> None:
         d = p[p["cls"] == cls]
         for meth, col, lab in (("flat", C_FLAT, "flat posterior"), ("BMA_pi0.5", C_BMA, "BMA, P(M0) = 0.5"),
                                ("M0", C_M0, "M0 alone")):
+            if meth == "M0" and "divides (T3" in cls:
+                continue  # M0 is the wrong model there (z of 10-80): left out
             e = d[d["method"] == meth].groupby("n").agg(cov=("cov95", "mean"), z=("z", "mean"))
-            axes[0, j].plot(e.index, e["cov"], "o-", color=col, lw=2, ms=4, label=lab)
-            axes[1, j].plot(e.index, e["z"], "o-", color=col, lw=2, ms=4, label=lab)
+            ls = "--" if meth == "M0" else "-"
+            axes[0, j].plot(e.index, e["cov"], "o" + ls, color=col, lw=2, ms=4, label=lab)
+            axes[1, j].plot(e.index, e["z"], "o" + ls, color=col, lw=2, ms=4, label=lab)
         axes[0, j].axhline(0.95, color="#0b0b0b", ls="--", lw=1)
         axes[1, j].axhline(0, color="#0b0b0b", ls="--", lw=1)
         axes[0, j].set_title(cls, fontsize=9)
         axes[0, j].set_ylim(-0.03, 1.03)
         for ax in axes[:, j]:
             ax.set_xscale("log", base=2)
-            ns = sorted(d["n"].unique())
+            ns = sorted(p["n"].unique())
             ax.set_xticks(ns)
             ax.set_xticklabels([str(x) for x in ns], rotation=45)
     axes[0, 0].set_ylabel("coverage of 95% interval, B.to_A")

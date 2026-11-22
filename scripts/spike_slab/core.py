@@ -566,7 +566,15 @@ def laplace_physical(face: Face, mle_phys: np.ndarray, h: float = 1e-5, n_mc: in
         ok &= Z[:, cols].sum(1) <= 1
     prob = ok.mean()
     trunc = plain + 0.5 * g0 @ shift + np.log(max(prob, 1.0 / n_mc))
+    # simpler variant: Gaussian centred at the MLE (no gradient term) times its mass inside
+    Z0 = Z - shift
+    ok0 = np.all(Z0 >= 0, axis=1)
+    for bi in range(len(face.blocks)):
+        cols = [j for j, c in enumerate(coords) if c[0] == bi]
+        ok0 &= Z0[:, cols].sum(1) <= 1
+    trunc0 = plain + np.log(max(ok0.mean(), 1.0 / n_mc))
     at0 = [face.names[i] for _bi, i, _r in coords if t[i] < 1e-6]
     return {"logZ_laplace_phys": float(plain), "logZ_laplace_trunc": float(trunc),
+            "logZ_laplace_trunc0": float(trunc0), "trunc0_prob": float(ok0.mean()),
             "trunc_prob": float(prob), "grad_term": float(0.5 * g0 @ shift),
             "H_min_eig_phys": float(ev.min()), "at_zero": at0, "ll_mle": float(ll0)}  # fmt: skip
