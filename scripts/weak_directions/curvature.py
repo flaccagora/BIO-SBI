@@ -130,11 +130,21 @@ def summary(df: pd.DataFrame) -> None:
     import matplotlib.pyplot as plt
     from analyse_fisher import TRUTH_SHORT, _style
 
+    from common import truth
+
+    z = np.load(OUT / "fisher_eigen.npz")
     rows = []
     for (gt, k), g in df.groupby(["truth", "k"], sort=False):
         g = g.set_index("t_sd")
+        # where the straight line from the truth leaves the simplex (in predicted sd at N)
+        v, lam, p = z[f"{gt}_V"][:, k - 1], z[f"{gt}_lam"][k - 1], truth(gt)
+        sd = 1 / np.sqrt(PRIOR_PREC * (1 + N * lam))
+        with np.errstate(divide="ignore"):
+            up = np.min(np.where(v < 0, p / -v, np.inf)) / sd
+            dn = np.min(np.where(v > 0, p / v, np.inf)) / sd
         p0 = g.loc[0, "profile"]
-        r = {"truth": gt, "k": k, "lam": g.lam.iloc[0]}
+        r = {"truth": gt, "k": k, "lam": g.lam.iloc[0], "sd_prob_units": sd,
+             "line_exit_plus_sd": up, "line_exit_minus_sd": dn}
         for a in (1, 2, 3):
             r[f"quad_even_{a}sd"] = g.loc[a, "quad"]
             r[f"line_even_{a}sd"] = 0.5 * (g.loc[a, "line"] + g.loc[-a, "line"])
@@ -143,6 +153,9 @@ def summary(df: pd.DataFrame) -> None:
         r["profile_over_line_2sd"] = r["profile_even_2sd"] / r["line_even_2sd"]
         r["line_over_quad_2sd"] = r["line_even_2sd"] / r["quad_even_2sd"]
         r["max_shift_3sd"] = float(g.loc[[-3, 3], "shift_norm"].max())
+        # bending: how far the profile path leaves the straight line per unit step
+        r["bend_3sd"] = r["max_shift_3sd"] / (3 * sd)
+        r["bend_1sd"] = float(g.loc[[-1, 1], "shift_norm"].max() - g.loc[0, "shift_norm"]) / sd
         rows.append(r)
     s = pd.DataFrame(rows)
     s.to_csv(TAB / "curvature_summary.csv", index=False)

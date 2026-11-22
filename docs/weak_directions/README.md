@@ -11,13 +11,13 @@ them against the XG2 NUTS posteriors, and asks which experimental design would b
 * **The spectrum has three tiers in every truth.** Two stiff directions are informed with less
   than one clone per endpoint: the average cell's growth (death vs division) and the
   composition of its offspring (AA vs BB, A vs B single daughter). Two to four intermediate
-  directions are informed by 2 to 35 clones per endpoint: the average cell's division
+  directions are informed by 1 to 35 clones per endpoint: the average cell's division
   symmetry (AB vs AA + BB) and its persistence vs death plus division. Then comes a block of
-  **4 to 5 weak directions**, informed only at 1/λ = **50 to 3000 clones per endpoint**.
+  **4 to 5 weak directions**, informed only at 1/λ = **50 to 3000 clones per endpoint**
+  (T5: 12–96).
 * **The weak block is "who does it", not "what happens".** Per truth, 74–100% of the
   weight of the 4 weakest eigenvectors lies in one 5-dimensional subspace (a random
-  vector would put 50% there). In
-  that subspace an outcome moves between A parents and B parents while the
+  vector would put 50% there). In that subspace an outcome moves between A parents and B parents while the
   population-average outcome distribution u_A p_A + u_B p_B stays fixed (u = stable type
   composition). The clone counts show how many A and B cells are produced. They show poorly
   *which type of parent* produced them. The five named "parent swaps", ranked by the clones
@@ -52,7 +52,7 @@ them against the XG2 NUTS posteriors, and asks which experimental design would b
   swaps. With the same total number of clones, the weakest λ improves by these factors:
   adding generations 1/2/3 ×2–17; A- and B-founded clones at 1/2/3/4 ×4–20; 4/6/8/10 plus
   B-founded clones at 1/2/3 ×3–12; B-founded clones at 4/6/8/10 ×2–5 (T1–T4 only, none for
-  the P truths); late endpoints only (8/10) ×0.04–0.2.
+  the P truths); late endpoints only (8/10) ×0.03–0.23.
 * **The posteriors follow the Fisher picture.** The posterior's top-4 principal subspace
   overlaps the Fisher weak-4 subspace 0.67–0.99 (median 0.89 at n ≥ 512; random 0.40).
   Variances along w1–w4 are 0.6–1.4 × the Gaussian prediction 1/(1 + nλ) (interquartile
@@ -60,6 +60,11 @@ them against the XG2 NUTS posteriors, and asks which experimental design would b
   into B's divisions are truncated (ratio ≈ 0.4, as for a half-normal, 0.36). T1 at
   n ≤ 1024 has its "B divides" branch (ratio 3–6, 42% of draws with B division mass > 0.15
   at 1024). T3 has a two-branch ridge, P3 a banana-shaped one.
+* **Straight but long.** Where the straight line stays feasible, the likelihood along a
+  weak eigenvector follows the Fisher parabola. But at n = 512 a step of 0.3–1.6 posterior
+  sd (0 for T1/T2/T4) along w1/w2 already leaves the simplex. The profile ridge then bends
+  along the faces (it moves 0.4–1.9× as far sideways as along v by ±3 sd). The faces, not
+  curvature of the likelihood, shape the weak-direction posteriors.
 * **Boundary truths (T1, T2, T4, B divisions = 0):** the information at the face is finite
   and continuous. The one-sided values equal those at ε = 0.001 to < 2%, and at ε = 0.01
   to within 10–15%. The asymptotics are not Gaussian along the 16–70% of each weak vector
@@ -376,7 +381,33 @@ moves some variance ratios, e.g. T1 at n = 256 from 6.2 to 3.5.
 
 ## 9. Straight direction or curved ridge?
 
-CURVATURE_PLACEHOLDER
+![curvature](figures/curvature.png)
+
+One dataset per truth (n = 512, dataset 0) and the two weakest eigenvectors
+(`tables/curvature*.csv`, `scripts/weak_directions/curvature.py`). The exact log likelihood
+is evaluated along the straight line truth + t·v and profiled over the other 9 tangent
+directions (SLSQP with the exact gradient, p ≥ 1e-9). It is centred at the truth, because at
+n = 512 15 of 27 MLEs sit on a face the truth is not on (26/27 at n = 128;
+`tables/mle_faces.md`). The grey parabola is the Fisher prediction.
+
+* **The simplex cuts the weak directions before curvature matters.** One posterior sd at
+  n = 512 along w1/w2 is 0.05–0.14 in probability units. The straight line from the truth
+  leaves the simplex after 0.3–1.6 sd on at least one side for every interior truth, and
+  immediately (0 sd) on both sides for T1/T2/T4: their weak vectors load on B's zero
+  divisions with both signs. The only direction with a feasible ±3 sd line is T5 w2.
+* **Where the line exists, it follows the parabola.** T5 w2: line/quadratic 1.16 at
+  ±2 sd, profile/line 0.9. T3 w2, P1 w2 and T5 w1 behave the same within their feasible
+  range. Locally the weak directions are straight.
+* **The profile path bends.** To stay inside the simplex the profile moves 0.4–1.9 times
+  as far in the other 9 directions as along v at ±3 sd (`bend_3sd`), and ≈ 1 already at
+  ±1 sd for T1 w1, T2 w2, P3 w1/w2. Its walls (the cliffs in the figure) are faces of the
+  simplex, where some outcome needed by the observed counts reaches 0. P3's profile is
+  flatter than the parabola: it rises toward the posterior's banana, matching the
+  posterior shape in §7.
+* Conclusion: the weak directions are straight locally, but they are long. At the XG2 sizes
+  a ±2 sd excursion reaches the boundary of the simplex, so the posterior along them is
+  shaped by the faces (truncation, curved ridges, branches), not by a Gaussian. The
+  Gaussian 1/(nλ) is right for the *scale*, which §7 confirms.
 
 ## Reproduce
 
@@ -384,7 +415,7 @@ CURVATURE_PLACEHOLDER
 uv run python scripts/weak_directions/compute_info.py        # info per generation, ~10 s
 uv run python scripts/weak_directions/analyse_fisher.py      # tables + figures a-c
 uv run python scripts/weak_directions/posterior_alignment.py # figure d (~5 min)
-uv run python scripts/weak_directions/curvature.py           # section 9 (~1 h, 2 threads)
+uv run python scripts/weak_directions/curvature.py           # section 9 (~10 min, 2 threads)
 uv run python scripts/weak_directions/mle_faces.py           # MLEs on simplex faces
 ```
 
