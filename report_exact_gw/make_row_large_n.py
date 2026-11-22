@@ -34,6 +34,39 @@ OUT = {"death": "dies", "persist": "persists", "to_A": "→A", "to_B": "→B",
 ORDER = ["death", "persist", "to_A", "to_B", "div_AA", "div_AB", "div_BB"]
 
 
+def first_stable(g: pd.DataFrame, col: str, thr: float) -> float:
+    """Smallest n from which ``col <= thr`` holds at that n and every larger n (inf: never)."""
+    g = g.sort_values("n")
+    ok, ns = (g[col] <= thr).to_numpy(), g["n"].to_numpy()
+    for i in range(len(ns)):
+        if ok[i:].all():
+            return float(ns[i])
+    return float("inf")
+
+
+def convergence_table(tab: pd.DataFrame, thr: float = 0.05) -> None:
+    """n from which the RMSE over the 3 datasets stays <= thr: posterior mean / MLE."""
+    rows, lines = [], []
+    truths = [t for t in TRUTHS if t in set(tab["gt"])]
+    for row in ("A", "B"):
+        params = sorted({p for p in tab["parameter"] if p.startswith(row + ".")},
+                        key=lambda p: ORDER.index(p.split(".")[1]))  # fmt: skip
+        for p in params:
+            cells = []
+            for gt in truths:
+                g = tab[(tab["gt"] == gt) & (tab["parameter"] == p)]
+                a, b = first_stable(g, "rmse_post", thr), first_stable(g, "rmse_mle", thr)
+                rows.append({"gt": gt, "parameter": p, "n_post": a, "n_mle": b})
+                fmt = lambda v: "--" if np.isinf(v) else str(int(v))  # noqa: E731
+                cells.append(f"{fmt(a)} / {fmt(b)}")
+            label = (row + " " + OUT[p.split(".")[1]]).replace(" →", r"$\to$")
+            lines.append(" & ".join([label, *cells]) + r" \\")
+        if row == "A":
+            lines.append(r"\midrule")
+    pd.DataFrame(rows).to_csv(TAB / "row_convergence.csv", index=False)
+    (TAB / "row_convergence.tex").write_text("\n".join(lines) + "\n")
+
+
 def main(results: Path) -> None:
     xg2 = results / "exact_gw" / "data_size"
     d = pd.read_csv(xg2 / "xg2_runs.csv")
@@ -52,6 +85,7 @@ def main(results: Path) -> None:
            .reset_index())  # fmt: skip
     TAB.mkdir(parents=True, exist_ok=True)
     tab.to_csv(TAB / "rows_large_n.csv", index=False)
+    convergence_table(tab)
     truths = [t for t in TRUTHS if t in set(tab["gt"])]
     ns = sorted(tab["n"].unique())
     for row in ("B", "A"):
