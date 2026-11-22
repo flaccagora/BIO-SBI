@@ -458,8 +458,27 @@ Early endpoints cost information on the stiff directions (growth and composition
 \section{Follow-ups: results}\label{sec:fu}
 {\sloppy All follow-up runs use the adjoint kernel and the XG2 datasets (nested, and checked against each run's stored \texttt{reference.npz}). The tables of this section are built by \code{report_exact_gw/make_followups.py}.\par}
 
-\subsection{Where B's row converges: $n$ = 2048 and 4096 (T1--T4)}\label{sec:fu-largen}
-\fig{btoa_large_n}{0.92}{\BA{} from 128 to 4096 clones per endpoint for the four truths whose B row had not converged at 1024: posterior mean $\pm$ sd per dataset (blue) and MLE (orange); dashed = truth. Runs: \texttt{data\_size/<truth>/n2048\_s*}, \texttt{n4096\_s*}.}
+\subsection{Where each parameter converges: $n$ up to 4096, all truths}\label{sec:fu-largen}
+All nine truths were extended to $n$ = 2048 and 4096 clones per endpoint (T1--T4 first, the prior draws and T5 later; datasets nested, 162 runs in all). Three of the new runs mixed badly with the default 4 $\times$ 500 draws and were rerun with another sampler seed and the ESS/$\hat R$ stopping rule (\S\ref{sec:fu-sampler}): P2 at $n$ = 4096 (max $\hat R$ 10.6 $\to$ 1.011), P4 at 4096 (1.30 $\to$ 1.029) and P3 at 2048 (1.17 $\to$ 1.012); the originals are kept in \res{results/exact_gw/data_size_reruns/large_n/}. In the P2 run one of the four chains had settled in a different solution --- A cells almost never die (0.01 instead of 0.29) and B cells die instead (0.38 instead of 0.03) --- about 10 nats below the others: the ``which type dies'' parent swap of \S\ref{sec:weakdirs}, a local optimum NUTS cannot leave. Nine further large-$n$ runs have max $\hat R$ 1.05--1.09 (P truths and T5); their means are used as they are.
+\fig{row_B_large_n}{1.0}{B's six probabilities against $n$ = 128--4096 for every truth (columns): posterior mean $\pm$ posterior sd (mean over the 3 datasets; blue), MLE (mean over the datasets; orange), truth (dashed).}
+\begin{center}\scriptsize\setlength{\tabcolsep}{2.2pt}
+\begin{tabular}{@{}lccccccccc@{}}\toprule
+ & T1 & T2 & T3 & T4 & T5 & P1 & P2 & P3 & P4 \\\midrule
+\tabin{tables/row_convergence.tex}
+\bottomrule
+\end{tabular}
+
+Clones per endpoint from which the RMSE over the 3 datasets stays $\le$ 0.05 at every larger $n$: posterior mean / MLE; -- = not by 4096. Script: \code{report_exact_gw/make_row_large_n.py}.
+\end{center}
+\begin{itemize}
+\item \textbf{``B's row converges'' is not one number.} With the 0.05 criterion, \BA{} converges by $n$ = 512--2048 for the prior draws but needs 2048--4096 for T1, T3, T4 and does not converge for T2 by 4096. B's division types for T1--T4 reach their true value 0 slowly (B$\to$AA at 512--4096), always from above.
+\item \textbf{For the prior draws the slow parameters are not \BA}: B persists (P1, P3), B dies (P4) and B$\to$AB (P1, P4) are still off by more than 0.05 at $n$ = 4096 (e.g.\ P3 B persists 0.08 against 0.035; P4 B dies 0.16 against 0.06). These are the parent-swap directions that \S\ref{sec:weakdirs} predicts need 1\,500--3\,000 clones per endpoint for P1, P3, P4.
+\item \textbf{The MLE is faster where B never divides and slower for the prior draws}: for \BA{} it converges by 512--2048 for T1--T4, but needs 2048--4096 for P1, P3, P4 (estimates jump between faces of the simplex at small $n$).
+\item \textbf{A's row} converges by 128--2048 for the curated truths (A's death is the slowest) and from 128 for T5; for the prior draws some entries need 4096 or more (A$\to$AB for P1, P3, P4; A$\to$B for P1; A$\to$BB for P3) --- the A side of the same parent swaps.
+\item \textbf{T5 (large clones)} has every parameter within 0.05 from $n$ = 128.
+\end{itemize}
+\fig{row_A_large_n}{1.0}{The same for A's six probabilities.}
+\textbf{\BA{} for T1--T4 in detail} (the truths whose \BA{} is biased at 1024):
 \begin{center}\footnotesize\setlength{\tabcolsep}{3pt}
 \begin{tabular}{@{}lrrlrrrrr@{}}\toprule
 truth & $n$ & \BA & post.\ mean (sd) & mean $z$ & 90\% cov. & RMSE post. & RMSE MLE & max $\hat R$ \\\midrule
@@ -749,7 +768,7 @@ On the CRC0322 2D counts (days 6 and 10 taken as generations 6 and 10; 165 and 1
 \item With all transitions free, 1024 clones per endpoint on generations 4--10 are \emph{not} enough for B's row when \BA{} is large: the posterior is biased toward ``B is lost'' by 1--2 sd and prior-sensitive. A's row and the growth/composition summaries converge from 256--512 clones per endpoint.
 \item The answer depends on the truth: large clones (T5) and truths near the prior's bulk converge fast; the reference biology (B switches back, never divides) converges slowest.
 \item The limiting factor is information along two directions --- switch back vs loss of B, and which parent made a mixed division --- combined, for the first, with the flat prior's volume. More NUTS budget cannot change it (Monte Carlo error $\approx$\,0.05 sd).
-\item \textbf{Follow-ups} (\S\ref{sec:fu}): B's switch back reaches an absolute error below 0.05 at 2048--4096 clones per endpoint (T2 not by 4096), but where B never divides the posterior stays 1--2 sd low at every $n$. A flat prior on \BA{} removes most of that bias for large \BA{} and adds some for small \BA: at small $n$ the prior decides. Some B-row posteriors have two branches whose weights NUTS cannot be trusted to get right (T1: 17\% on ``B divides'' by SMC evidence); report branch masses, not just converged-looking chains. No ``uninformative'' prior is neutral about \BA{} at these $n$: under Dirichlet(\textonehalf) and the exact Jeffreys prior the bias remains (\S\ref{sec:fu-jeffreys}), so report prior-free quantities or a range over priors.
+\item \textbf{Follow-ups} (\S\ref{sec:fu}): B's switch back reaches an absolute error below 0.05 at 2048--4096 clones per endpoint for T1, T3, T4 (T2 not by 4096) and at 512--2048 for the prior draws, whose slow parameters are instead B's death, persistence and mixed divisions (not converged by 4096 for P1, P3, P4), but where B never divides the posterior stays 1--2 sd low at every $n$. A flat prior on \BA{} removes most of that bias for large \BA{} and adds some for small \BA: at small $n$ the prior decides. Some B-row posteriors have two branches whose weights NUTS cannot be trusted to get right (T1: 17\% on ``B divides'' by SMC evidence); report branch masses, not just converged-looking chains. No ``uninformative'' prior is neutral about \BA{} at these $n$: under Dirichlet(\textonehalf) and the exact Jeffreys prior the bias remains (\S\ref{sec:fu-jeffreys}), so report prior-free quantities or a range over priors.
 \item \textbf{The next experiment should observe early and found some clones with B cells} (\S\ref{sec:design}): the robust optimal protocol ($\tfrac38$ A at generation 2, $\tfrac14$ B at 1, $\tfrac14$ B at 2, $\tfrac18$ A at 10) needs 51--440 detected clones for a \BA{} sd of 0.05, against 700--21\,700 for generations 4--10 with A founders, provided early clones can be scored at a known number of divisions and typing errors are controlled.
 \item \textbf{Whether B gives rise to A at all} is testable from endpoint counts with very small effects (\S\ref{sec:dediff}), but the test is dominated by cell-typing errors: the KRT20$\to$LGR5 mis-scoring rate must be measured and modelled, or the question settled directly with organoids founded by KRT20$^+$ cells.
 \end{enumerate}

@@ -117,7 +117,9 @@ def load_run(path: Path) -> dict | None:
     priors = OmegaConf.to_container(cfg.priors)
     ex = metrics.get("exact_gw") or {}
     return {
-        "path": str(path), "gt": str(cfg.gt), "seed": int(cfg.seed),
+        # dataset index: data_seed when set (reruns with another sampler seed), else seed
+        "path": str(path), "gt": str(cfg.gt),
+        "seed": int(cfg.data_seed if cfg.get("data_seed") is not None else cfg.seed),
         "n": int(cfg.design.clones), "prior": str(cfg.prior), "priors": priors,
         "free": free, "truth": dict(zip(rec["parameter"], rec["truth"])), "draws": draws,
         "rhat": ex.get("max_rhat", np.nan), "divergences": ex.get("divergences", np.nan),
