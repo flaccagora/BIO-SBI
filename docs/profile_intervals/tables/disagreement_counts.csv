@@ -1,0 +1,11 @@
+arm,level,arm only,profile only
+dir_half,90,108,57
+dir_half,95,52,21
+flat,90,114,135
+flat,95,61,88
+flat_btoa,90,99,95
+flat_btoa,95,49,57
+jeffreys,90,82,82
+jeffreys,95,30,42
+wald,90,9,132
+wald,95,8,145
