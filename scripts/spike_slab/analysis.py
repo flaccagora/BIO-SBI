@@ -53,6 +53,15 @@ def chibar3_p(T: float) -> float:
     return float(3 / 8 * chi2.sf(T, 1) + 3 / 8 * chi2.sf(T, 2) + 1 / 8 * chi2.sf(T, 3))
 
 
+def _logz(z) -> tuple[float, str]:
+    """Main evidence estimate; if the bridge failed (NaN), SMC's, then Laplace."""
+    lz, used = float(z[LOGZ_KEY]), ""
+    for alt in ("logZ_smc", "logZ_laplace"):
+        if not np.isfinite(lz) and alt in z.files and np.isfinite(float(z[alt])):
+            lz, used = float(z[alt]), alt
+    return lz, used
+
+
 def load_run(d) -> dict | None:
     meta = json.loads((d / "meta.json").read_text())
     if not all((d / f"{m}.npz").exists() for m in ("full", "M0")):
@@ -67,11 +76,7 @@ def load_run(d) -> dict | None:
         if not f.exists():
             continue
         z = np.load(f)
-        lz = float(z[LOGZ_KEY])
-        out[f"{m}:fallback"] = ""
-        for alt in ("logZ_smc", "logZ_laplace"):  # bridge failed (NaN): next estimate
-            if not np.isfinite(lz) and alt in z.files and np.isfinite(float(z[alt])):
-                lz, out[f"{m}:fallback"] = float(z[alt]), alt
+        lz, out[f"{m}:fallback"] = _logz(z)
         out[f"logZ_{m}"] = lz
         out[f"ll_{m}"] = float(z["ll_mle"])
         out[f"mle_{m}"] = np.asarray(z["mle_phys"])[idx]
@@ -354,7 +359,7 @@ def faces8(run_df: pd.DataFrame) -> None:
         names = meta["names"]
         idx = [names.index(n) for n in FREE12]
         truth = np.array(meta["truth"])[idx]
-        lz = np.array([float(np.load(d / f"{m}.npz")[LOGZ_KEY]) for m in FACES8])
+        lz = np.array([_logz(np.load(d / f"{m}.npz"))[0] for m in FACES8])
         pm = np.exp(lz - lz.max())
         pm /= pm.sum()
         Ds, Ws = [], []

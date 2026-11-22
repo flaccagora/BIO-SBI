@@ -265,7 +265,75 @@ in the tables (largest P(M0 | y) with P(M0) = 0.9: 0.034, P4 n 128 seed 1).
 
 ### Eight faces
 
-FILL_FACES
+Uniform prior 1/8 on each subset of {B.div_AA, B.div_AB, B.div_BB} pinned at 0 (M_full
+and M0 included), seed 0 only, n 128-1024, all 9 truths (36 runs). The six intermediate
+faces were run at half the budget (SMC 10 000 evaluations, 1000 fresh draws), so their
+evidences are less precise (about 0.3-0.5 nats). `tables/faces8_per_run.md`.
+
+| gt       |    n |   P(M_full) |   P(div_AA=0) |   P(div_AB=0) |   P(div_BB=0) |   P(M0), 8 faces |   P(M0), 2 models |   B.to_A BMA8 mean |   B.to_A z |
+|:---------|-----:|------------:|--------------:|--------------:|--------------:|-----------------:|------------------:|-------------------:|-----------:|
+| T1_ref   |  128 |       0.212 |         0.579 |         0.512 |         0.593 |            0.297 |             0.584 |              0.531 |     -1.101 |
+| T1_ref   |  256 |       0.22  |         0.581 |         0.639 |         0.625 |            0.377 |             0.632 |              0.541 |     -0.855 |
+| T1_ref   |  512 |       0.023 |         0.678 |         0.855 |         0.86  |            0.531 |             0.958 |              0.758 |     -0.591 |
+| T1_ref   | 1024 |       0.034 |         0.702 |         0.914 |         0.491 |            0.356 |             0.912 |              0.754 |     -0.753 |
+| T2_toA05 |  128 |       0.145 |         0.306 |         0.691 |         0.588 |            0.17  |             0.54  |              0.279 |     -1.632 |
+| T2_toA05 |  256 |       0.087 |         0.553 |         0.753 |         0.644 |            0.33  |             0.792 |              0.374 |     -1.226 |
+| T2_toA05 |  512 |       0.016 |         0.779 |         0.851 |         0.884 |            0.606 |             0.974 |              0.469 |     -0.452 |
+| T2_toA05 | 1024 |       0.015 |         0.852 |         0.751 |         0.836 |            0.548 |             0.973 |              0.491 |     -0.183 |
+| T4_slowA |  128 |       0.289 |         0.517 |         0.466 |         0.532 |            0.249 |             0.463 |              0.483 |     -1.196 |
+| T4_slowA |  256 |       0.027 |         0.867 |         0.792 |         0.732 |            0.534 |             0.951 |              0.723 |     -1.18  |
+| T4_slowA |  512 |       0.003 |         0.932 |         0.867 |         0.887 |            0.722 |             0.996 |              0.767 |     -0.868 |
+| T4_slowA | 1024 |       0.01  |         0.945 |         0.636 |         0.726 |            0.421 |             0.977 |              0.758 |     -1.2   |
+| T3_Bdiv  |  128 |       0.581 |         0.062 |         0.303 |         0.201 |            0     |             0     |              0.214 |     -2.966 |
+| T3_Bdiv  |  256 |       0.656 |         0.115 |         0.224 |         0.123 |            0     |             0     |              0.157 |     -2.65  |
+| T3_Bdiv  |  512 |       0.678 |         0.132 |         0.283 |         0.006 |            0     |             0     |              0.284 |     -1.965 |
+| T3_Bdiv  | 1024 |       0.438 |         0.493 |         0.405 |         0     |            0     |             0     |              0.451 |     -1.063 |
+| T5_C7    |  128 |       0.671 |         0.151 |         0.196 |         0     |            0     |             0     |              0.088 |     -0.279 |
+| T5_C7    |  256 |       0.746 |         0.033 |         0.22  |         0     |            0     |             0     |              0.068 |     -1.008 |
+| T5_C7    |  512 |       0.476 |         0.018 |         0.506 |         0     |            0     |             0     |              0.12  |      0.85  |
+| T5_C7    | 1024 |       0.815 |         0     |         0.185 |         0     |            0     |             0     |              0.101 |      0.05  |
+| P1       |  128 |       0.53  |         0.078 |         0.048 |         0.442 |            0     |             0     |              0.059 |     -0.976 |
+| P1       |  256 |       0.744 |         0.122 |         0.035 |         0.196 |            0     |             0     |              0.089 |     -0.347 |
+| P1       |  512 |       0.644 |         0.011 |         0.023 |         0.346 |            0     |             0     |              0.042 |     -2.244 |
+| P1       | 1024 |       0.744 |         0     |         0.092 |         0.197 |            0     |             0     |              0.066 |     -1.21  |
+| P2       |  128 |       0.541 |         0.063 |         0.423 |         0.012 |            0     |             0     |              0.193 |      0.749 |
+| P2       |  256 |       0.663 |         0.209 |         0.192 |         0     |            0     |             0     |              0.302 |      1.618 |
+| P2       |  512 |       0.561 |         0.038 |         0.42  |         0     |            0     |             0     |              0.258 |      1.625 |
+| P2       | 1024 |       0.722 |         0     |         0.278 |         0     |            0     |             0     |              0.213 |      1.885 |
+| P3       |  128 |       0.844 |         0.07  |         0.041 |         0.092 |            0     |             0     |              0.271 |     -0.009 |
+| P3       |  256 |       0.775 |         0.15  |         0.035 |         0.076 |            0     |             0     |              0.17  |     -1.467 |
+| P3       |  512 |       0.874 |         0.014 |         0.094 |         0.02  |            0     |             0     |              0.223 |     -1.046 |
+| P3       | 1024 |       0.862 |         0.029 |         0.006 |         0.106 |            0     |             0     |              0.229 |     -1.014 |
+| P4       |  128 |       0.412 |         0.173 |         0.168 |         0.539 |            0     |             0     |              0.173 |      0.615 |
+| P4       |  256 |       0.383 |         0.155 |         0.196 |         0.562 |            0     |             0     |              0.163 |      0.621 |
+| P4       |  512 |       0.339 |         0.239 |         0.163 |         0.619 |            0     |             0     |              0.128 |      0.185 |
+| P4       | 1024 |       0.356 |         0.279 |         0.119 |         0.608 |            0     |             0     |              0.133 |      0.382 |
+
+True B divisions of the dividing truths:
+
+| gt      |   B.div_AA_truth |   B.div_AB_truth |   B.div_BB_truth |
+|:--------|-----------------:|-----------------:|-----------------:|
+| T3_Bdiv |            0.02  |            0.05  |            0.15  |
+| T5_C7   |            0.05  |            0.05  |            0.67  |
+| P1      |            0.262 |            0.266 |            0.024 |
+| P2      |            0.35  |            0.004 |            0.358 |
+| P3      |            0.195 |            0.334 |            0.083 |
+| P4      |            0.175 |            0.506 |            0.018 |
+
+* **For the no-division truths the eight-face prior dilutes the gain.** M_full itself is
+  rejected (P below 0.035 from n = 512, as with two models), but M0's 1/8 prior share
+  competes with the six intermediate faces, which still allow one or two B divisions near
+  0 and are therefore still truncated at a boundary. P(M0 | y) is 0.17-0.72 (two-model:
+  0.46-0.996), and B.to_A's z is -0.2 ... -1.2 at n 512-1024, against -1.0 ... +0.5 for
+  the two-model BMA and -1.3 ... -2.0 for the flat posterior on the same six runs. The
+  marginal probability that each single division is zero is 0.5-0.95.
+* **For the dividing truths it finds small rates**, which two models cannot express:
+  P(B.div_AB = 0) = 0.19-0.42 for P2 (true 0.004), P(B.div_BB = 0) = 0.20-0.62 for P1 and
+  P4 (true 0.018-0.024), P(B.div_AA = 0) = 0.49 for T3 at n 1024 (true 0.02). These are
+  near-zero rates that the data cannot tell from zero. B.to_A barely changes: P2's z is
+  +0.7 ... +1.9 with eight faces and +0.7 ... +1.85 under the flat posterior.
+* So the prior over models matters: put the point mass on the structural hypothesis of
+  interest ("B never divides", 1/2), not spread uniformly over all faces.
 
 ### No dedifferentiation
 
