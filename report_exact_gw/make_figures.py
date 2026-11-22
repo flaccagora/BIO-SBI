@@ -345,13 +345,19 @@ def fig_prior(runs):
 def fig_p3_ridge():
     fig, axes = plt.subplots(1, 2, figsize=(6.4, 2.8))
     truth = {"A.div_AB": 0.212, "B.div_AB": 0.334, "A.div_BB": 0.396, "B.div_BB": 0.083}
+    mles = {}
     for s, col in zip((0, 1, 2), (BLUE, ORANGE, AQUA), strict=True):
-        post = pd.read_csv(XG2 / "P3" / f"n1024_s{s}" / "posterior_samples.csv.gz")
+        run = XG2 / "P3" / f"n1024_s{s}"
+        post = pd.read_csv(run / "posterior_samples.csv.gz")
         sub = post.sample(600, random_state=0)
+        mles[s] = (json.loads((run / "mle.json").read_text())["mle"], col)
         for ax, (x, y) in zip(axes, (("A.div_AB", "B.div_AB"), ("A.div_BB", "B.div_BB")), strict=True):
             ax.scatter(sub[x], sub[y], s=3, color=col, alpha=0.35, lw=0,
                        label=f"dataset {s}")  # fmt: skip
     for ax, (x, y) in zip(axes, (("A.div_AB", "B.div_AB"), ("A.div_BB", "B.div_BB")), strict=True):
+        for s, (m, col) in mles.items():
+            ax.plot(m[x], m[y], "D", color=col, mec=INK, mew=0.8, ms=5.5,
+                    label="MLE (per dataset)" if s == 0 else None)  # fmt: skip
         ax.plot(truth[x], truth[y], "*", color=INK, ms=7, label="truth")
         ax.set_xlabel(pname(x))
         ax.set_ylabel(pname(y))
