@@ -9,7 +9,7 @@
 \usepackage{amsmath,amssymb}
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta,positioning}
-\graphicspath{{../report_exact_gw/figures/}{../docs/weak_directions/figures/}{../docs/spike_slab/figures/}{../docs/dediff_test/figures/}{../docs/optimal_design/figures/}{../docs/jeffreys/figures/}{../docs/profile_intervals/figures/}{../docs/misspecification/figures/}{figures/}}
+\graphicspath{{../report_exact_gw/figures/}{../docs/weak_directions/figures/}{../docs/spike_slab/figures/}{../docs/dediff_test/figures/}{../docs/optimal_design/figures/}{../docs/jeffreys/figures/}{../docs/profile_intervals/figures/}{../docs/misspecification/figures/}{../docs/free_founder/figures/}{figures/}}
 
 % ------------------------------------------------------------------ look
 \definecolor{cblue}{HTML}{2A78D6}
@@ -592,6 +592,35 @@ growth slows after generation 5 & 0.37 & $-6.7\%$ & 0.52 & 14--19\% & 78\% \\\bo
 \end{columns}
 \end{frame}
 
+\begin{frame}{Letting the model not know the progenitor}
+\centering
+\includegraphics[width=0.80\textwidth]{b_to_a.png}
+
+{\tiny \BA{}, posterior mean and 90\% interval, $n$ = 512. Free: founder type $p_A$ and doublet fraction $\pi_2$ (uniform priors), each clone's progenitor summed out. F70: 30\% B founders; D15A: 15\% doublets; D15mix: both.}
+
+\smallskip
+\begin{columns}[T]
+\begin{column}{0.47\textwidth}
+{\scriptsize\setlength{\tabcolsep}{2.5pt}
+\begin{tabular}{@{}lrrc@{}}\toprule
+ & \BA & worst & covered (of 9) \\
+data, model & bias & $|z|$ & \BA{} / $m_{BA}$ / $\rho$ \\\midrule
+70/30, all-A model & $-0.24$ & \alert{38.6} & 5 / 6 / 5 \\
+70/30, $p_A$ free & $-0.09$ & 2.8 & 5 / 9 / 7 \\
++ doublets, $p_A$, $\pi_2$ free & $-0.08$ & 2.4 & 7 / 9 / 9 \\\bottomrule
+\end{tabular}}
+\end{column}
+\begin{column}{0.51\textwidth}
+\begin{itemize}\scriptsize
+\item \textbf{no longer confidently wrong}: T1 \BA{} 0.02 $\pm$ 0.02 $\to$ \textbf{0.52 [0.36, 0.69]} (truth 0.80)
+\item $p_A$ is \textbf{barely learnable} (a parent swap); doublets are identified
+\item cost: \BA{} for T1--T4 stays 0.15--0.35 low
+\item[$\Rightarrow$] counts cannot pin \BA{} down: \textbf{record or sort the founder at seeding}
+\end{itemize}
+\end{column}
+\end{columns}
+\end{frame}
+
 \begin{frame}{The dedifferentiation test is the most fragile result}
 \centering
 \includegraphics[width=0.70\textwidth]{dediff_fpr.png}
@@ -898,6 +927,20 @@ MLE of LRT-selected model & 0.040 & --- & --- \\\bottomrule
 \includegraphics[width=0.90\textwidth]{detection_power.png}
 
 {\small Goodness-of-fit test (grey) and likelihood-ratio test against the extended model (blue), $n$ = 512. ``base'': false-alarm rate.}
+\end{frame}
+
+\begin{frame}{Backup: all five parent swaps ($n$ = 1024)}
+\centering
+\includegraphics[height=0.76\textheight]{swap_ridges.pdf}
+
+{\scriptsize Same outcome for A parents ($x$) vs B parents ($y$): draws of 3 datasets, MLEs (diamonds), truth (star); dashed: constant average-cell rate.}
+\end{frame}
+
+\begin{frame}{Backup: progenitor posteriors (free founder model)}
+\centering
+\includegraphics[height=0.76\textheight]{founder_posteriors.png}
+
+{\scriptsize $p_A$ (left) barely moves from the prior for P1--P4; doublet fraction $\pi_2$ (right) is identified, and stays at 0.005 on single-founder data. 20 of 41 runs mixed poorly: indicative.}
 \end{frame}
 
 \begin{frame}{Backup: sampler cost}
