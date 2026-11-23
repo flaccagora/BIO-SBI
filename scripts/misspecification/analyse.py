@@ -247,6 +247,9 @@ def main():
             r["estimated: max |bias| B.to_A"] = x.iloc[0]["absbias_B.to_A_max"]
         main_rows.append(r)
     main = pd.DataFrame(main_rows)
+    mae = mae_all12(fits).groupby("scen")["mae_all12"].agg(["mean", "max"])
+    main.insert(3, "MAE all 12 (mean over truths)", main["scenario"].map(mae["mean"]))
+    main.insert(4, "MAE all 12 (worst truth)", main["scenario"].map(mae["max"]))
     md(main, "scenario_table")
     md(summ, "per_scenario_all")
     # extended parameter estimates
@@ -290,12 +293,20 @@ def heat(ax, M, rows, cols, fmt, cmap, vmax, title):
     return im
 
 
+def mae_all12(fits: pd.DataFrame) -> pd.DataFrame:
+    """Standard-model MLE: |MLE - truth| averaged over the 12 probabilities and the datasets."""
+    f = fits[fits.model == "std"].copy()
+    err = np.mean([np.abs(f[p] - f["t_" + p]) for p in C.NAMES], axis=0)
+    f["mae_all12"] = err
+    return f.groupby(["scen", "gt"], as_index=False)["mae_all12"].mean()
+
+
 def figures(per, dd, summ, ext, fits, p_crit):
     std = per[per.model == "std"]
     scen = [s for s in SCEN if s in set(std.scen)]
     gts = C.GTS
-    fig, axes = plt.subplots(1, 3, figsize=(16, 6.5), constrained_layout=True)
-    for ax, (col, fmt, vmax, title) in zip(axes, [
+    fig, axes = plt.subplots(1, 4, figsize=(21, 6.5), constrained_layout=True)
+    for ax, (col, fmt, vmax, title) in zip(axes[:3], [
         ("bias_B.to_A", "{:+.2f}", 0.3, "bias of B→A (MLE − truth)"),
         ("bias_m_BA", "{:+.2f}", 0.4, "bias of m_BA (MLE − truth)"),
         ("bias_rho_rel", "{:+.1%}", 0.1, "relative bias of growth rate ρ"),
@@ -308,6 +319,25 @@ def figures(per, dd, summ, ext, fits, p_crit):
                     M[i, j] = x[col].iloc[0]
         im = heat(ax, M, [f"{s}" for s in scen], gts, fmt, "RdBu_r", vmax, title)
         fig.colorbar(im, ax=ax, shrink=0.6)
+    # mean absolute error over all 12 probabilities (signed biases would cancel)
+    mae = mae_all12(fits)
+    M = np.full((len(scen), len(gts)), np.nan)
+    for i, s in enumerate(scen):
+        for j, g in enumerate(gts):
+            x = mae[(mae.scen == s) & (mae["gt"] == g)]
+            if len(x):
+                M[i, j] = x["mae_all12"].iloc[0]
+    ax = axes[3]
+    im = ax.imshow(M, cmap="Reds", vmin=0, vmax=0.2, aspect="auto")
+    ax.set_xticks(range(len(gts)), gts, rotation=45, ha="right", fontsize=8)
+    ax.set_yticks(range(len(scen)), scen, fontsize=8)
+    for i in range(M.shape[0]):
+        for j in range(M.shape[1]):
+            if np.isfinite(M[i, j]):
+                ax.text(j, i, f"{M[i, j]:.3f}", ha="center", va="center", fontsize=6.5,
+                        color="white" if M[i, j] > 0.13 else "black")  # fmt: skip
+    ax.set_title("mean |MLE − truth| over all 12 probabilities", fontsize=10)
+    fig.colorbar(im, ax=ax, shrink=0.6)
     fig.suptitle("Standard model fitted to misspecified data: mean MLE error over datasets "
                  "(n = 512 clones per generation, generations 4/6/8/10)", fontsize=11)
     fig.savefig(FIG / "bias_heatmap.png", dpi=160)

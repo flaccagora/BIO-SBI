@@ -795,28 +795,28 @@ On the CRC0322 2D counts (days 6 and 10 taken as generations 6 and 10; 165 and 1
 Code \code{scripts/misspecification/}; note \res{docs/misspecification/README.md}; results \res{results/exact_gw/misspecification/}. For each scenario and truth: MLE on 10 datasets, profile intervals on 3, goodness of fit, the extended model where one exists, the dedifferentiation test on 100 datasets without dedifferentiation (null rows N1, N2 of \S\ref{sec:dediff}), NUTS on one dataset per truth for three scenarios. The custom simulator reproduces the pipeline's law where they overlap. About 6\,h on 16 local workers.
 
 \begin{center}\scriptsize\setlength{\tabcolsep}{2.4pt}
-\begin{tabular}{@{}lrrrrrrr@{}}\toprule
- & \multicolumn{2}{c}{\BA{} bias} & $\rho$ & \BA{} 95\% & dediff test & \multicolumn{2}{c}{detected} \\
-what is wrong in the data & mean & max & bias & coverage & false pos. & GOF & ext.\ LRT \\\midrule
-nothing (correctly specified) & $-0.04$ & 0.14 & $-0.1\%$ & 0.78 & 3--4\% & 6\% & --- \\
-founders 70\% A / 30\% B & $-0.18$ & 0.65 & $-0.4\%$ & 0.63 & 3--5\% & 11\% & 58\% \\
-15\% doublets (two founders) & $-0.28$ & 0.75 & $+1.8\%$ & 0.26 & 17--19\% & 51\% & 100\% \\
-15\% doublets, founders 70/30 & $-0.30$ & 0.79 & $+1.5\%$ & 0.15 & 5--16\% & 57\% & 100\% \\
-KRT20$^+$ read as LGR5$^+$, 0.5\% & $-0.03$ & 0.09 & $-0.1\%$ & 0.78 & \textbf{98--100\%} & 6\% & 9\% \\
-KRT20$^+$ read as LGR5$^+$, 2\% / 5\% & $-0.03$ & 0.10 & $-0.1\%$ & 0.89--0.96 & \textbf{100\%} & 4--7\% & 9--10\% \\
-symmetric mis-typing 2\% & $-0.04$ & 0.17 & $-0.2\%$ & 0.81 & \textbf{100\%} & 8\% & 9\% \\
-organoid heterogeneity, $\kappa$ = 50 & $-0.29$ & 0.76 & $+1.7\%$ & 0.22 & 28--45\% & 82\% & --- \\
-organoid heterogeneity, $\kappa$ = 10 & $-0.30$ & 0.65 & $+7.5\%$ & 0.00 & \textbf{100\%} & 100\% & --- \\
-asynchronous divisions ($\pm$1 generation) & $-0.34$ & 0.78 & $+1.9\%$ & 0.07 & 11--12\% & 69\% & --- \\
-density dependence & $+0.10$ & 0.25 & $-7.2\%$ & 0.15 & 0--5\% & 100\% & --- \\
-10\% / 20\% of cells not counted & $-0.06$ & 0.30 / 0.45 & $-0.2$ / $-0.5\%$ & 0.81 & 0--4\% & 9\% & 14 / 52\% \\
-\BA{} doubles after generation 5 & $+0.01$ & 0.13 & $-0.6\%$ & 0.96 & 2--5\% & 27\% & --- \\
-growth slows after generation 5 & $-0.08$ & 0.37 & $-6.7\%$ & 0.52 & 14--19\% & 78\% & --- \\\bottomrule
+\begin{tabular}{@{}lrrrrrrrr@{}}\toprule
+ & \multicolumn{2}{c}{\BA{} bias} & all 12 & $\rho$ & \BA{} 95\% & dediff test & \multicolumn{2}{c}{detected} \\
+what is wrong in the data & mean & max & MAE & bias & coverage & false pos. & GOF & ext.\ LRT \\\midrule
+nothing (correctly specified) & $-0.04$ & 0.14 & .059 & $-0.1\%$ & 0.78 & 3--4\% & 6\% & --- \\
+founders 70\% A / 30\% B & $-0.18$ & 0.65 & .091 & $-0.4\%$ & 0.63 & 3--5\% & 11\% & 58\% \\
+15\% doublets (two founders) & $-0.28$ & 0.75 & .106 & $+1.8\%$ & 0.26 & 17--19\% & 51\% & 100\% \\
+15\% doublets, founders 70/30 & $-0.30$ & 0.79 & .114 & $+1.5\%$ & 0.15 & 5--16\% & 57\% & 100\% \\
+KRT20$^+$ read as LGR5$^+$, 0.5\% & $-0.03$ & 0.09 & .060 & $-0.1\%$ & 0.78 & \textbf{98--100\%} & 6\% & 9\% \\
+KRT20$^+$ read as LGR5$^+$, 2\% / 5\% & $-0.03$ & 0.10 & .059 / .066 & $-0.1\%$ & 0.89--0.96 & \textbf{100\%} & 4--7\% & 9--10\% \\
+symmetric mis-typing 2\% & $-0.04$ & 0.17 & .063 & $-0.2\%$ & 0.81 & \textbf{100\%} & 8\% & 9\% \\
+organoid heterogeneity, $\kappa$ = 50 & $-0.29$ & 0.76 & .121 & $+1.7\%$ & 0.22 & 28--45\% & 82\% & --- \\
+organoid heterogeneity, $\kappa$ = 10 & $-0.30$ & 0.65 & .150 & $+7.5\%$ & 0.00 & \textbf{100\%} & 100\% & --- \\
+asynchronous divisions ($\pm$1 generation) & $-0.34$ & 0.78 & .136 & $+1.9\%$ & 0.07 & 11--12\% & 69\% & --- \\
+density dependence & $+0.10$ & 0.25 & .118 & $-7.2\%$ & 0.15 & 0--5\% & 100\% & --- \\
+10\% / 20\% of cells not counted & $-0.06$ & 0.30 / 0.45 & .084 / .115 & $-0.2$ / $-0.5\%$ & 0.81 & 0--4\% & 9\% & 14 / 52\% \\
+\BA{} doubles after generation 5 & $+0.01$ & 0.13 & .074 & $-0.6\%$ & 0.96 & 2--5\% & 27\% & --- \\
+growth slows after generation 5 & $-0.08$ & 0.37 & .102 & $-6.7\%$ & 0.52 & 14--19\% & 78\% & --- \\\bottomrule
 \end{tabular}
 
-Standard model fitted. Bias: MLE minus truth, mean and largest mean bias over the 9 truths. Dediff false positives: rejection rate of the $\bar\chi^2$ test at nominal 5\% on data without dedifferentiation (N1--N2). Detected: binned goodness-of-fit test calibrated on correctly specified data (size 6\%), and likelihood-ratio test of the standard against the extended model (founder mixture and size, confusion matrix, capture; size 0--7\%). Heterogeneity: each clone draws its own probabilities from Dirichlet($\kappa\theta$).
+Standard model fitted. Bias: MLE minus truth, mean and largest mean bias over the 9 truths. All-12 MAE: $|$MLE $-$ truth$|$ averaged over the 12 probabilities, the datasets and the truths (the correctly specified row is the sampling-noise floor at $n$ = 512). Dediff false positives: rejection rate of the $\bar\chi^2$ test at nominal 5\% on data without dedifferentiation (N1--N2). Detected: binned goodness-of-fit test calibrated on correctly specified data (size 6\%), and likelihood-ratio test of the standard against the extended model (founder mixture and size, confusion matrix, capture; size 0--7\%). Heterogeneity: each clone draws its own probabilities from Dirichlet($\kappa\theta$).
 \end{center}
-\fig{bias_heatmap}{1.0}{Mean error of the MLE of \BA, $m_{BA}$ and the growth rate $\rho$, per scenario (rows) and truth (columns).}
+\fig{bias_heatmap}{1.0}{Mean error of the MLE of \BA, $m_{BA}$ and the growth rate $\rho$, and mean absolute error over all 12 probabilities (right), per scenario (rows) and truth (columns). In the right panel the ``base'' row (correctly specified) is the sampling noise at $n$ = 512, largest for the prior draws P1--P4.}
 \fig{dediff_fpr}{0.9}{False-positive rate of the dedifferentiation test on data without dedifferentiation: standard model (red, orange) and the model with the true founders, typing error or capture (hatched). Dashed: nominal 5\%.}
 \begin{itemize}
 \item \textbf{Typing errors: invisible, harmless for the estimates, fatal for the test.} A KRT20$^+$ cell scored LGR5$^+$ looks exactly like a B cell that switched back. The transition estimates barely move, and neither goodness of fit nor the extended model detects the error (4--10\%), but the dedifferentiation test rejects in 98--100\% of experiments without dedifferentiation, even at 0.5\% mis-scoring. With the true error rate in the model the false-positive rate returns to 0--9\%. Only an independently measured error rate can protect a dedifferentiation claim (\S\ref{sec:dediff-ratio}).
@@ -824,6 +824,7 @@ Standard model fitted. Bias: MLE minus truth, mean and largest mean bias over th
 \item \textbf{Organoid heterogeneity is the most damaging biology}: with $\kappa$ = 10 no \BA{} interval covers the truth, $\rho$ is 7.5\% too high and the dedifferentiation test always fires; even mild heterogeneity ($\kappa$ = 50) gives 28--45\% false positives. It is easily detected (82--100\%), but the model has no fix yet.
 \item \textbf{Asynchrony, density dependence and time-varying growth} bias \BA{} or $m_{BA}$ and $\rho$ (by up to 7\%) and are detected in 69--100\% of datasets; asynchrony and slowing growth also inflate the dedifferentiation test (11--19\%).
 \item \textbf{Cell loss} inflates the \BA{} error 1.5--1.9$\times$, is nearly undetectable, and leaves the test intact.
+\item \textbf{Over all 12 probabilities} the error (mean absolute, 0.059 when correctly specified) is unchanged by typing errors (0.059--0.066), rises by 40--55\% with unknown founders or 10\% cell loss (0.084--0.091), and 1.8--2.5-fold with doublets, heterogeneity, asynchrony, density dependence or 20\% cell loss (0.106--0.150; worst truth 0.16--0.22).
 \item \textbf{The identifiable summaries are robust to assay problems}: $\rho$ moves by less than 2\% on average (at most 5\%, doublets on T5) and the stable A fraction by less than 0.03 under founders, doublets, typing errors and cell loss; under biology $\rho$ moves more (heterogeneity, density, slowing growth: up to 8--14\% for some truths).
 \item Even correctly specified, the 95\% profile interval of \BA{} covers in 78\% of the 27 checked cases at $n$ = 512 here (95\% over all of \S\ref{sec:fu-profile}); the misses were checked with 20 extra optimiser starts and are genuine.
 \end{itemize}
