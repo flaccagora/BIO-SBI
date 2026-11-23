@@ -407,6 +407,70 @@ def fig_death_ridge():
     save(fig, "death_ridge")
 
 
+SWAP_PANELS = [  # (title, truth, x = A's share, y = B's share)
+    ("which parent makes AB", "P3", "A.div_AB", "B.div_AB"),
+    ("which type dies", "P4", "A.death", "B.death"),
+    ("switch vs persist: one A daughter", "P4", "A.persist", "B.to_A"),
+    ("switch vs persist: one B daughter", "P4", "A.to_B", "B.persist"),
+    ("which parent makes AA", "P1", "A.div_AA", "B.div_AA"),
+    ("which type divides", "P4", "A.div", "B.div"),
+]
+
+
+def fig_swap_ridges():
+    """All five parent swaps: A's vs B's probability of the same outcome, n = 1024."""
+    from make_swap_theory import OUT_A, OUT_B, mean_matrix, perron
+
+    def col(df, name):
+        if name.endswith(".div"):
+            r = name[0]
+            return df[[f"{r}.div_AA", f"{r}.div_AB", f"{r}.div_BB"]].sum(axis=1)
+        return df[name]
+
+    fig, axes = plt.subplots(2, 3, figsize=(9.6, 6.2))
+    for ax, (title, gt, xn, yn) in zip(axes.flat, SWAP_PANELS, strict=True):
+        z = np.load(XG2 / gt / "n1024_s0" / "reference.npz", allow_pickle=True)
+        t = dict(zip([str(v) for v in z["truth_names"]], z["truth"].astype(float)))
+        for r in "AB":
+            t[f"{r}.div"] = sum(t[f"{r}.div_{k}"] for k in ("AA", "AB", "BB"))
+        pA = np.array([t["A." + k] for k in OUT_A])
+        pB = np.array([t["B." + k] for k in OUT_B])
+        _, _, u = perron(mean_matrix(pA, pB))
+        xs, ys = [], []
+        for s, c in zip((0, 1, 2), (BLUE, ORANGE, AQUA), strict=True):
+            run = XG2 / gt / f"n1024_s{s}"
+            post = pd.read_csv(run / "posterior_samples.csv.gz").sample(600, random_state=0)
+            x, y = col(post, xn), col(post, yn)
+            xs.append(x)
+            ys.append(y)
+            ax.scatter(x, y, s=3, color=c, alpha=0.35, lw=0, label=f"dataset {s}")
+            m = json.loads((run / "mle.json").read_text())["mle"]
+            for r in "AB":
+                m[f"{r}.div"] = sum(m[f"{r}.div_{k}"] for k in ("AA", "AB", "BB"))
+            ax.plot(m[xn], m[yn], "D", color=c, mec=INK, mew=0.8, ms=5,
+                    label="MLE (per dataset)" if s == 0 else None)  # fmt: skip
+        lo = min(min(v.min() for v in xs), t[xn]) - 0.03
+        hi = max(max(v.max() for v in xs), t[xn]) + 0.03
+        xl = np.linspace(max(lo, 0), min(hi, 1), 50)
+        yl = t[yn] - u[0] / u[1] * (xl - t[xn])  # u_A x + u_B y constant through the truth
+        ax.plot(xl, yl, ls="--", color=INK2, lw=0.9, label="same average-cell rate")
+        ax.plot(t[xn], t[yn], "*", color=INK, ms=8, label="truth")
+        ylo = min(min(v.min() for v in ys), t[yn]) - 0.03
+        yhi = max(max(v.max() for v in ys), t[yn]) + 0.03
+        ax.set_xlim(max(lo, 0), min(hi, 1))
+        ax.set_ylim(max(ylo, 0), min(yhi, 1))
+        lab = lambda n: pname(n) if not n.endswith(".div") else f"{n[0]} divides (any)"  # noqa: E731
+        ax.set_xlabel(lab(xn), fontsize=8)
+        ax.set_ylabel(lab(yn), fontsize=8)
+        ax.set_title(f"{title} ({gt})", fontsize=8.5)
+        ax.tick_params(labelsize=7)
+    leg = axes[0, 0].legend(loc="upper right", fontsize=5.8, markerscale=1.0)
+    for h in leg.legend_handles:
+        h.set_alpha(1)
+    fig.tight_layout()
+    save(fig, "swap_ridges")
+
+
 def copy_note_figures():
     for name in ("profile_T1_ref_s0_n128", "profile_T2_toA05_s0_n1024", "decomposition",
                  "prior_alpha_and_bias"):  # fmt: skip
