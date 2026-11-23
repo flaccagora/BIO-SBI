@@ -35,7 +35,7 @@ simulators use.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 import scipy.fft
@@ -737,3 +737,216 @@ def log_likelihood(
     if kernel == "adjoint" and dP.shape[0]:
         grad += np.einsum("dm,dm->d", dC, barC[np.asarray(rows, dtype=np.int64)])
     return total, grad
+
+
+# ------------------------------------------------- free founder distribution
+# With the founder-type probabilities ``phi`` and the founder-size probabilities ``pi``
+# inferred, the grid values are G = sum_m pi_m S^m with S = phi_A F_A + phi_B F_B, where
+# F_k is the pgf of a clone started by one type-k cell. Hence
+#   dG/dphi_k = (sum_m pi_m m S^(m-1)) F_k,   dG/dpi_m = S^m,
+# and the same for the detection probability q = sum_m pi_m (1 - (1 - phi.g)^m) with
+# g_k = P(a type-k cell leaves a detected descendant):
+#   dq/dphi_k = (sum_m pi_m m (1 - s)^(m-1)) g_k,   dq/dpi_m = 1 - (1 - s)^m.
+_ONE = np.array([1], dtype=np.int64)
+_UNIT = (np.array([1.0, 0.0]), np.array([0.0, 1.0]))
+
+
+def single_founder_pgfs(model: GWModel, C: np.ndarray, mono: tuple, generations: int,
+                        grid: GridSpec) -> tuple[np.ndarray, np.ndarray, np.ndarray]:  # fmt: skip
+    """Pgfs ``F_A, F_B`` of a clone started by one A / one B cell on the half grid.
+
+    Returns ``(FA, FB, traj)`` (complex ``(Lx, Ly // 2 + 1)`` each; ``traj`` = the stored
+    iterates for :func:`_pgf_adjoint`). Polynomial form ``C`` as for :func:`law_poly`.
+    """
+    ma, mb, _, maxp = mono
+    gens = int(generations)
+    zx, zy = _grid_points(grid)
+    out = np.empty((grid.Lx, len(zy)), np.complex128)
+    traj = np.empty((grid.Lx, gens + 1, 4, len(zy)))
+    c0, cx, cy = model.f0
+    _pgf_value(C, ma, mb, maxp, gens, zx, zy, c0, cx, cy, _UNIT[0], _ONE, np.ones(1), out, traj)
+    FA = traj[:, gens, 0] + 1j * traj[:, gens, 1]
+    FB = traj[:, gens, 2] + 1j * traj[:, gens, 3]
+    return FA, FB, traj
+
+
+def _loop_single_founder(model: GWModel, P, dP, rows, generations: int, grid: GridSpec):
+    """``F_k`` and ``dF_k (D, ...)`` on the half grid for k = A, B (forward mode)."""
+    zx, zy = _grid_points(grid)
+    c0, cx, cy = model.f0
+    res = []
+    for e in _UNIT:
+        out = np.empty((grid.Lx, len(zy)), np.complex128)
+        dout = np.empty((dP.shape[0], grid.Lx, len(zy)), np.complex128)
+        _pgf_grid(
+            np.ascontiguousarray(P, dtype=float), np.ascontiguousarray(dP, dtype=float),
+            np.asarray(rows, dtype=np.int64), model.offspring, model.n_out, int(generations),
+            zx, zy, c0, cx, cy, e, _ONE, np.ones(1), out, dout,
+        )  # fmt: skip
+        res.extend([out, dout])
+    return res
+
+
+def _mix(phi, sizes, pis, FA, FB):
+    """``G``, ``dG/dS``, ``dG/dphi (2, ...)`` and ``dG/dpi (S, ...)`` on the grid."""
+    S = phi[0] * FA + phi[1] * FB
+    G = np.zeros_like(S)
+    dGdS = np.zeros_like(S)
+    dpi = []
+    for m, pi in zip(sizes, pis, strict=True):
+        Sm = S ** int(m)
+        G += pi * Sm
+        dGdS += pi * int(m) * S ** (int(m) - 1)
+        dpi.append(Sm)
+    return G, dGdS, np.stack([dGdS * FA, dGdS * FB]), np.stack(dpi)
+
+
+def _irfft(vals: np.ndarray, grid: GridSpec) -> np.ndarray:
+    """Coefficients (rescaled by the damping radii) of half-grid values ``(..., Lx, Ly2)``."""
+    p = scipy.fft.irfft2(vals, s=(grid.Lx, grid.Ly), axes=(-2, -1), workers=1)
+    if grid.rx != 1.0 or grid.ry != 1.0:
+        p = p * _scale(grid)
+    return p
+
+
+def _founder_detection(model: GWModel, P, dP, rows, generations: int, kernel: str):
+    """Return the detection probability and its gradients along ``dP``, ``phi`` and ``pi``."""
+    gs, dgs = [], []
+    for e in _UNIT:
+        if kernel == "adjoint":
+            g, dg = _detection_nb(model.offspring, model.n_out,
+                                  np.asarray(model.capture, float),
+                                  np.ascontiguousarray(P, dtype=float),
+                                  np.ascontiguousarray(dP, dtype=float),
+                                  np.asarray(rows, dtype=np.int64), int(generations), e, _ONE,
+                                  np.ones(1))  # fmt: skip
+        else:
+            g, dg = detection_and_grad(replace(model, founder=e, sizes=_ONE,
+                                               size_probs=np.ones(1)), P, dP, rows, generations)  # fmt: skip
+        gs.append(float(g))
+        dgs.append(np.asarray(dg, dtype=float))
+    phi = np.asarray(model.founder, dtype=float)
+    s = phi[0] * gs[0] + phi[1] * gs[1]
+    ds = phi[0] * dgs[0] + phi[1] * dgs[1]
+    ls = math.log1p(-s) if s < 1 else -np.inf
+    q, dqds = 0.0, 0.0
+    dq_pi = np.zeros(len(model.sizes))
+    for i, (m, pi) in enumerate(zip(model.sizes, model.size_probs, strict=True)):
+        c = -math.expm1(int(m) * ls) if np.isfinite(ls) else 1.0
+        dq_pi[i] = c
+        q += pi * c
+        dqds += pi * int(m) * (1 - s) ** (int(m) - 1)
+    return q, dqds * ds, dqds * np.asarray(gs), dq_pi
+
+
+def log_likelihood_founder(
+    model: GWModel,
+    P: np.ndarray,
+    dP: np.ndarray,
+    rows: np.ndarray,
+    data: list[HorizonData],
+    floor: float = 1e-15,
+    min_detection: float = 1e-6,
+    kernel: str = "loop",
+    grad: bool = True,
+) -> tuple[float, np.ndarray, np.ndarray, np.ndarray]:
+    """:func:`log_likelihood` plus the gradient in the founder distribution.
+
+    Returns ``(log-likelihood, d/d directions (D,), d/d model.founder (2,),
+    d/d model.size_probs (S,))``, the last two treating every entry as a free variable
+    (the caller applies the simplex constraint). Same value as :func:`log_likelihood` up
+    to round-off; ``grad=False`` returns zero gradients. Both kernels: ``adjoint`` takes
+    the founder gradients by contracting the FFT adjoint with ``dG/dphi``, ``dG/dpi``
+    (cheap: final-generation quantities only); ``loop`` propagates ``F_A`` and ``F_B``
+    separately in forward mode (twice the cost of :func:`log_likelihood`).
+    """
+    if kernel not in ("loop", "adjoint"):
+        raise ValueError(f"Unknown exact-GW kernel {kernel!r} (loop | adjoint)")
+    D = dP.shape[0] if grad else 0
+    if not grad:
+        dP, rows = dP[:0], rows[:0]
+    phi = np.asarray(model.founder, dtype=float)
+    sizes, pis = np.asarray(model.sizes), np.asarray(model.size_probs, dtype=float)
+    total, g_dir = 0.0, np.zeros(D)
+    g_phi, g_pi = np.zeros(2), np.zeros(len(sizes))
+    if kernel == "adjoint":
+        mono = monomials(model)
+        C, dC = poly_coefficients(mono[2], len(mono[0]), P, dP, rows)
+        barC = np.zeros((2, len(mono[0])))
+    for h in data:
+        g = h.grid
+        if kernel == "adjoint":
+            FA, FB, traj = single_founder_pgfs(model, C, mono, h.generations, g)
+            G, dGdS, dG_phi, dG_pi = _mix(phi, sizes, pis, FA, FB)
+            p = _irfft(G, g)
+        else:
+            FA, dFA, FB, dFB = _loop_single_founder(model, P, dP, rows, h.generations, g)
+            G, dGdS, dG_phi, dG_pi = _mix(phi, sizes, pis, FA, FB)
+            p = _irfft(G, g)
+        pc = p[h.a, h.b]
+        ok = pc > floor
+        pz = np.where(ok, pc, floor)
+        total += float(h.weight @ np.log(pz))
+        if grad:
+            wv = np.where(ok, h.weight / pz, 0.0)
+            if kernel == "adjoint":
+                cot = np.zeros((g.Lx, g.Ly))
+                cot[h.a, h.b] = wv * (g.rx ** -h.a.astype(float) * g.ry ** -h.b.astype(float))
+                A = _fft_adjoint(cot, g)
+                g_phi += np.real(np.einsum("ij,kij->k", A, dG_phi))
+                g_pi += np.real(np.einsum("ij,kij->k", A, dG_pi))
+                if D:
+                    # the adjoint kernel's chain rule from S to F_A, F_B is lam * phi_k
+                    _pgf_adjoint(C, mono[0], mono[1], mono[3], int(h.generations), phi, sizes,
+                                 pis, traj, A, barC)  # fmt: skip
+            else:
+                extra = _irfft(np.concatenate([dG_phi, dG_pi]), g)
+                ge = extra[:, h.a, h.b] @ wv
+                g_phi += ge[:2]
+                g_pi += ge[2:]
+                if D:
+                    dG = dGdS[None] * (phi[0] * dFA + phi[1] * dFB)
+                    g_dir += _irfft(dG, g)[:, h.a, h.b] @ wv
+        if model.detected:
+            q, dq, dq_phi, dq_pi = _founder_detection(model, P, dP, rows, h.generations, kernel)
+            if q > min_detection:
+                total -= h.clones * math.log(q)
+                if grad:
+                    g_dir -= h.clones * dq / q
+                    g_phi -= h.clones * dq_phi / q
+                    g_pi -= h.clones * dq_pi / q
+            else:
+                total -= h.clones * math.log(min_detection)
+    if kernel == "adjoint" and D:
+        g_dir += np.einsum("dm,dm->d", dC, barC[np.asarray(rows, dtype=np.int64)])
+    return total, g_dir, g_phi, g_pi
+
+
+def founder_composition_laws(model: GWModel, P: np.ndarray, generations: int,
+                             grid: GridSpec) -> tuple[list[str], np.ndarray]:  # fmt: skip
+    """Joint law of the counts and the founder composition (unconditional on detection).
+
+    Returns ``(labels, p)`` with ``p (K, Lx, Ly)``: ``p[c, a, b] = P(founders = c,
+    Z = (a, b))`` for every composition ``c`` = (founder count ``m``, ``k`` A founders)
+    with ``pi_m > 0``, labelled ``"A"``, ``"B"`` (``m = 1``), ``"AA"``, ``"AB"``, ``"BB"``
+    (``m = 2``), ... Summing over ``c`` gives the law of :func:`law_poly`. Posterior
+    composition probabilities of a clone with counts ``(a, b) != (0, 0)`` are
+    ``p[:, a, b] / p[:, a, b].sum()`` (detection conditioning cancels).
+    """
+    mono = monomials(model)
+    C, _ = poly_coefficients(mono[2], len(mono[0]), P, np.zeros((0, P.shape[1])),
+                            np.zeros(0, dtype=np.int64))  # fmt: skip
+    FA, FB, _ = single_founder_pgfs(model, C, mono, generations, grid)
+    phi = np.asarray(model.founder, dtype=float)
+    labels, vals = [], []
+    for m, pi in zip(model.sizes, model.size_probs, strict=True):
+        m = int(m)
+        if pi <= 0:
+            continue
+        for k in range(m, -1, -1):  # k A founders
+            w = pi * math.comb(m, k) * phi[0] ** k * phi[1] ** (m - k)
+            if w <= 0:
+                continue
+            labels.append("A" * k + "B" * (m - k))
+            vals.append(w * FA**k * FB ** (m - k))
+    return labels, np.clip(_irfft(np.stack(vals), grid), 0.0, None)

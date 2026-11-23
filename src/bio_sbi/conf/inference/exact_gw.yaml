@@ -2,8 +2,9 @@
 # exact law of the raw endpoint counts (2-D FFT of the iterated pgf), same theta
 # coordinates and prior as NPE. No training: budget.simulations / max_epochs are unused.
 # Supports simulator=galton_watson(_hours), two types (two_type, reversible_ab, any fixed
-# entries), fixed founder rows, homogeneous law, two labels (any capture / 2x2 confusion),
-# selection detected or all; anything else raises ValueError.
+# entries), fixed founder rows or free ones (opt-in, e.g. '~law.fixed.founder' infers founder.A,
+# 'law.founder_sizes=[1,2]' also the doublet fraction; reparam none only), homogeneous law, two
+# labels (any capture / 2x2 confusion), selection detected or all; anything else raises ValueError.
 #   bio-sbi inference=exact_gw law=reversible_ab design=real_like
 name: exact_gw
 # SBC cases for this method (one full MCMC run each, ~1-5 min): overrides

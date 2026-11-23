@@ -160,9 +160,8 @@ def test_unsupported_configurations_raise(law):
     three = GaltonWatson(load_law("three_type"))
     with pytest.raises(ValueError, match="two cell types"):
         check_supported(three, ObservationModel(three.types))
-    free_founder = GaltonWatson(load_law(fixed={}))
-    with pytest.raises(ValueError, match="founder"):
-        check_supported(free_founder, obs2)
+    # free founder rows are supported (tests/test_free_founder.py)
+    check_supported(GaltonWatson(load_law(fixed={})), obs2)
 
 
 def test_nuts_samples_a_correlated_gaussian():

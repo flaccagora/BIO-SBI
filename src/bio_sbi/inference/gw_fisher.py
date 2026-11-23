@@ -192,6 +192,8 @@ class JeffreysPrior:
         # of the likelihood object are used
         dummy = [Cohort(float(h), np.array([[1, 0]])) for h in horizons]
         self.lik = ExactLikelihood(simulator, observation, dummy)
+        if self.lik.founder_free:
+            raise ValueError("Fisher information: free founder rows are not supported")
         self.model = self.lik.model
         self.generations = [h.generations for h in self.lik.data]
         self.weights = np.ones(len(horizons)) if weights is None else np.asarray(weights, float)
