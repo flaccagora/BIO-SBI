@@ -98,7 +98,7 @@ def mle(seed_max: int = 9) -> pd.DataFrame:
     rows = []
     for _, x in d.iterrows():
         for k in KEYS:
-            rows.append({"scen": x.scen, "model": f"mle_{x.model}", "gt": x.gt, "seed": x.seed,
+            rows.append({"scen": x.scen, "model": f"mle_{x.model}", "gt": x["gt"], "seed": x.seed,
                          "key": k, "mean": x[k], "truth": x[f"t_{k}"],
                          "bias": x[k] - x[f"t_{k}"],
                          "x_founder_A": x.get("x_founder_A"),
@@ -137,13 +137,46 @@ def tasks(labels, prog, clones):
     return out
 
 
+def oracle_prog(r) -> tuple[list[str], np.ndarray]:
+    """Per-clone progenitor posterior at the TRUE parameters and founder distribution
+    (the information limit of the counts), aligned with the run's saved clones."""
+    sys.path.insert(0, str(Path(__file__).parent))
+    import run as R
+
+    from bio_sbi.inference import dediff_lrt as dl
+    from bio_sbi.inference.exact_gw import ExactLikelihood
+
+    cohorts, _ = R.dataset_with_founders(r["scen"], r["gt"], r["seed"])
+    sim = R.make_sim(R.MODELS[r["model"]])
+    lik = ExactLikelihood(sim, dl.observation(None), cohorts, kernel="adjoint")
+    o = R.C.SCENARIOS[r["scen"]][1]
+    P = R.C.TRUTHS[r["gt"]]
+    m = {"A": dict(zip(dl.ENTRIES["A"], P[0], strict=True)),
+         "B": dict(zip(dl.ENTRIES["B"], P[1], strict=True)),
+         "founder": {"A": o.get("founder_A", 1.0), "B": 1 - o.get("founder_A", 1.0)}}  # fmt: skip
+    if "founder_size.2" in sim.space.names:
+        m["founder_size"] = {"1": 1 - o.get("doublet", 0.0), "2": o.get("doublet", 0.0)}
+    theta = sim.space.encode(sim.physical_from_mapping(m)).astype(float)
+    labels, probs = lik.progenitor_posterior(theta)
+    out = []
+    for h, c, pr in zip(lik.data, cohorts, probs, strict=True):
+        cell = {(int(a), int(b)): j for j, (a, b) in enumerate(zip(h.a, h.b, strict=True))}
+        out.append(pr[[cell[(int(a), int(b))] for a, b in c.counts]])
+    return labels, np.concatenate(out)
+
+
 def progenitor_table(runs, which="prog") -> tuple[pd.DataFrame, pd.DataFrame]:
     """Per run x task x generation: AUC, Brier, prior-only Brier, mean score / rate; and
-    the pooled reliability data (score, target) per scenario x model x task."""
+    the pooled reliability data (score, target) per scenario x model x task.
+    ``which``: ``prog`` (averaged over posterior draws), ``prog_at_mean`` or ``oracle``."""
     rows, pooled = [], []
     for r in runs:
         z = np.load(r["npz"])
-        clones, prog, labels = z["clones"], z[which].astype(float), z["labels"]
+        clones = z["clones"]
+        if which == "oracle":
+            labels, prog = oracle_prog(r)
+        else:
+            prog, labels = z[which].astype(float), z["labels"]
         for name, score, y in tasks(labels, prog, clones):
             for g in (*GENS, "all"):
                 m = np.ones(len(y), bool) if g == "all" else clones[:, 0] == g
@@ -203,7 +236,7 @@ def fig_founder(ft: pd.DataFrame, path: Path):
     ylabels, y = [], 0
     for s, m in combos:
         for g in GTS:
-            x = ft[(ft.scen == s) & (ft.model == m) & (ft.gt == g) & (ft.seed == 0)]
+            x = ft[(ft.scen == s) & (ft.model == m) & (ft["gt"] == g) & (ft.seed == 0)]
             if not len(x):
                 continue
             x = x.iloc[0]
@@ -219,7 +252,7 @@ def fig_founder(ft: pd.DataFrame, path: Path):
     pos, k = [], 0
     for s, m in combos:
         for g in GTS:
-            if ((ft.scen == s) & (ft.model == m) & (ft.gt == g) & (ft.seed == 0)).any():
+            if ((ft.scen == s) & (ft.model == m) & (ft["gt"] == g) & (ft.seed == 0)).any():
                 pos.append(k)
                 k += 1
         k += 0.6
@@ -241,25 +274,25 @@ def fig_toa(kt: pd.DataFrame, nuts_a: pd.DataFrame, ml: pd.DataFrame, path: Path
     for ax, s in zip(axes, SCEN, strict=True):
         for i, g in enumerate(GTS):
             for off, model, c in ((-0.2, "fA", COL["blue"]), (0.0, "fA+d2", COL["aqua"])):
-                x = kt[(kt.scen == s) & (kt.model == model) & (kt.gt == g) & (kt.seed == 0)
+                x = kt[(kt.scen == s) & (kt.model == model) & (kt["gt"] == g) & (kt.seed == 0)
                        & (kt.key == "B.to_A")]  # fmt: skip
                 if len(x):
                     x = x.iloc[0]
                     ax.plot([i + off] * 2, [x.q05, x.q95], color=c, lw=2.5,
                             solid_capstyle="round")  # fmt: skip
                     ax.plot(i + off, x["mean"], "o", color=c, ms=4)
-            x = nuts_a[(nuts_a.scen == s) & (nuts_a.gt == g) & (nuts_a.key == "B.to_A")]
+            x = nuts_a[(nuts_a.scen == s) & (nuts_a["gt"] == g) & (nuts_a.key == "B.to_A")]
             if len(x):
                 x = x.iloc[0]
                 ax.plot([i + 0.2] * 2, [x.q05, x.q95], color=COL["orange"], lw=2.5,
                         solid_capstyle="round")  # fmt: skip
                 ax.plot(i + 0.2, x["mean"], "o", color=COL["orange"], ms=4)
             for model, mk in (("mle_std", "x"), ("mle_ext", "+")):
-                x = ml[(ml.scen == s) & (ml.model == model) & (ml.gt == g) & (ml.seed == 0)
+                x = ml[(ml.scen == s) & (ml.model == model) & (ml["gt"] == g) & (ml.seed == 0)
                        & (ml.key == "B.to_A")]  # fmt: skip
                 if len(x):
                     ax.plot(i + 0.33, x["mean"].iloc[0], mk, color=COL["ink2"], ms=5)
-            t = kt[(kt.gt == g) & (kt.key == "B.to_A")]["truth"]
+            t = kt[(kt["gt"] == g) & (kt.key == "B.to_A")]["truth"]
             if len(t):
                 ax.plot([i - 0.35, i + 0.4], [t.iloc[0]] * 2, color=COL["ink"], lw=1)
         ax.set_xticks(range(len(GTS)), GTS, rotation=60, fontsize=8)
@@ -338,7 +371,7 @@ def fig_auc(pt: pd.DataFrame, path: Path):
         M = np.full((len(GTS), len(GENS)), np.nan)
         for i, g in enumerate(GTS):
             for j, h in enumerate(GENS):
-                x = d[(d.gt == g) & (d.gen == h)]
+                x = d[(d["gt"] == g) & (d.gen == h)]
                 if len(x):
                     M[i, j] = x.auc.iloc[0]
         ax.imshow(M, vmin=0.5, vmax=1.0, cmap=cmap, aspect="auto")
@@ -377,6 +410,8 @@ def main():
     pt.to_csv(TAB / "progenitor.csv", index=False)
     pt_mean, _ = progenitor_table(runs, "prog_at_mean")
     pt_mean.to_csv(TAB / "progenitor_at_posterior_mean.csv", index=False)
+    pt_or, pool_or = progenitor_table(runs, "oracle")
+    pt_or.to_csv(TAB / "progenitor_oracle.csv", index=False)
 
     # ---- summaries printed for the write-up
     pd.set_option("display.width", 250)
@@ -385,7 +420,7 @@ def main():
     print("\n== founder parameters (seed 0)")
     print(ft.round(3).to_string(index=False))
     print("\n== key quantities: free-founder posterior, per scenario x model")
-    agg = kt.groupby(["scen", "model", "key"]).agg(
+    agg = kt[kt.seed == 0].groupby(["scen", "model", "key"]).agg(
         mean_bias=("bias", "mean"), max_abs_bias=("bias", lambda v: np.abs(v).max()),
         mean_abs_z=("z", lambda v: np.abs(v).mean()), max_abs_z=("z", lambda v: np.abs(v).max()),
         cover90=("cover90", "mean"), n=("bias", "size"))  # fmt: skip
@@ -409,11 +444,20 @@ def main():
         index=["scen", "gt"], columns="model", values=["mean", "z", "cover90"])  # fmt: skip
     print(wide.round(3).to_string())
     print("\n== progenitor posterior (all generations, seed 0)")
-    pa = pt[(pt.gen == "all")]
+    pa = pt[(pt.gen == "all") & (pt.seed == 0)]
     print(pa.groupby(["scen", "model", "task"])[["rate", "mean_score", "auc", "brier",
                                                  "brier_const"]].mean().round(3).to_string())  # fmt: skip
+    print("\n== progenitor posterior at the posterior mean / at the truth (oracle)")
+    for name, d in (("at posterior mean", pt_mean), ("oracle", pt_or)):
+        print(name)
+        print(d[(d.gen == "all") & (d.seed == 0)].groupby(["scen", "model", "task"])[
+            ["auc", "brier", "brier_const"]].mean().round(3).to_string())  # fmt: skip
+    po = pt_or[(pt_or.gen != "all") & (pt_or.seed == 0)].groupby(["scen", "model", "task", "gen"])[
+        ["auc", "brier", "brier_const"]].mean()  # fmt: skip
+    po.round(4).to_csv(TAB / "progenitor_oracle_by_generation.csv")
+    print(po.round(3).to_string())
     print("\n== progenitor AUC by generation (mean over truths)")
-    pg = pt[pt.gen != "all"].groupby(["scen", "model", "task", "gen"])[
+    pg = pt[(pt.gen != "all") & (pt.seed == 0)].groupby(["scen", "model", "task", "gen"])[
         ["auc", "brier", "brier_const", "rate"]].mean()  # fmt: skip
     print(pg.round(3).to_string())
     pg.round(4).to_csv(TAB / "progenitor_by_generation.csv")
@@ -424,6 +468,7 @@ def main():
     fig_toa(kt, nuts_a, ml, FIG / "b_to_a.png")
     fig_reliability(pool, FIG / "progenitor_reliability.png")
     fig_auc(pt, FIG / "progenitor_auc.png")
+    fig_reliability(pool_or, FIG / "progenitor_reliability_oracle.png")
 
 
 if __name__ == "__main__":

@@ -8,7 +8,7 @@ LOCAL=/home/matteo/BIO-SBI/results/exact_gw/free_founder
 REMOTE=matteo@172.28.107.111
 count() {
   l=$(ls $LOCAL/*/*/*.json $LOCAL/*/*/*.err 2>/dev/null | wc -l)
-  r=$(ssh -o ConnectTimeout=10 $REMOTE 'ls ~/bio-sbi-remote/results/free_founder/*/*/*.json ~/bio-sbi-remote/results/free_founder/*/*/*.err 2>/dev/null | wc -l')
+  r=$(ssh -o ConnectTimeout=10 $REMOTE 'find ~/bio-sbi-remote/results/free_founder -name "*.json" -o -name "*.err" | wc -l')
   echo $((l + ${r:-0}))
 }
 while true; do
@@ -22,4 +22,4 @@ while true; do
 done
 ls $LOCAL/*/*/*.err 2>/dev/null
 tail -3 $LOCAL/logs/*.log
-ssh $REMOTE 'tail -3 ~/bio-sbi-remote/results/free_founder/logs/*.log; ls ~/bio-sbi-remote/results/free_founder/*/*/*.err 2>/dev/null'
+ssh $REMOTE 'tail -3 ~/bio-sbi-remote/results/free_founder/logs/*.log; find ~/bio-sbi-remote/results/free_founder -name "*.err"'
