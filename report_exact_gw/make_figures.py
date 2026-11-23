@@ -370,6 +370,43 @@ def fig_p3_ridge():
     save(fig, "p3_ridge")
 
 
+def fig_death_ridge():
+    """The "which type dies" parent swap: A.death vs B.death draws for P4 and P2, n = 1024."""
+    from make_swap_theory import OUT_A, OUT_B, mean_matrix, perron
+
+    fig, axes = plt.subplots(1, 2, figsize=(6.4, 2.9))
+    for ax, gt in zip(axes, ("P4", "P2"), strict=True):
+        z = np.load(XG2 / gt / "n1024_s0" / "reference.npz", allow_pickle=True)
+        t = dict(zip([str(v) for v in z["truth_names"]], z["truth"].astype(float)))
+        pA = np.array([t["A." + k] for k in OUT_A])
+        pB = np.array([t["B." + k] for k in OUT_B])
+        _, _, u = perron(mean_matrix(pA, pB))
+        for s, col in zip((0, 1, 2), (BLUE, ORANGE, AQUA), strict=True):
+            run = XG2 / gt / f"n1024_s{s}"
+            post = pd.read_csv(run / "posterior_samples.csv.gz").sample(600, random_state=0)
+            ax.scatter(post["A.death"], post["B.death"], s=3, color=col, alpha=0.35, lw=0,
+                       label=f"dataset {s}")  # fmt: skip
+            m = json.loads((run / "mle.json").read_text())["mle"]
+            ax.plot(m["A.death"], m["B.death"], "D", color=col, mec=INK, mew=0.8, ms=5.5,
+                    label="MLE (per dataset)" if s == 0 else None)  # fmt: skip
+        # parent swap through the truth: u_A * A.death + u_B * B.death constant
+        x = np.linspace(0, 0.45, 50)
+        y = t["B.death"] - u[0] / u[1] * (x - t["A.death"])
+        ok = (y >= 0) & (y <= 0.45)
+        ax.plot(x[ok], y[ok], ls="--", color=INK2, lw=0.9, label="same average death rate")
+        ax.plot(t["A.death"], t["B.death"], "*", color=INK, ms=8, label="truth")
+        ax.set_xlabel(pname("A.death"))
+        ax.set_ylabel(pname("B.death"))
+        ax.set_xlim(0, 0.42)
+        ax.set_ylim(0, 0.42)
+        ax.set_title(f"{gt}, $n$ = 1024", fontsize=9)
+    leg = axes[0].legend(loc="upper right", fontsize=6, markerscale=1.0)
+    for h in leg.legend_handles:
+        h.set_alpha(1)
+    fig.tight_layout()
+    save(fig, "death_ridge")
+
+
 def copy_note_figures():
     for name in ("profile_T1_ref_s0_n128", "profile_T2_toA05_s0_n1024", "decomposition",
                  "prior_alpha_and_bias"):  # fmt: skip
