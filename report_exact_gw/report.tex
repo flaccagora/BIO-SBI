@@ -677,7 +677,25 @@ Over the 9 truths; A2 = A-founded clones observed at generation 2, etc. Gains re
 \item \textbf{Checks.} For the current design the XG2 posterior variance of \BA{} is 0.89$\times$ the prediction (median). For the new designs, simulated MLEs (50 datasets per case, B founders simulated directly) have sd 0.95--0.98 of the prediction at 1024 clones (T3 and P2 with R1, T3 with A+B 1--4), whereas the current design at 4096 clones is 1.43$\times$ worse than predicted (half the MLEs on a face): early designs are already in the large-sample regime, the current one is not, so its real deficit is larger than the table shows.
 \item \textbf{Cost models} (per founder seeded, or adding culture time) barely change the optimum.
 \end{itemize}
-\textbf{Caveats.} (i) The model has synchronous generations; a real early time point mixes clones that have divided 0, 1 or 2 times, so the time point must be matched to the cell cycle or divisions counted (e.g.\ live imaging). (ii) Typing errors and impure B sorts are not modelled; early clones have few cells, so a single misread cell weighs more (\S\ref{sec:dediff-ratio}) --- the next study before committing to generation 1. (iii) Detection is survival only (plating efficiency not modelled). (iv) For T1, T2, T4 the B-founded gains are evaluated just inside the boundary; with ``B never divides'' known, R1 still gives a \BA{} sd of 0.044--0.046 at $N$ = 512 against 0.069--0.087 for the current design.
+\textbf{If the founder type is not perfectly known.} The gains above assume that the type of every founder is recorded (sorted single LGR5$^+$ and KRT20$^+$ cells). Otherwise each clone's law is the mixture over its hidden founder, $w\,p_A(c) + (1-w)\,p_B(c)$, with $w$ = P(founder is A) in that cohort. We recomputed the information with the founder weight either known or estimated from the same data (a nuisance parameter; script \code{scripts/optimal_design/founder_uncertainty.py}; check: with $w$ = 1 or 0 it reproduces the cached information to $10^{-13}$):
+\begin{center}\footnotesize\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}lll@{}}\toprule
+design, founder information & gain on var(\BA) vs current, median (range) & \BA{} sd at $N$ = 512 \\\midrule
+R1, founders recorded & 21 (6.5--89) & 0.016--0.046 \\
+R1, sorted, purity 95\% / 80\%, purity known & 19 / 16 & 0.017--0.049 \\
+R1, sorted, purity 90\% / 80\%, purity estimated & 10 (3.3--57) / 8 (2.5--46) & 0.018--0.085 \\
+R1 time points, unsorted ($p_A$ = 0.7 estimated) & 5.6 (2.0--17) & 0.038--0.126 \\
+current design, unsorted ($p_A$ = 0.7 estimated) & 0.77 (0.37--1.2) & 0.054--0.42 \\\bottomrule
+\end{tabular}
+
+Same total number of detected clones; ``current'' = A-founded clones at generations 4/6/8/10 with known founders; R1 = $\tfrac38$ A2 + $\tfrac14$ B1 + $\tfrac14$ B2 + $\tfrac18$ A10; unsorted R1 = the same time points (1/4 at generation 1, 5/8 at 2, 1/8 at 10) without founder labels.
+\end{center}
+\begin{itemize}
+\item \textbf{Imperfect sorting costs little if the purity is measured}: at 80\% purity R1 still gives a 16-fold smaller \BA{} variance than the current design. \textbf{An unmeasured purity costs about half the gain} (8--10-fold), because the impurity trades off against B's own fate along the parent-swap direction.
+\item \textbf{Without any founder information, early observation still helps}: the R1 time points with unsorted founders give a 5.6-fold (2--17) smaller \BA{} variance than the current design with known A founders; the current time points with unsorted founders are worse than now (0.77). Early endpoints carry the information; sorted founders multiply it by another 2--4.
+\item These are asymptotic (Fisher) numbers. With unsorted founders the posterior can have two branches along the parent-swap ridge (\S\ref{sec:freefounder}), so the real precision at a few hundred clones is lower than predicted. \textbf{Recommendation:} sort founders and measure the sort purity on the same day (e.g.\ re-stain a sample of sorted cells); if sorting is impossible, still observe early.
+\end{itemize}
+\textbf{Caveats.} (i) The model has synchronous generations; a real early time point mixes clones that have divided 0, 1 or 2 times, so the time point must be matched to the cell cycle or divisions counted (e.g.\ live imaging). (ii) Typing errors are not modelled (impure sorts: above); early clones have few cells, so a single misread cell weighs more (\S\ref{sec:dediff-ratio}) --- the next study before committing to generation 1. (iii) Detection is survival only (plating efficiency not modelled). (iv) For T1, T2, T4 the B-founded gains are evaluated just inside the boundary; with ``B never divides'' known, R1 still gives a \BA{} sd of 0.044--0.046 at $N$ = 512 against 0.069--0.087 for the current design.
 
 % ====================================================================== dedifferentiation test
 \section{Testing for dedifferentiation: can B give rise to A?}\label{sec:dediff}
