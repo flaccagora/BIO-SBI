@@ -48,7 +48,7 @@
   left=5pt,right=5pt,top=3pt,bottom=3pt,fontupper=\small}
 \newtcolorbox{caveat}{colback=pendbg,colframe=corange,boxrule=0.6pt,arc=2pt,
   left=5pt,right=5pt,top=3pt,bottom=3pt,fontupper=\small}
-\graphicspath{{figures/}{../docs/dediff_test/figures/}{../docs/jeffreys/figures/}{../docs/weak_directions/figures/}{../docs/optimal_design/figures/}{../docs/spike_slab/figures/}{../docs/profile_intervals/figures/}{../docs/misspecification/figures/}}
+\graphicspath{{figures/}{../docs/dediff_test/figures/}{../docs/jeffreys/figures/}{../docs/weak_directions/figures/}{../docs/optimal_design/figures/}{../docs/spike_slab/figures/}{../docs/profile_intervals/figures/}{../docs/misspecification/figures/}{../docs/free_founder/figures/}}
 \makeatletter\newcommand{\tabin}[1]{\@@input #1 }\makeatother  % expandable \input for table rows
 \newcommand{\fig}[3]{\begin{figure}[H]\centering\includegraphics[width=#2\linewidth]{#1}\caption{#3}\label{fig:#1}\end{figure}}
 \hypersetup{pdftitle={BIO-SBI: exact likelihood for Galton-Watson and the XG2 experiment},pdfauthor={BIO-SBI}}
@@ -98,7 +98,7 @@ Data & synthetic only \\
 
 \textbf{Dedifferentiation test} (\S\ref{sec:dediff}). A likelihood-ratio test of ``B never gives rise to A'' is well calibrated with per-dataset boundary ($\bar\chi^2$) critical values (1--6.5\% false positives) and, with perfect typing, detects $m_{BA} \approx 0.003$ A cells per B cell per generation already at 128 clones per endpoint. But 0.5\% of KRT20$^+$ cells mis-scored as LGR5$^+$, if not modelled, gives 75--100\% false positives, and assuming a rate only 10--20\% too low can still give most of them; assuming it 50--100\% too high costs little power. Measure an upper limit of the typing error ($\pm$25\% is enough) and test at that limit.
 
-\textbf{Misspecification} (\S\ref{sec:misspec}). Simulated data that break one assumption at a time show that cell-typing errors are invisible in the data yet make the dedifferentiation test reject in 98--100\% of experiments without dedifferentiation; unmodelled founders, doublets, organoid heterogeneity and asynchronous divisions bias \BA{} down by up to 0.8 with confident posteriors. Growth rate and stable composition are robust to assay problems. Modelling founders and typing errors fixes them; heterogeneity and asynchrony are detectable but not yet modelled.
+\textbf{Misspecification} (\S\ref{sec:misspec}). Simulated data that break one assumption at a time show that cell-typing errors are invisible in the data yet make the dedifferentiation test reject in 98--100\% of experiments without dedifferentiation; unmodelled founders, doublets, organoid heterogeneity and asynchronous divisions bias \BA{} down by up to 0.8 with confident posteriors. Growth rate and stable composition are robust to assay problems. Modelling founders and typing errors fixes them; heterogeneity and asynchrony are detectable but not yet modelled. Treating each clone's progenitor as unknown in the posterior (free founder distribution, \S\ref{sec:freefounder}) removes the confidently wrong \BA{} (T1: 0.02 $\to$ 0.52 for a truth of 0.80) but the progenitor fraction itself is barely learnable from endpoint counts, so \BA{} stays uncertain: recording founders at seeding is what identifies it.
 
 \textbf{Recommendations.}
 \begin{itemize}
@@ -850,7 +850,31 @@ Standard model fitted. Bias: MLE minus truth, mean and largest mean bias over th
 \item Even correctly specified, the 95\% profile interval of \BA{} covers in 78\% of the 27 checked cases at $n$ = 512 here (95\% over all of \S\ref{sec:fu-profile}); the misses were checked with 20 extra optimiser starts and are genuine.
 \end{itemize}
 \fig{detection_power}{0.9}{Can the misspecification be seen in the data? Detection rate of the goodness-of-fit test (grey) and of the likelihood-ratio test against the extended model (blue, where one exists), $n$ = 512. ``base'': false-alarm rate.}
-\textbf{For the lab.} (i) Sort single cells and record each founder's type --- doublets and unknown founders bias \BA{} confidently and are only partly visible. (ii) Measure the KRT20$^+$$\to$LGR5$^+$ mis-scoring rate independently before any claim of dedifferentiation; the data cannot reveal it. (iii) Check organoid-to-organoid heterogeneity (replicate wells, overdispersion of clone sizes) and size- or time-dependent growth before fitting; if present, the current model's \BA{} and dedifferentiation test are not reliable. (iv) Match time points to division counts.
+\subsection{Unknown progenitors in the posterior}\label{sec:freefounder}
+In real organoids the progenitor of a clone is not observed; only its endpoint counts are. The exact likelihood already sums over the hidden progenitor of each clone, $G = \sum_m \pi_m \big(p_A F_A + (1-p_A) F_B\big)^m$ (and the same for the detection probability), so we made the progenitor distribution free in the NUTS pipeline: $p_A$ = P(founder is A) and the doublet fraction $\pi_2$, both with Uniform(0,\,1) priors (opt-in \code{'~law.fixed.founder'}, \code{law.founder_sizes=[1,2]}; exact gradients for both kernels, about 1.4$\times$ the cost; \code{ExactLikelihood.progenitor_posterior} gives P(founder $\mid$ counts) per clone; note \res{docs/free_founder/README.md}). Runs: $n$ = 512, dataset 0, all 9 truths, for the founder scenarios above (41 runs; controls reduced for time: no doublet-free control, the ``no doublets but $\pi_2$ free'' check on T1 and T2 only).
+\fig{founder_posteriors}{0.82}{Posterior mean and 90\% interval of $p_A$ (left) and of the doublet fraction $\pi_2$ (right) per scenario and truth; dashed: truth.}
+\fig{b_to_a}{1.0}{\BA{} under the free-progenitor model (blue: $p_A$ free; green: $p_A$ and $\pi_2$ free) and under the all-A model (orange, NUTS of the misspecification study), with the MLEs of the all-A ($\times$) and extended (+) models; bars: posterior mean and 90\% interval; black: truth.}
+\begin{center}\footnotesize\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}lrrrrrr@{}}\toprule
+ & \multicolumn{3}{c}{\BA} & \multicolumn{3}{c}{90\% coverage (of 9 truths)} \\
+data, model & mean bias & max $|$bias$|$ & max $|z|$ & \BA & $m_{BA}$ & $\rho$ \\\midrule
+founders 70/30, all-A model & $-0.24$ & 0.78 & 38.6 & 5 & 6 & 5 \\
+founders 70/30, $p_A$ free & $-0.09$ & 0.28 & 2.8 & 5 & 9 & 7 \\
+doublets + 70/30, $p_A$ and $\pi_2$ free & $-0.08$ & 0.26 & 2.4 & 7 & 9 & 9 \\
+doublets (A founders), $p_A$ and $\pi_2$ free & $-0.17$ & 0.61 & 3.5 & 4 & 9 & 8 \\
+all-A data, $p_A$ free & $-0.17$ & 0.54 & 3.2 & 6 & 6 & 9 \\\bottomrule
+\end{tabular}
+\end{center}
+\begin{itemize}
+\item \textbf{The confidently wrong answer disappears.} With 30\% B founders, \BA{} for T1 moves from 0.02 ($z = -39$, all-A model) to 0.52 [0.36, 0.69]; T3 from 0.06 to 0.38, T4 from 0.04 to 0.57; the worst $|z|$ drops from 39 to 2.4--3.5, and $m_{BA}$ is covered in every truth.
+\item \textbf{But the progenitor fraction is hardly learnable from endpoint counts}, as expected from the parent-swap theory (\S\ref{sec:weakdirs}): for the prior draws the posterior of $p_A$ is close to its prior (90\% intervals about [0.05, 0.95]); for T1--T4 it settles at 0.2--0.4 against 0.7. The doublet fraction, in contrast, is identified (covered in 5--7 of 9 truths) and the model does not invent doublets where there are none ($\pi_2$ = 0.005 [0, 0.014] for T1).
+\item \textbf{Freedom has a price.} \BA{} of T1--T4 stays 0.15--0.35 below the truth (two branches along the parent-swap ridge: $p_A \approx$ 0.2--0.6 with \BA{} near the truth, and $p_A \approx$ 0.9 with \BA{} $\approx$ 0, 3--12 nats lower), and on correctly specified all-A data a free $p_A$ widens and lowers \BA{} (T1: 0.26 [0.03, 0.62] against 0.80) where the all-A model was nearly unbiased. Growth rate and stable composition stay robust (bias $\le$ 0.02 and 0.005).
+\item \textbf{Per-clone progenitor probabilities are weak for type, useful for doublets}: ranking clones by P(founder = A $\mid$ counts) gives AUC $\approx$ 0.6 (0.68--0.75 for T1--T4, $\approx$ 0.5 for the prior draws), slightly better at early endpoints (0.64 at generation 4 vs 0.60 at 10), and is miscalibrated where $p_A$ is underestimated; doublets are recognised with AUC 0.78.
+\item Mixing is harder with free progenitors (20 of 41 runs flagged: $\hat R > 1.05$ or chains on different branches), so individual runs are indicative; the pattern is consistent across truths and with the MLE study.
+\end{itemize}
+\textbf{Consequence.} Treating the progenitor as unknown is the honest model when founders are not recorded, and it removes the confident bias, but the endpoint counts cannot tell an A-founded clone from a B-founded one well enough to estimate \BA{} precisely. Recording the founder type at seeding (or sorting founders) is what makes \BA{} identifiable --- the design of \S\ref{sec:design}.
+
+\textbf{For the lab.} (i) Sort single cells and record each founder's type --- doublets and unknown founders bias \BA{} confidently and are only partly visible, and modelling unknown founders removes the bias but not the uncertainty (\S\ref{sec:freefounder}). (ii) Measure the KRT20$^+$$\to$LGR5$^+$ mis-scoring rate independently before any claim of dedifferentiation; the data cannot reveal it. (iii) Check organoid-to-organoid heterogeneity (replicate wells, overdispersion of clone sizes) and size- or time-dependent growth before fitting; if present, the current model's \BA{} and dedifferentiation test are not reliable. (iv) Match time points to division counts.
 
 % ====================================================================== conclusions
 \section{Conclusions}\label{sec:conclusions}

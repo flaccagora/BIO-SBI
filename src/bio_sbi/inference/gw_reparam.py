@@ -91,6 +91,9 @@ class StickCoordinates:
             self.a, self.b = np.asarray(lik.prior_a, float), np.asarray(lik.prior_b, float)
             self.orders: dict[str, list[str]] = {}
             return
+        if getattr(lik, "founder_free", False):
+            raise ValueError("exact_gw reparam / stick_order: free founder rows need the "
+                             "default coordinates (reparam: none)")  # fmt: skip
         types = list(lik.sim.law.types)
         orders: dict = brow_order(types) if brow else {}
         orders.update({str(k): list(v) for k, v in (stick_order or {}).items()})

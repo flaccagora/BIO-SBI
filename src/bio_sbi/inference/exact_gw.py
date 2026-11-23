@@ -17,7 +17,11 @@ Gradients are exact (forward mode through the pgf recursion).
 
 Supported: ``simulator=galton_watson`` / ``galton_watson_hours``, two types (any outcome
 table and fixed entries, e.g. ``two_type`` or ``reversible_ab``), fixed founder rows
-(e.g. single A founder), homogeneous law, two measured labels with any capture and 2x2
+(e.g. single A founder) or free ones (opt-in: e.g. ``'~law.fixed.founder'`` infers the
+founder-type probability ``founder.A``; ``law.founder_sizes=[1,2]`` also infers the
+founder-size probabilities; Dirichlet priors from ``law.concentration`` as for every
+row; exact gradients, see :func:`~bio_sbi.inference.gw_exact.log_likelihood_founder`;
+default coordinates only, ``reparam: none``), homogeneous law, two measured labels with any capture and 2x2
 confusion (pgf substitution ``x -> 1 - c + c (C x + ...)``), ``selection`` detected or
 all. Anything else raises ``ValueError``.
 
@@ -44,7 +48,16 @@ from scipy.special import expit, log_expit
 
 from ..rng import rng_for
 from .base import FittedPosterior, InferenceMethod
-from .gw_exact import GridSpec, GWModel, HorizonData, grid_spec, histogram, law_and_jac
+from .gw_exact import (
+    GridSpec,
+    GWModel,
+    HorizonData,
+    founder_composition_laws,
+    grid_spec,
+    histogram,
+    law_and_jac,
+    log_likelihood_founder,
+)
 from .gw_exact import log_likelihood as _log_likelihood
 from .gw_reparam import StickCoordinates, parse_spec
 from .nuts import NutsChain, ess, split_rhat
@@ -83,17 +96,23 @@ def check_supported(simulator, observation) -> None:
             f"inference=exact_gw: free scalar parameters {[s.name for s in space.free_scalars]}"
             " are not supported"
         )
-    for row in space.rows:
-        if row.prefix in ("founder", "founder_size") and row.n_sticks:
-            raise ValueError(
-                f"inference=exact_gw needs a fixed {row.prefix} row (e.g. law.fixed.founder.A=1);"
-                " free founder parameters are not supported"
-            )
     if observation.n_labels != 2 or tuple(observation.types) != tuple(simulator.types):
         raise ValueError("inference=exact_gw needs two measured labels for the two types")
 
 
 # ---------------------------------------------------------------------- likelihood
+def _stick_jacobian(s: np.ndarray, r) -> np.ndarray:
+    """``d p_free / d s`` ``(n_sticks, len(free))`` of a stick-broken row (mass ``r.mass``)."""
+    m = len(r.free)
+    d = np.zeros((m - 1, m))
+    for j in range(m - 1):
+        for i in range(j, m):
+            others = np.prod([1.0 - s[k] for k in range(i) if k != j])
+            si = s[i] if i < m - 1 else 1.0
+            d[j, i] = r.mass * others * (1.0 if i == j else -si)
+    return d
+
+
 class ExactLikelihood:
     """Exact log-likelihood and log-posterior of one dataset (list of cohorts).
 
@@ -124,7 +143,7 @@ class ExactLikelihood:
         self.floor = float(floor)
         self.min_detection = float(min_detection)
         law = simulator.law
-        theta0 = np.full(self.space.theta_dim, 0.5)  # founder rows are fixed: any theta
+        theta0 = np.full(self.space.theta_dim, 0.5)  # fixed founder rows: any theta
         P, founder, size_probs = law.unpack(self.space, self.space.decode(theta0))
         self.model = GWModel(
             offspring=np.ascontiguousarray(law.offspring, dtype=np.int64),
@@ -151,21 +170,32 @@ class ExactLikelihood:
                     f"{spec.Lx}x{spec.Ly} grid > grid.max_points={max_points:g}"
                 )
             self.data.append(HorizonData(simulator.generations(c.horizon), a, b, w, spec))
-        # theta coordinate -> (type row, free entries, stick index)
+        # theta coordinate -> (type row, free entries, stick index); free founder rows
+        # (founder types / founder sizes) come after the type rows in theta
         self.directions = []
+        self.founder_rows: list = []  # (row, first theta index) of free founder rows
         self.prior_a, self.prior_b = [], []
+        t = 0
         for r in self.space.rows:
             if not r.n_sticks:
                 continue
-            k = law.types.index(r.prefix)  # founder rows have no sticks (checked)
-            for j in range(r.n_sticks):
-                self.directions.append((k, r, j))
+            if r.prefix in ("founder", "founder_size"):
+                self.founder_rows.append((r, t))
+            else:
+                if self.founder_rows:
+                    raise ValueError("exact_gw: type rows must precede the founder rows")
+                k = law.types.index(r.prefix)
+                for j in range(r.n_sticks):
+                    self.directions.append((k, r, j))
+            t += r.n_sticks
             tail = np.cumsum(r.alpha[::-1])[::-1]
             self.prior_a.extend(r.alpha[:-1])
             self.prior_b.extend(tail[1:])
         self.prior_a = np.asarray(self.prior_a, dtype=float)
         self.prior_b = np.asarray(self.prior_b, dtype=float)
-        self.dim = len(self.directions)
+        self.dim = t
+        #: Theta coordinates of the outcome rows (``dim`` unless founder rows are free).
+        self.n_row_dims = len(self.directions)
         self.n_outcomes_max = law.offspring.shape[1]
         self._lock = threading.Lock()
         self.evals, self.eval_seconds = 0, 0.0
@@ -196,6 +226,19 @@ class ExactLikelihood:
 
     # ---------------------------------------------------------------- parameters
     @property
+    def founder_free(self) -> bool:
+        """Whether the founder type and/or founder size probabilities are inferred."""
+        return bool(self.founder_rows)
+
+    def model_at(self, theta: np.ndarray) -> GWModel:
+        """:attr:`model` with the founder distribution at ``theta`` (free founder rows)."""
+        if not self.founder_free:
+            return self.model
+        _, founder, size_probs = self.sim.law.unpack(self.space, self.space.decode(theta))
+        return replace(self.model, founder=np.asarray(founder, dtype=float),
+                       size_probs=np.asarray(size_probs, dtype=float))  # fmt: skip
+
+    @property
     def grids(self) -> list[GridSpec]:
         """FFT grid of every horizon."""
         return [h.grid for h in self.data]
@@ -210,8 +253,8 @@ class ExactLikelihood:
         """``P (2, O)``, ``dP (d, O)`` (row derivative per coordinate) and its row index."""
         theta = np.asarray(theta, dtype=float)
         P = self.probabilities(theta)
-        dP = np.zeros((self.dim, self.n_outcomes_max))
-        rows = np.zeros(self.dim, dtype=np.int64)
+        dP = np.zeros((self.n_row_dims, self.n_outcomes_max))
+        rows = np.zeros(self.n_row_dims, dtype=np.int64)
         start = 0
         for t, (k, r, j) in enumerate(self.directions):
             if j == 0:
@@ -246,7 +289,57 @@ class ExactLikelihood:
         else:
             P = self.probabilities(theta)
             dP, rows = np.zeros((0, self.n_outcomes_max)), np.zeros(0, dtype=np.int64)
+        if self.founder_free:
+            return self._log_likelihood_founder(theta, P, dP, rows, grad, weights, t0)
         return self.log_likelihood_P(P, dP, rows, grad, weights, t0)
+
+    def _log_likelihood_founder(self, theta, P, dP, rows, grad, weights, t0):
+        """Free founder rows: :func:`~bio_sbi.inference.gw_exact.log_likelihood_founder`."""
+        theta = np.asarray(theta, dtype=float)
+        data = self.data
+        if weights is not None:
+            data = [replace(h, weight=np.asarray(w, dtype=float))
+                    for h, w in zip(self.data, weights, strict=True)]  # fmt: skip
+        model = self.model_at(theta)
+        ll, g_dir, g_phi, g_pi = log_likelihood_founder(
+            model, P, dP, rows, data, self.floor, self.min_detection, self.kernel, grad
+        )
+        g = np.zeros(self.dim if grad else 0)
+        if grad:
+            g[: self.n_row_dims] = g_dir
+            for r, t in self.founder_rows:
+                ge = g_phi if r.prefix == "founder" else g_pi  # per entry of the row
+                s = theta[t : t + r.n_sticks]
+                g[t : t + r.n_sticks] = _stick_jacobian(s, r) @ ge[list(r.free)]
+        with self._lock:
+            self.evals += 1
+            self.grad_evals += bool(grad)
+            self.eval_seconds += time.perf_counter() - t0
+        return ll, g
+
+    def progenitor_posterior(self, theta: np.ndarray) -> tuple[list[str], list[np.ndarray]]:
+        """Posterior founder composition of every histogram cell at ``theta``.
+
+        Returns ``(labels, probs)``: ``labels`` the compositions (``"A"``, ``"B"``,
+        ``"AA"``, ``"AB"``, ``"BB"``, ... with nonzero prior probability), ``probs`` one
+        ``(cells, K)`` array per horizon aligned with that horizon's histogram cells
+        ``(h.a, h.b)``: ``P(founders = c | counts)`` from :func:`~bio_sbi.inference.
+        gw_exact.founder_composition_laws` (cells of negligible probability get the
+        prior composition). Every horizon has the same labels.
+        """
+        theta = np.asarray(theta, dtype=float)
+        model = self.model_at(theta)
+        P = self.probabilities(theta)
+        labels, out = None, []
+        for h in self.data:
+            lab, p = founder_composition_laws(model, P, h.generations, h.grid)
+            labels = lab
+            w = p[:, h.a, h.b].T  # (cells, K)
+            tot = w.sum(1, keepdims=True)
+            prior = np.array([p_c.sum() for p_c in p])
+            prior = prior / prior.sum()
+            out.append(np.where(tot > 0, w / np.where(tot > 0, tot, 1.0), prior[None]))
+        return labels, out
 
     def log_likelihood_P(self, P: np.ndarray, dP: np.ndarray, rows: np.ndarray,
                          grad: bool = True, weights: list[np.ndarray] | None = None,
@@ -300,12 +393,13 @@ class ExactLikelihood:
         cells.
         """
         P, dP, rows = self.jacobian(theta)
+        model = self.model_at(theta)
         out = []
         for h in self.data:
             g = h.grid
-            p, _ = law_and_jac(self.model, P, dP[:0], rows[:0], h.generations, g)
+            p, _ = law_and_jac(model, P, dP[:0], rows[:0], h.generations, g)
             big = GridSpec(2 * g.Lx, 2 * g.Ly, 1.0, 1.0)
-            pb, _ = law_and_jac(self.model, P, dP[:0], rows[:0], h.generations, big)
+            pb, _ = law_and_jac(model, P, dP[:0], rows[:0], h.generations, big)
             norm = 1 - pb[0, 0] if self.model.detected else 1.0
             inside = pb[: g.Lx, : g.Ly].sum() - (pb[0, 0] if self.model.detected else 0.0)
             ref = pb[h.a, h.b]
