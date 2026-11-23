@@ -48,7 +48,7 @@
   left=5pt,right=5pt,top=3pt,bottom=3pt,fontupper=\small}
 \newtcolorbox{caveat}{colback=pendbg,colframe=corange,boxrule=0.6pt,arc=2pt,
   left=5pt,right=5pt,top=3pt,bottom=3pt,fontupper=\small}
-\graphicspath{{figures/}{../docs/dediff_test/figures/}{../docs/jeffreys/figures/}{../docs/weak_directions/figures/}{../docs/optimal_design/figures/}{../docs/spike_slab/figures/}{../docs/profile_intervals/figures/}}
+\graphicspath{{figures/}{../docs/dediff_test/figures/}{../docs/jeffreys/figures/}{../docs/weak_directions/figures/}{../docs/optimal_design/figures/}{../docs/spike_slab/figures/}{../docs/profile_intervals/figures/}{../docs/misspecification/figures/}}
 \makeatletter\newcommand{\tabin}[1]{\@@input #1 }\makeatother  % expandable \input for table rows
 \newcommand{\fig}[3]{\begin{figure}[H]\centering\includegraphics[width=#2\linewidth]{#1}\caption{#3}\label{fig:#1}\end{figure}}
 \hypersetup{pdftitle={BIO-SBI: exact likelihood for Galton-Watson and the XG2 experiment},pdfauthor={BIO-SBI}}
@@ -97,6 +97,8 @@ Data & synthetic only \\
 \textbf{Follow-ups} (\S\ref{sec:fu}). B's switch back reaches an error below 0.05 at 2048--4096 clones per endpoint for T1, T3, T4 (T2 not by 4096), but where B never divides the posterior stays 1--2 sd low at every $n$. A flat prior on \BA{} cuts the \BA{} error of T1--T4 by 1.7--5$\times$ and, at $n$ = 128, up to doubles it for the small-\BA{} truths. Reparametrising B's row helps modestly within a branch (0.8--1.6$\times$); T1's posterior at $n$ = 1024 has a second ``B divides'' branch holding about 17\% of the mass, which single NUTS runs weight anywhere between 2\% and 28\%. Two other ``uninformative'' priors do not fix the \BA{} bias either (\S\ref{sec:fu-jeffreys}): the exact Jeffreys prior is proper but concentrates on B self-renewal and \BA{} $\approx$ 0 (bias $-$0.13 at $n$ = 128, $-$0.04 at 1024); Dirichlet(\textonehalf) is the best symmetric prior (RMSE 0.19 $\to$ 0.07), and at 1024 the priors still differ by more than 0.25 posterior sd in most cells.
 
 \textbf{Dedifferentiation test} (\S\ref{sec:dediff}). A likelihood-ratio test of ``B never gives rise to A'' is well calibrated with per-dataset boundary ($\bar\chi^2$) critical values (1--6.5\% false positives) and, with perfect typing, detects $m_{BA} \approx 0.003$ A cells per B cell per generation already at 128 clones per endpoint. But 0.5\% of KRT20$^+$ cells mis-scored as LGR5$^+$, if not modelled, gives 75--100\% false positives, and assuming a rate only 10--20\% too low can still give most of them; assuming it 50--100\% too high costs little power. Measure an upper limit of the typing error ($\pm$25\% is enough) and test at that limit.
+
+\textbf{Misspecification} (\S\ref{sec:misspec}). Simulated data that break one assumption at a time show that cell-typing errors are invisible in the data yet make the dedifferentiation test reject in 98--100\% of experiments without dedifferentiation; unmodelled founders, doublets, organoid heterogeneity and asynchronous divisions bias \BA{} down by up to 0.8 with confident posteriors. Growth rate and stable composition are robust to assay problems. Modelling founders and typing errors fixes them; heterogeneity and asynchrony are detectable but not yet modelled.
 
 \textbf{Recommendations.}
 \begin{itemize}
@@ -785,6 +787,49 @@ On the CRC0322 2D counts (days 6 and 10 taken as generations 6 and 10; 165 and 1
 \subsection{How to run it}
 \code{uv run python scripts/dediff_test/run.py data counts.csv --reps 200} with columns \code{horizon,A,B} (horizon in generations); add \code{--confusion 0.02 --typing-kind b_as_a} to include a typing error. It prints $\Lambda$, the fitted $m_{BA}$, and $p$-values from the $\bar\chi^2$ mixture (from the fit), the textbook mixture, $\chi^2_3$, and the parametric bootstrap. Use the bootstrap or the $\bar\chi^2$-from-fit $p$-value.
 
+% ====================================================================== misspecification
+\section{What if the model is wrong? Misspecified biology and assay}\label{sec:misspec}
+\begin{keybox}
+\textbf{In short.} Every result above assumes that the organoids follow the model exactly. We simulated data that break one assumption at a time and fitted the standard model (n = 512 clones per endpoint, all 9 truths). \textbf{Cell-typing errors are invisible in the data but turn the dedifferentiation test into a false alarm} (98--100\% false positives from 0.5\% mis-scoring). \textbf{Unmodelled founders and doublets, organoid heterogeneity and asynchronous divisions} push \BA{} down along the known weak direction --- by 0.4--0.8 for the large-\BA{} truths --- and the posterior can be confidently wrong. Growth rate and stable composition stay robust to assay problems. Modelling the founders, the typing error or the cell loss restores the estimates; heterogeneity, asynchrony and density dependence are detectable but not yet modelled.
+\end{keybox}
+Code \code{scripts/misspecification/}; note \res{docs/misspecification/README.md}; results \res{results/exact_gw/misspecification/}. For each scenario and truth: MLE on 10 datasets, profile intervals on 3, goodness of fit, the extended model where one exists, the dedifferentiation test on 100 datasets without dedifferentiation (null rows N1, N2 of \S\ref{sec:dediff}), NUTS on one dataset per truth for three scenarios. The custom simulator reproduces the pipeline's law where they overlap. About 6\,h on 16 local workers.
+
+\begin{center}\scriptsize\setlength{\tabcolsep}{2.4pt}
+\begin{tabular}{@{}lrrrrrrr@{}}\toprule
+ & \multicolumn{2}{c}{\BA{} bias} & $\rho$ & \BA{} 95\% & dediff test & \multicolumn{2}{c}{detected} \\
+what is wrong in the data & mean & max & bias & coverage & false pos. & GOF & ext.\ LRT \\\midrule
+nothing (correctly specified) & $-0.04$ & 0.14 & $-0.1\%$ & 0.78 & 3--4\% & 6\% & --- \\
+founders 70\% A / 30\% B & $-0.18$ & 0.65 & $-0.4\%$ & 0.63 & 3--5\% & 11\% & 58\% \\
+15\% doublets (two founders) & $-0.28$ & 0.75 & $+1.8\%$ & 0.26 & 17--19\% & 51\% & 100\% \\
+15\% doublets, founders 70/30 & $-0.30$ & 0.79 & $+1.5\%$ & 0.15 & 5--16\% & 57\% & 100\% \\
+KRT20$^+$ read as LGR5$^+$, 0.5\% & $-0.03$ & 0.09 & $-0.1\%$ & 0.78 & \textbf{98--100\%} & 6\% & 9\% \\
+KRT20$^+$ read as LGR5$^+$, 2\% / 5\% & $-0.03$ & 0.10 & $-0.1\%$ & 0.89--0.96 & \textbf{100\%} & 4--7\% & 9--10\% \\
+symmetric mis-typing 2\% & $-0.04$ & 0.17 & $-0.2\%$ & 0.81 & \textbf{100\%} & 8\% & 9\% \\
+organoid heterogeneity, $\kappa$ = 50 & $-0.29$ & 0.76 & $+1.7\%$ & 0.22 & 28--45\% & 82\% & --- \\
+organoid heterogeneity, $\kappa$ = 10 & $-0.30$ & 0.65 & $+7.5\%$ & 0.00 & \textbf{100\%} & 100\% & --- \\
+asynchronous divisions ($\pm$1 generation) & $-0.34$ & 0.78 & $+1.9\%$ & 0.07 & 11--12\% & 69\% & --- \\
+density dependence & $+0.10$ & 0.25 & $-7.2\%$ & 0.15 & 0--5\% & 100\% & --- \\
+10\% / 20\% of cells not counted & $-0.06$ & 0.30 / 0.45 & $-0.2$ / $-0.5\%$ & 0.81 & 0--4\% & 9\% & 14 / 52\% \\
+\BA{} doubles after generation 5 & $+0.01$ & 0.13 & $-0.6\%$ & 0.96 & 2--5\% & 27\% & --- \\
+growth slows after generation 5 & $-0.08$ & 0.37 & $-6.7\%$ & 0.52 & 14--19\% & 78\% & --- \\\bottomrule
+\end{tabular}
+
+Standard model fitted. Bias: MLE minus truth, mean and largest mean bias over the 9 truths. Dediff false positives: rejection rate of the $\bar\chi^2$ test at nominal 5\% on data without dedifferentiation (N1--N2). Detected: binned goodness-of-fit test calibrated on correctly specified data (size 6\%), and likelihood-ratio test of the standard against the extended model (founder mixture and size, confusion matrix, capture; size 0--7\%). Heterogeneity: each clone draws its own probabilities from Dirichlet($\kappa\theta$).
+\end{center}
+\fig{bias_heatmap}{1.0}{Mean error of the MLE of \BA, $m_{BA}$ and the growth rate $\rho$, per scenario (rows) and truth (columns).}
+\fig{dediff_fpr}{0.9}{False-positive rate of the dedifferentiation test on data without dedifferentiation: standard model (red, orange) and the model with the true founders, typing error or capture (hatched). Dashed: nominal 5\%.}
+\begin{itemize}
+\item \textbf{Typing errors: invisible, harmless for the estimates, fatal for the test.} A KRT20$^+$ cell scored LGR5$^+$ looks exactly like a B cell that switched back. The transition estimates barely move, and neither goodness of fit nor the extended model detects the error (4--10\%), but the dedifferentiation test rejects in 98--100\% of experiments without dedifferentiation, even at 0.5\% mis-scoring. With the true error rate in the model the false-positive rate returns to 0--9\%. Only an independently measured error rate can protect a dedifferentiation claim (\S\ref{sec:dediff-ratio}).
+\item \textbf{Unknown founders and doublets bias \BA{} confidently.} B-founded clones and two-cell clones look like ``B divides'' to a model that assumes one A founder, so the fit trades \BA{} for B divisions (the weak direction of \S\ref{sec:weakdirs}): \BA{} drops by 0.4--0.8 for T1, T3, T4. With 30\% B founders NUTS gives T1 \BA{} = 0.02 $\pm$ 0.02 against 0.80. A 70/30 founder mix is hard to see (goodness of fit 11\%, extended LRT 58\%); doublets are seen (51--100\%). Estimating the founder mixture and doublet fraction removes the bias (largest \BA{} bias 0.06--0.13; coverage 0.89--0.93) even though the founder fraction itself is poorly determined (estimates 0.24--0.81 for 0.7).
+\item \textbf{Organoid heterogeneity is the most damaging biology}: with $\kappa$ = 10 no \BA{} interval covers the truth, $\rho$ is 7.5\% too high and the dedifferentiation test always fires; even mild heterogeneity ($\kappa$ = 50) gives 28--45\% false positives. It is easily detected (82--100\%), but the model has no fix yet.
+\item \textbf{Asynchrony, density dependence and time-varying growth} bias \BA{} or $m_{BA}$ and $\rho$ (by up to 7\%) and are detected in 69--100\% of datasets; asynchrony and slowing growth also inflate the dedifferentiation test (11--19\%).
+\item \textbf{Cell loss} inflates the \BA{} error 1.5--1.9$\times$, is nearly undetectable, and leaves the test intact.
+\item \textbf{The identifiable summaries are robust to assay problems}: $\rho$ moves by less than 2\% on average (at most 5\%, doublets on T5) and the stable A fraction by less than 0.03 under founders, doublets, typing errors and cell loss; under biology $\rho$ moves more (heterogeneity, density, slowing growth: up to 8--14\% for some truths).
+\item Even correctly specified, the 95\% profile interval of \BA{} covers in 78\% of the 27 checked cases at $n$ = 512 here (95\% over all of \S\ref{sec:fu-profile}); the misses were checked with 20 extra optimiser starts and are genuine.
+\end{itemize}
+\fig{detection_power}{0.9}{Can the misspecification be seen in the data? Detection rate of the goodness-of-fit test (grey) and of the likelihood-ratio test against the extended model (blue, where one exists), $n$ = 512. ``base'': false-alarm rate.}
+\textbf{For the lab.} (i) Sort single cells and record each founder's type --- doublets and unknown founders bias \BA{} confidently and are only partly visible. (ii) Measure the KRT20$^+$$\to$LGR5$^+$ mis-scoring rate independently before any claim of dedifferentiation; the data cannot reveal it. (iii) Check organoid-to-organoid heterogeneity (replicate wells, overdispersion of clone sizes) and size- or time-dependent growth before fitting; if present, the current model's \BA{} and dedifferentiation test are not reliable. (iv) Match time points to division counts.
+
 % ====================================================================== conclusions
 \section{Conclusions}\label{sec:conclusions}
 \begin{enumerate}
@@ -805,7 +850,8 @@ On the CRC0322 2D counts (days 6 and 10 taken as generations 6 and 10; 165 and 1
 \item A prior for B's other outcomes that keeps \BA{} flat without unbounded densities (e.g.\ concentration 1 for every B outcome except a flat \BA), and a rerun of the flat-\BA{} cells with it: the 0.2 concentrations made B's small entries unsampleable.
 \item The one unresolved Jeffreys cell (T1, $n$ = 128, dataset 1): an exact sampler for $p_J$ times the likelihood that converges.
 \item Prior sensitivity by NUTS where reweighting is unreliable (203 (run, prior) pairs; at least the wrong prior at $n \ge 512$).
-\item Dedifferentiation test (\S\ref{sec:dediff}): robustness to organoid fate heterogeneity and to typing errors that depend on clone size; sizing the B-founder design.
+\item Models for organoid heterogeneity (random effects per clone), asynchronous divisions (continuous time) and density dependence: these misspecifications are detectable and damaging (\S\ref{sec:misspec}) but cannot be corrected yet.
+\item Dedifferentiation test (\S\ref{sec:dediff}): typing errors that depend on clone size; sizing the B-founder design.
 \end{itemize}
 
 % ====================================================================== appendix
