@@ -672,11 +672,40 @@ R3 (no B sort): A at 1/3/4/6 & 4.5 & 250--2\,100 \\\bottomrule
 \end{columns}
 \end{frame}
 
+\begin{frame}{What if founders are not perfectly known?}
+\vspace{0pt}
+\footnotesize Each clone's law becomes a mixture over its hidden founder, $w\,p_A + (1-w)\,p_B$, with the founder weight $w$ known or estimated from the same data.
+
+\smallskip
+\centering
+{\scriptsize\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}lcc@{}}\toprule
+design, founder information & var(\BA) gain & sd(\BA), $N$ = 512 \\\midrule
+\textbf{R1, founders recorded} & \textbf{21} (6.5--89) & 0.016--0.046 \\
+R1, sorted 95\% pure, \textbf{purity measured} & 19 & 0.017--0.047 \\
+R1, sorted 80\% pure, \textbf{purity measured} & 16 & 0.020--0.049 \\
+R1, sorted 90\% pure, purity estimated & 10 (3.3--57) & 0.018--0.073 \\
+R1, sorted 80\% pure, purity estimated & 8 (2.5--46) & 0.021--0.085 \\
+R1 time points, \textbf{unsorted} ($p_A$ = 0.7 estimated) & 5.6 (2.0--17) & 0.038--0.126 \\
+current time points, unsorted & \alert{0.77} (0.37--1.2) & 0.054--0.42 \\\bottomrule
+\end{tabular}}
+
+\raggedright
+{\tiny R1 = $\tfrac38$A2 + $\tfrac14$B1 + $\tfrac14$B2 + $\tfrac18$A10. Gain: median (range) relative to the current design (A founders at 4/6/8/10, recorded), same total clones, 9 truths. Asymptotic (Fisher) numbers; with unsorted founders the posterior can have two branches, so real precision at a few hundred clones is lower.}
+
+\begin{itemize}\scriptsize
+\item \textbf{impure sorting costs little if the purity is measured} (80\% purity still gives 16$\times$)
+\item an \textbf{unmeasured} purity halves the gain: impurity trades off against B's own fate (a parent swap)
+\item no sorting: early observation alone still gives 5.6$\times$; unsorted founders at the current time points are \alert{worse than now}
+\end{itemize}
+\begin{block}{}\footnotesize Sort founders and measure the sort purity on the same day (re-stain a sample of sorted cells); if sorting is impossible, still observe early.\end{block}
+\end{frame}
+
 \begin{frame}{Concrete suggestions for the lab}
 \begin{columns}[T]
 \begin{column}{0.49\textwidth}
 \begin{block}{1. Organoids from sorted KRT20$^+$ cells}
-\footnotesize Observes B's fate directly. Any validated LGR5$^+$ cell is direct evidence of dedifferentiation.
+\footnotesize Observes B's fate directly. Any validated LGR5$^+$ cell is direct evidence of dedifferentiation. Measure the sort purity.
 \end{block}
 \begin{block}{2. Early time points (1--2 divisions)}
 \footnotesize Score clones at a \emph{known} number of divisions: match the time point to the cell cycle, or count divisions (live imaging).
