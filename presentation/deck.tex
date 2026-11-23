@@ -282,23 +282,6 @@ T5 post. & .10 & .11 & .09 & .12 & .10 \\\bottomrule
 \end{columns}
 \end{frame}
 
-\begin{frame}{How much data until B's row converges?}
-\begin{columns}[c]
-\begin{column}{0.52\textwidth}
-\includegraphics[width=\textwidth]{btoa_large_n.pdf}
-\end{column}
-\begin{column}{0.45\textwidth}\small
-\begin{itemize}
-\item \BA{} within 0.05 of the truth at \textbf{2048--4096} clones per endpoint for T1, T3, T4 (T2 not even at 4096); the MLE one doubling earlier
-\item but where B never divides, the posterior stays \textbf{1--2 sd low at every $n$}
-\item at 1024 the answer still moves by 0.2--1.2 sd when the prior changes
-\item A's row, growth rate and composition: $n^{-1/2}$ regime from 256--512
-\end{itemize}
-\take{Rule of thumb: A's row needs a few hundred, B's row thousands of clones per endpoint with the current design.}
-\end{column}
-\end{columns}
-\end{frame}
-
 \begin{frame}{Every B probability up to 4096 clones per endpoint}
 \begin{columns}[c]
 \begin{column}{0.64\textwidth}
@@ -316,13 +299,16 @@ B$\to$AB & 512 & 512 & -- \\\bottomrule
 \end{tabular}}
 
 {\tiny Posterior mean; -- = not by 4096.}
-\begin{itemize}\footnotesize
-\item ``B's row converges'' is \textbf{not one number}: it depends on the truth
-\item prior draws: \BA{} by 512--2048, but \textbf{B dies, persists, B$\to$AB} still off at 4096 (P1, P3, P4) --- the parent swaps
-\item T5 (large clones): everything within 0.05 from 128
+\begin{itemize}\scriptsize
+\item ``B's row converges'' is \textbf{not one number}
+\item prior draws: \BA{} by 512--2048, but \textbf{B dies, persists, B$\to$AB} off at 4096 (P1, P3, P4): parent swaps
+\item T5 (large clones): all within 0.05 from 128
+\item MLE: \BA{} one doubling earlier (T1--T4)
 \end{itemize}
 \end{column}
 \end{columns}
+\vspace{-4pt}
+\take{Rule of thumb: A's row needs a few hundred, B's row thousands of clones per endpoint with the current design.}
 \end{frame}
 
 \begin{frame}{MLE or posterior mean?}
