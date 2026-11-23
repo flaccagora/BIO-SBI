@@ -437,6 +437,27 @@ Grown clones sit at $u$ and grow at $\rho$, so they barely see swaps.
 \end{columns}
 \end{frame}
 
+\begin{frame}{Two datasets, two answers: P3 posteriors at $n$ = 1024}
+\begin{columns}[T]
+\begin{column}{0.495\textwidth}
+\centering{\small\textbf{dataset 0}}\\
+\includegraphics[width=\textwidth]{p3_n1024_s0_posterior.png}
+\end{column}
+\begin{column}{0.495\textwidth}
+\centering{\small\textbf{dataset 1}}\\
+\includegraphics[width=\textwidth]{p3_n1024_s1_posterior.png}
+\end{column}
+\end{columns}
+
+{\tiny Grey: prior; blue: NUTS posterior; red: truth; orange dashed: MLE. Same truth, same $n$, both runs converged (max $\hat R \le 1.03$).}
+
+\smallskip
+\begin{itemize}\footnotesize
+\item dataset 0 puts the divisions on \textbf{A$\to$BB} and \textbf{B$\to$AB}; dataset 1 on \textbf{A$\to$AB} and \textbf{B$\to$BB}: the parent swap, chosen by dataset noise
+\item what the counts do fix agrees: A persists, A death, \BA{}; growth and stable composition (next slide)
+\end{itemize}
+\end{frame}
+
 \begin{frame}{Example: which parent made the mixed division? (P3, $n$ = 1024)}
 \centering
 \includegraphics[width=0.88\textwidth]{p3_ridge.pdf}
