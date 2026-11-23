@@ -573,23 +573,27 @@ growth slows after generation 5 & 0.37 & $-6.7\%$ & 0.52 & 14--19\% & 78\% \\\bo
 {\tiny MLE on 10 datasets per scenario and truth; dediff test on 100 null datasets (rows N1, N2); GOF: binned goodness-of-fit test, size 6\%. Heterogeneity: each clone draws its own probabilities from Dirichlet($\kappa\theta$).}
 \end{frame}
 
-\begin{frame}{Wrong founders or heterogeneity: \BA{} biased, confidently}
+\begin{frame}{Wrong founders or heterogeneity: every estimate degrades}
 \begin{columns}[c]
-\begin{column}{0.42\textwidth}
-\centering\includegraphics[height=0.66\textheight]{bias_btoa_heatmap.png}
+\begin{column}{0.44\textwidth}
+\centering\includegraphics[height=0.70\textheight]{mae_all12_heatmap.png}
 
-{\tiny MLE bias of \BA. F70: 30\% B founders; D15: doublets; MT: mis-typing; HET: heterogeneity; ASYNC: asynchrony; LOSS: cells missed; TV: rates change.}
+{\tiny Mean $|$MLE $-$ truth$|$ over all 12 probabilities, $n$ = 512.}
 \end{column}
-\begin{column}{0.56\textwidth}
+\begin{column}{0.54\textwidth}
 \begin{itemize}\small
-\item B-founded and two-cell clones look like ``B divides'' to a model with one A founder: \BA{} drops by \textbf{0.4--0.8} for T1, T3, T4 (the weak direction of Part 6)
-\item and \textbf{confidently}: with 30\% B founders NUTS gives T1 \BA{} = \alert{0.02 $\pm$ 0.02} (truth 0.80)
-\item heterogeneity and asynchrony do the same; coverage 0.00--0.26
-\item \textbf{fix}: estimating founder mix and doublet fraction brings the bias back to 0.06--0.13 (coverage 0.89--0.93)
+\item correctly specified (``base''): \textbf{0.059} on average, the sampling noise at $n$ = 512
+\item typing errors: \textbf{unchanged} (0.059--0.066)
+\item unknown founders, 10\% of cells missed: \textbf{+40--55\%}
+\item doublets, heterogeneity, asynchrony, density, 20\% missed: \textbf{1.8--2.5$\times$} (worst truth 0.16--0.22)
+\item \BA{} is hit hardest: down by 0.4--0.8 for T1, T3, T4, with confident posteriors
 \end{itemize}
 \take{Growth rate and stable composition are robust to assay problems ($<2\%$); biology moves them by up to 8--14\%.}
 \end{column}
 \end{columns}
+
+{\tiny F70: 30\% B founders; D15A/D15mix: 15\% doublets (with A / mixed founders); MT: mis-typing; HET: heterogeneity; ASYNC: asynchrony; DENS: density dependence; LOSS90/80: 10\%/20\% of cells missed; TV: rates change after gen.\ 5.}
+
 \end{frame}
 
 \begin{frame}{Letting the model not know the progenitor}
