@@ -144,11 +144,16 @@ def job(scen: str, model: str, gt: str, seed: int, threads: int, out_dir: Path) 
         check_dataset(scen, gt, seed, cohorts)
         sim = make_sim(MODELS[model])
         lik = ExactLikelihood(sim, dl.observation(None), cohorts, kernel="adjoint")
-        m = ExactGW(kernel="adjoint", threads=threads, chains=4, init_starts=8, warmup=300,
-                    draws=500, log_every=0, seed=seed, max_tree_depth=7,
+        smoke = os.environ.get("FF_SMOKE") == "1"  # tiny run: checks the post-processing
+        m = ExactGW(kernel="adjoint", threads=threads, chains=4, init_starts=4 if smoke else 8,
+                    warmup=20 if smoke else 300, draws=500, log_every=0, seed=seed,
+                    max_tree_depth=3 if smoke else 7, init_maxiter=10 if smoke else 200,
                     stop={"enabled": True, "ess": 200.0, "tail_ess": 100.0,
-                          "max_draws": 500})  # fmt: skip
-        theta, diag = m.run(lik, key=("free_founder", scen, model, gt, seed))
+                          "min_draws": 20 if smoke else 100, "block": 20 if smoke else 50,
+                          "max_draws": 20 if smoke else 500})  # fmt: skip
+        # (the stop rule is a run() argument; the study's all-A runs omitted it and drew
+        # a fixed 500 per chain)
+        theta, diag = m.run(lik, key=("free_founder", scen, model, gt, seed), stop=m.stop)
         t_nuts = time.perf_counter() - t0
         names = physical_names(sim)
         phys = sim.space.decode(theta)
@@ -175,7 +180,8 @@ def job(scen: str, model: str, gt: str, seed: int, threads: int, out_dir: Path) 
                 "init_log_posterior", "chain_mean_log_posterior", "seconds", "seconds_per_eval",
                 "gradient_evals", "chain_means")  # fmt: skip
         res["convergence"] = {k: diag.get(k) for k in keep}
-        res["stop"] = {k: diag["stop"][k] for k in ("reason", "failed", "draws_per_chain")}
+        st = diag.get("stop") or {"reason": "fixed", "failed": [], "draws_per_chain": None}
+        res["stop"] = {k: st[k] for k in ("reason", "failed", "draws_per_chain")}
         res["seconds_nuts"] = t_nuts
         # ---- per-clone progenitor posterior
         t1 = time.perf_counter()
