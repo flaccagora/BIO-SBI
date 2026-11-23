@@ -9,7 +9,7 @@
 \usepackage{amsmath,amssymb}
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta,positioning}
-\graphicspath{{../report_exact_gw/figures/}{../docs/weak_directions/figures/}{../docs/spike_slab/figures/}{../docs/dediff_test/figures/}{../docs/optimal_design/figures/}{../docs/jeffreys/figures/}{../docs/profile_intervals/figures/}{figures/}}
+\graphicspath{{../report_exact_gw/figures/}{../docs/weak_directions/figures/}{../docs/spike_slab/figures/}{../docs/dediff_test/figures/}{../docs/optimal_design/figures/}{../docs/jeffreys/figures/}{../docs/profile_intervals/figures/}{../docs/misspecification/figures/}{figures/}}
 
 % ------------------------------------------------------------------ look
 \definecolor{cblue}{HTML}{2A78D6}
@@ -70,6 +70,7 @@
 \item The bias of \BA
 \item Weak directions
 \item Testing for dedifferentiation
+\item What if the model is wrong?
 \item Ideas for the wet lab
 \item What 500 organoids per endpoint buy
 \end{enumerate}
@@ -638,9 +639,76 @@ exact & 1--13\% \\
 \textbf{Robust test}: give a measured interval for the rate; reject only if rejected at every rate in it.
 
 \smallskip
-{\scriptsize Real CRC0322 data: $\Lambda = 45$, $p$ = 0.005, but $\hat m_{BA}$ = 1.35 is implausible: typing errors and organoid heterogeneity are not modelled $\Rightarrow$ \textbf{not evidence}.}
+{\scriptsize Real CRC0322 data: $\Lambda = 45$, $p$ = 0.005, but $\hat m_{BA}$ = 1.35 is implausible: typing errors and organoid heterogeneity are not modelled, and either alone produces such rejections (next part) $\Rightarrow$ \textbf{not evidence}.}
 \end{column}
 \end{columns}
+\end{frame}
+
+% ================================================================== misspecification
+\section{What if the model is wrong?}
+
+\begin{frame}{Breaking one assumption at a time ($n$ = 512, all 9 truths)}
+{\scriptsize\setlength{\tabcolsep}{3.5pt}
+\begin{tabular}{@{}lrrrrr@{}}\toprule
+what is wrong in the data & \BA{} bias & growth $\rho$ & \BA{} 95\% & dediff test & seen by \\
+(standard model fitted) & max over truths & bias & coverage & false pos. & GOF test \\\midrule
+nothing & 0.14 & $-0.1\%$ & 0.78 & 3--4\% & 6\% \\\midrule
+\multicolumn{6}{@{}l}{\emph{assay}} \\
+founders 70\% A / 30\% B & \alert{0.65} & $-0.4\%$ & 0.63 & 3--5\% & 11\% \\
+15\% doublets (two founders) & \alert{0.75} & $+1.8\%$ & \alert{0.26} & 17--19\% & 51\% \\
+KRT20$^+$ read as LGR5$^+$, 0.5\% & 0.09 & $-0.1\%$ & 0.78 & \alert{\textbf{98--100\%}} & 6\% \\
+KRT20$^+$ read as LGR5$^+$, 2--5\% & 0.10 & $-0.1\%$ & 0.89--0.96 & \alert{\textbf{100\%}} & 4--7\% \\
+10\% / 20\% of cells not counted & 0.30 / 0.45 & $-0.2$ / $-0.5\%$ & 0.81 & 0--4\% & 9\% \\\midrule
+\multicolumn{6}{@{}l}{\emph{biology}} \\
+organoid heterogeneity, mild ($\kappa$ = 50) & \alert{0.76} & $+1.7\%$ & \alert{0.22} & \alert{28--45\%} & 82\% \\
+organoid heterogeneity, strong ($\kappa$ = 10) & \alert{0.65} & $+7.5\%$ & \alert{0.00} & \alert{\textbf{100\%}} & 100\% \\
+asynchronous divisions ($\pm$1 gen.) & \alert{0.78} & $+1.9\%$ & \alert{0.07} & 11--12\% & 69\% \\
+density dependence & 0.25 & $-7.2\%$ & 0.15 & 0--5\% & 100\% \\
+growth slows after generation 5 & 0.37 & $-6.7\%$ & 0.52 & 14--19\% & 78\% \\\bottomrule
+\end{tabular}}
+
+\smallskip
+{\tiny MLE on 10 datasets per scenario and truth; dediff test on 100 null datasets (rows N1, N2); GOF: binned goodness-of-fit test, size 6\%. Heterogeneity: each clone draws its own probabilities from Dirichlet($\kappa\theta$).}
+\end{frame}
+
+\begin{frame}{Wrong founders or heterogeneity: \BA{} biased, confidently}
+\begin{columns}[c]
+\begin{column}{0.42\textwidth}
+\centering\includegraphics[height=0.66\textheight]{bias_btoa_heatmap.png}
+
+{\tiny MLE bias of \BA. F70: 30\% B founders; D15: doublets; MT: mis-typing; HET: heterogeneity; ASYNC: asynchrony; LOSS: cells missed; TV: rates change.}
+\end{column}
+\begin{column}{0.56\textwidth}
+\begin{itemize}\small
+\item B-founded and two-cell clones look like ``B divides'' to a model with one A founder: \BA{} drops by \textbf{0.4--0.8} for T1, T3, T4 (the weak direction of Part 7)
+\item and \textbf{confidently}: with 30\% B founders NUTS gives T1 \BA{} = \alert{0.02 $\pm$ 0.02} (truth 0.80)
+\item heterogeneity and asynchrony do the same; coverage 0.00--0.26
+\item \textbf{fix}: estimating founder mix and doublet fraction brings the bias back to 0.06--0.13 (coverage 0.89--0.93)
+\end{itemize}
+\take{Growth rate and stable composition are robust to assay problems ($<2\%$); biology moves them by up to 8--14\%.}
+\end{column}
+\end{columns}
+\end{frame}
+
+\begin{frame}{The dedifferentiation test is the most fragile result}
+\centering
+\includegraphics[width=0.70\textwidth]{dediff_fpr.png}
+
+\begin{columns}[T]
+\begin{column}{0.50\textwidth}
+\begin{itemize}\scriptsize
+\item \textbf{typing errors}: estimates barely move and no test sees them (4--10\%), but the test rejects in \alert{98--100\%} of experiments without dedifferentiation
+\item with the true error rate in the model: back to 0--9\% (hatched)
+\end{itemize}
+\end{column}
+\begin{column}{0.48\textwidth}
+\begin{itemize}\scriptsize
+\item \textbf{heterogeneity}: 28--45\% false positives (mild), 100\% (strong); detectable, but \textbf{no model for it yet}
+\item asynchrony, slowing growth: 11--19\%
+\end{itemize}
+\end{column}
+\end{columns}
+\take{Only an independently measured typing-error rate, and a check for organoid heterogeneity, can protect a dedifferentiation claim.}
 \end{frame}
 
 % ================================================================== 9 wet lab
@@ -676,22 +744,25 @@ R3 (no B sort): A at 1/3/4/6 & 4.5 & 250--2\,100 \\\bottomrule
 \begin{frame}{Concrete suggestions for the lab}
 \begin{columns}[T]
 \begin{column}{0.49\textwidth}
-\begin{block}{1. Organoids from single sorted KRT20$^+$ cells}
-\small Observes B's fate directly. Any validated LGR5$^+$ cell is direct evidence of dedifferentiation.
+\begin{block}{1. Organoids from sorted KRT20$^+$ cells}
+\footnotesize Observes B's fate directly. Any validated LGR5$^+$ cell is direct evidence of dedifferentiation.
 \end{block}
 \begin{block}{2. Early time points (1--2 divisions)}
-\small Score clones at a \emph{known} number of divisions: match the time point to the cell cycle, or count divisions (live imaging).
+\footnotesize Score clones at a \emph{known} number of divisions: match the time point to the cell cycle, or count divisions (live imaging).
 \end{block}
 \begin{block}{3. Keep one late endpoint}
-\small $\sim$1/8 of clones at a late generation pins growth and composition.
+\footnotesize $\sim$1/8 of clones at a late generation pins growth and composition.
 \end{block}
 \end{column}
 \begin{column}{0.49\textwidth}
-\begin{alertblock}{4. Measure the typing error on the same assay}
-\small P(KRT20$^+$ scored LGR5$^+$): an \textbf{upper limit} to $\pm$25\% $\approx$ 3\,000 KRT20$^+$ cells of known identity (2\% error), e.g.\ sorted pure populations or double staining.
+\begin{alertblock}{4. Measure the typing error}
+\footnotesize P(KRT20$^+$ scored LGR5$^+$): an \textbf{upper limit} to $\pm$25\% $\approx$ 3\,000 KRT20$^+$ cells of known identity (2\% error), e.g.\ sorted pure populations or double staining.
 \end{alertblock}
-\begin{block}{5. Also record}
-\small plating efficiency (empty clones), how many cells were seeded, organoid-to-organoid heterogeneity (fate differences, slowing growth).
+\begin{block}{5. Single cells, record founder type}
+\footnotesize doublets and unknown founders bias \BA{} confidently and are only partly visible in the data.
+\end{block}
+\begin{block}{6. Check organoid heterogeneity}
+\footnotesize replicate wells, overdispersion of clone sizes, size- or time-dependent growth; also plating efficiency.
 \end{block}
 \end{column}
 \end{columns}
@@ -701,7 +772,7 @@ R3 (no B sort): A at 1/3/4/6 & 4.5 & 250--2\,100 \\\bottomrule
 \section{What 500 organoids per endpoint buy}
 
 \begin{frame}{With the current design: 500 organoids at each of 4 endpoints}
-{\small A-founded clones, generations 4/6/8/10, $\approx$ 2\,000 organoids (XG2 at $n$ = 512).}
+{\small A-founded clones, generations 4/6/8/10, $\approx$ 2\,000 organoids (XG2 at $n$ = 512), \textbf{if the model is right}: wrong founders, doublets, heterogeneity or asynchrony can bias \BA{} by 0.4--0.8.}
 
 \smallskip
 {\footnotesize\setlength{\tabcolsep}{4pt}
@@ -750,13 +821,14 @@ R2: 500 A2, 1250 B2, 250 A10 & .023--.032 & .007--.031 \\\bottomrule
 \end{frame}
 
 \begin{frame}{Take-home}
-\begin{enumerate}
+\begin{enumerate}\small
 \item The exact GW likelihood (pgf + FFT) makes MLE and NUTS on raw organoid counts routine.
 \item A's row, growth and composition are recovered from a few hundred organoids per endpoint.
 \item \textbf{B$\to$A is the hardest parameter}: a flat ridge (``B switches back'' vs ``B is lost'') plus prior volume and the simplex boundary bias it by 1--2 sd, and the bias does not shrink in sd units.
 \item \textbf{Profile-likelihood intervals} need no prior and are the only calibrated intervals for \BA{} (95\% coverage vs 67\% for the flat posterior).
 \item The weak directions are \textbf{parent swaps}: late counts see what the population does, not which cell did it. Information lives in \textbf{early} and \textbf{B-founded} clones.
-\item Whether B gives rise to A is \textbf{testable} with few events --- but only once the \textbf{cell-typing error} is measured.
+\item Whether B gives rise to A is \textbf{testable} with few events --- but only once the \textbf{cell-typing error} is measured and organoid \textbf{heterogeneity} ruled out.
+\item If the model is wrong (founders, doublets, heterogeneity, asynchrony), \BA{} is biased with confident posteriors; growth and composition stay robust.
 \item With 2\,000 organoids, an early, B-founded design measures \BA{} 3--5$\times$ more precisely than the current one.
 \end{enumerate}
 \end{frame}
@@ -803,6 +875,20 @@ R2: 500 A2, 1250 B2, 250 A10 & .023--.032 & .007--.031 \\\bottomrule
 \begin{frame}{Backup: optimal designs per truth}
 \centering
 \includegraphics[width=0.97\textwidth]{optimal_weights.png}
+\end{frame}
+
+\begin{frame}{Backup: does modelling the misspecification fix it?}
+\centering
+\includegraphics[width=0.97\textwidth]{fix_rmse.png}
+
+{\small Red: standard model; blue: true setting known; green: setting estimated (extended model). Dashed: correctly specified data.}
+\end{frame}
+
+\begin{frame}{Backup: can the misspecification be seen in the data?}
+\centering
+\includegraphics[width=0.90\textwidth]{detection_power.png}
+
+{\small Goodness-of-fit test (grey) and likelihood-ratio test against the extended model (blue), $n$ = 512. ``base'': false-alarm rate.}
 \end{frame}
 
 \begin{frame}{Backup: sampler cost}
