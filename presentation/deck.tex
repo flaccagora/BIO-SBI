@@ -367,17 +367,17 @@ B$\to$AB & 512 & 512 & -- \\\bottomrule
 
 \begin{frame}{Why are B's parameters hard?}
 \begin{columns}[c]
-\begin{column}{0.50\textwidth}
-\includegraphics[width=\textwidth]{profile_panels.pdf}
+\begin{column}{0.47\textwidth}
+\centering\includegraphics[width=\textwidth]{gallery_btoa.png}
 \end{column}
-\begin{column}{0.48\textwidth}\small
+\begin{column}{0.51\textwidth}\footnotesize
 \begin{enumerate}
 \item \textbf{A founds every clone}: B's behaviour is seen only inside mixed populations, never in isolation.
-\item \textbf{Compensation}: ``B switches back to A'' and ``B is lost'' (dies, or divides into B's) give almost the same counts $\Rightarrow$ flat, often two-branched likelihood (blue).
+\item \textbf{Compensation}: ``B switches back to A'' and ``B is lost'' (dies, or divides into B's) give almost the same counts $\Rightarrow$ flat, often two-branched likelihood.
 \item \textbf{Boundaries}: ``B never divides'' is a face of the simplex; posteriors are truncated there.
 \item \textbf{Small clones} carry little information (T5, $\sim$200 cells, is easy).
 \end{enumerate}
-{\scriptsize Blue: profile log-likelihood of \BA; orange: log marginal posterior. T1 at $n$=128: the profile drops only 1.9 nats from \BA{} = 0.9 to 0.2.}
+{\scriptsize Profile log likelihood of \BA{} (fix it, maximise the other 9) per truth, $n$ = 128 (light) to 4096 (dark); orange: truth. At small $n$ the profiles are flat or two-branched (T1, T3, P4) and sharpen only slowly; T5 is sharp from $n$ = 128.}
 \end{column}
 \end{columns}
 \end{frame}
