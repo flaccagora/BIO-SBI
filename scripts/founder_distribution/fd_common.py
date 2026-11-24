@@ -55,7 +55,7 @@ SIZE_DISTS = {
 }
 SIZE_LABEL = {"S1": "S1 all single", "S2": "S2 mostly single", "S3": "S3 uniform 1-3",
               "S4": "S4 uniform 1-5"}  # fmt: skip
-PAS = (1.0, 0.9, 0.7, 0.5, 0.3, 0.1)
+PAS = (1.0, 0.9, 0.7, 0.6, 0.5, 0.3, 0.1, 0.0)
 GENS = (1, 2, 4, 6, 8, 10)
 DESIGNS = {
     "XG2": {4: 0.25, 6: 0.25, 8: 0.25, 10: 0.25},  # A-founded XG2 endpoints

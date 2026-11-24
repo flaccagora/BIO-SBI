@@ -35,3 +35,11 @@ case $1 in
     run_nuts 4
     wait ;;
 esac
+# (used after the first launch: the "mle" branch above was replaced by "after_mle", which
+# waits for the MLE runner, then runs the multi-condition MLEs, then NUTS runner 2)
+if [ "$1" = after_mle ]; then
+  while pgrep -f "founder_distribution/run.py mle" > /dev/null; do sleep 60; done
+  uv run python scripts/founder_distribution/multi.py --truths T1_ref,P3 --seeds 0-5 \
+    --workers 4 >> $LOG/multi.log 2>&1
+  run_nuts 2
+fi
