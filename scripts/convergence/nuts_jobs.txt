@@ -1,0 +1,5 @@
+# label n seed (slowest first, fast comparator second)
+S0 512 0
+F1 512 0
+S1 512 0
+S3 512 0
