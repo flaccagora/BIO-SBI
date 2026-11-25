@@ -122,6 +122,8 @@ def figure(s: pd.DataFrame, nt: pd.DataFrame) -> None:
         star = np.zeros_like(M, bool)
         for i, t in enumerate(truths):
             for j, st in enumerate(SETTINGS):
+                if df.empty:
+                    continue
                 r = df[(df.truth == t) & (df.setting == st)]
                 if len(r):
                     M[i, j] = float(r[col].iloc[0])
