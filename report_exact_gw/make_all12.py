@@ -101,9 +101,93 @@ def free_founder_sims() -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def truth12(gt: str) -> np.ndarray:
+    z = np.load(RES / "data_size" / gt / "n1024_s0" / "reference.npz", allow_pickle=True)
+    t = dict(zip([str(v) for v in z["truth_names"]], z["truth"].astype(float), strict=True))
+    return np.array([t[p] for p in NAMES])
+
+
+def multi_fisher(fi: pd.DataFrame) -> pd.DataFrame:
+    """All-12 total-variance ratio combined / single condition (both estimated), median."""
+    sys.path.insert(0, str(ROOT / "scripts" / "founder_distribution"))
+    import analyse_fisher as AF  # noqa: PLC0415
+    import fd_common as F  # noqa: PLC0415
+
+    rows = []
+    for gt in F.TRUTHS:
+        z = dict(np.load(F.CACHE / f"{gt}.npz"))
+        for dname, design in F.DESIGNS.items():
+            for name, parts in AF.COMBOS.items():
+                J, _ = AF.joint_conditions(z, parts, design)
+                I_th = F.schur(J, np.arange(10), np.arange(10, J.shape[0]))
+                tr = float(np.trace(np.linalg.pinv(I_th))) / F.N_TOTAL
+                for i, dist in enumerate(AF.SINGLES[name]):
+                    s = fi[(fi.truth == F.SHORTNAME[gt]) & (fi.design == dname) & (fi.dist == dist)
+                           & (fi["mode"] == "E")].trvar12.iloc[0]  # fmt: skip
+                    rows.append({"truth": F.SHORTNAME[gt], "design": dname, "combo": name,
+                                 "single": dist, "which": i, "ratio_all12": s / tr})  # fmt: skip
+    return pd.DataFrame(rows)
+
+
+def multi_mle() -> pd.DataFrame:
+    rows = []
+    for f in sorted((RES / "founder_distribution" / "multi").glob("*/*.json")):
+        d = json.loads(f.read_text())
+        est = np.array([d["conditions"][0][p] for p in NAMES])
+        rows.append({"setup": d["setup"], "truth": d["gt"], "seed": d["seed"],
+                     "mae12": float(np.mean(np.abs(est - truth12(d["gt"]))))})  # fmt: skip
+    return pd.DataFrame(rows)
+
+
+def heatmap_all12(fi: pd.DataFrame) -> None:
+    import matplotlib  # noqa: PLC0415
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt  # noqa: PLC0415
+    from matplotlib.colors import LinearSegmentedColormap, LogNorm  # noqa: PLC0415
+
+    med = fi.groupby(["design", "dist", "mode"]).gain_all12.median().reset_index()
+    med["size"] = med.dist.str.split("_").str[0]
+    med["pA"] = med.dist.str.split("pA").str[1].astype(float)
+    sizes = ["S1", "S2", "S3", "S4"]
+    slab = {"S1": "S1 single", "S2": "S2 mostly single", "S3": "S3 unif. 1-3", "S4": "S4 unif. 1-5"}
+    pas = sorted(med.pA.unique(), reverse=True)
+    cmap = LinearSegmentedColormap.from_list("rb", ["#b8302f", "#e8584e", "#f0efec", "#6da7ec", "#1c5cab"])
+    fig, axes = plt.subplots(2, 2, figsize=(11, 6), constrained_layout=True)
+    for (i, design), (j, mode) in [(a, b) for a in enumerate(("XG2", "R1t")) for b in enumerate(("K", "E"))]:
+        ax = axes[i, j]
+        M = np.array([[med[(med.design == design) & (med["mode"] == mode) & (med["size"] == sz)
+                           & np.isclose(med.pA, pa)].gain_all12.iloc[0] for pa in pas] for sz in sizes])  # fmt: skip
+        im = ax.imshow(M, cmap=cmap, norm=LogNorm(1 / 8, 8), aspect="auto")
+        for a in range(M.shape[0]):
+            for b in range(M.shape[1]):
+                ax.text(b, a, f"{M[a, b]:.2f}", ha="center", va="center", fontsize=7)
+        ax.set_xticks(range(len(pas)), [f"{p:g}" for p in pas])
+        ax.set_yticks(range(4), [slab[s] for s in sizes])
+        ax.set_xlabel("p_A (share of A founder cells)")
+        ax.set_title(f"{'XG2 design' if design == 'XG2' else 'R1 time points'}, founders "
+                     f"{'known' if mode == 'K' else 'estimated'}", fontsize=10)  # fmt: skip
+    cb = fig.colorbar(im, ax=axes, shrink=0.7, label="gain vs single A founder, known (same design)")
+    ticks = [1 / 8, 1 / 4, 1 / 2, 1, 2, 4, 8]
+    cb.set_ticks(ticks, labels=["1/8", "1/4", "1/2", "1", "2", "4", "8"])
+    cb.minorticks_off()
+    fig.suptitle("Founder distribution and information on all 12 probabilities: "
+                 "total variance (reference / setting), median over the 9 truths", fontsize=11)
+    out = ROOT / "docs" / "founder_distribution" / "figures"
+    fig.savefig(out / "info_all12.png", dpi=150)
+    plt.close(fig)
+
+
 def main() -> None:
     TAB.mkdir(parents=True, exist_ok=True)
     fi = fisher_table()
+    heatmap_all12(fi)
+    mf = multi_fisher(fi)
+    mf.to_csv(TAB / "all12_multi_fisher.csv", index=False)
+    print(mf.groupby(["design", "combo", "which"]).ratio_all12.median().unstack("which").round(2).to_string())
+    mm = multi_mle()
+    mm.to_csv(TAB / "all12_multi_mle.csv", index=False)
+    print(mm.groupby(["setup", "truth"]).mae12.mean().round(3).to_string())
     fi.to_csv(TAB / "all12_fisher.csv", index=False)
     fs = fi.groupby(["design", "dist", "mode"]).gain_all12.median().unstack("mode")
     print(fs.round(2).to_string())
