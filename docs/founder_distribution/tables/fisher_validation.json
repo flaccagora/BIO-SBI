@@ -1,0 +1,86 @@
+{
+ "single": [
+  {
+   "truth": "P3",
+   "h": 4,
+   "L": 80,
+   "rel_err_singleA": 1.0575659745096079e-15,
+   "detection_err": 0.0,
+   "kept_mass": 1.0,
+   "rel_err_mix_S1_pA0.7": 1.178145745775832e-15
+  },
+  {
+   "truth": "P3",
+   "h": 8,
+   "L": 625,
+   "rel_err_singleA": 2.33268226164409e-13,
+   "detection_err": 0.0,
+   "kept_mass": 0.9999999999636804,
+   "rel_err_mix_S1_pA0.7": 2.424467158204797e-13
+  },
+  {
+   "truth": "T1_ref",
+   "h": 6,
+   "L": 231,
+   "rel_err_singleA": 3.0016724296486294e-14,
+   "detection_err": 0.0,
+   "kept_mass": 0.9999999999975325,
+   "rel_err_mix_S1_pA0.7": 2.952700584614908e-14
+  },
+  {
+   "truth": "T3_Bdiv",
+   "h": 10,
+   "L": 1617,
+   "rel_err_singleA": 3.0493076796679303e-13,
+   "detection_err": 0.0,
+   "kept_mass": 0.9999999997862572,
+   "rel_err_mix_S1_pA0.7": 3.021410993560458e-13
+  }
+ ],
+ "scores": [
+  {
+   "truth": "P3",
+   "h": 4,
+   "dist": "S4_pA0.5",
+   "cells": 206,
+   "rel_err_vs_loop": 2.3559193579969113e-15,
+   "rel_err_vs_adjoint": 5.979628413678615e-14,
+   "rel_err_vs_fd": 2.470250253941747e-09,
+   "mean_score_max": 2.182044381274633e-10,
+   "kept_mass": 0.9999999999937615
+  },
+  {
+   "truth": "T1_ref",
+   "h": 6,
+   "dist": "S2_pA0.7",
+   "cells": 219,
+   "rel_err_vs_loop": 1.0835791735404072e-15,
+   "rel_err_vs_adjoint": 6.540174297440213e-14,
+   "rel_err_vs_fd": 1.1167745246736341e-08,
+   "mean_score_max": 3.169467975915937e-09,
+   "kept_mass": 0.9999999999478465
+  },
+  {
+   "truth": "T3_Bdiv",
+   "h": 4,
+   "dist": "S3_pA0.9",
+   "cells": 172,
+   "rel_err_vs_loop": 7.987416236216879e-16,
+   "rel_err_vs_adjoint": 2.292858307808146e-14,
+   "rel_err_vs_fd": 4.215791366715905e-09,
+   "mean_score_max": 0.04094360122623964,
+   "kept_mass": 0.9999999999994487
+  },
+  {
+   "truth": "T5_C7",
+   "h": 2,
+   "dist": "S4_pA0.3",
+   "cells": 112,
+   "rel_err_vs_loop": 1.5232255133170318e-15,
+   "rel_err_vs_adjoint": 6.283305242432766e-15,
+   "rel_err_vs_fd": 3.4923593872139694e-09,
+   "mean_score_max": 9.80247089418405e-16,
+   "kept_mass": 1.0
+  }
+ ]
+}
