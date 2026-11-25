@@ -396,6 +396,31 @@ outcome-row sticks, condition-1 founder sticks, condition-2 founder sticks, …)
 unchanged; in the config, a list of cohorts per condition with condition-specific
 `law.fixed.founder` / `law.founder_sizes`.
 
+### 5. Lab knowledge as an informative founder prior (report §12.4–12.5)
+
+Priors on the founder parameters. By default (all runs above) they are flat: the
+`founder` and `founder_size` rows get Dirichlet(1) priors from `law.concentration`
+(p_A ~ Uniform(0, 1), sizes ~ flat Dirichlet on the true support), sampled through
+stick-breaking Betas jointly with the transitions; MLE and the Fisher "E" setting use no
+prior. Lab knowledge enters as `law.concentration` = 1 + κ·truth (mode at the truth):
+`run.py` models `lab<κ>` and `labw<κ>` (p_A prior centred 0.15 too low). Their "MLE" is a
+MAP: log-likelihood + Σ(α_i − 1) log π_i of the founder rows (zero for flat rows).
+
+- Fisher (`lab_prior_fisher.py`; `tables/lab_prior_fisher{,_summary}.csv`,
+  `figures/lab_prior.png`): prior precision (Gaussian Beta/Dirichlet) added to the founder
+  block before the Schur complement. XG2 endpoints: κ = 20 (p_A ± 0.10) recovers 0.5–0.7 of
+  the E → K loss for multi-cell seeding, κ = 100 (± 0.045) 0.75–0.87, κ = 1000 ≥ 0.93. R1 time
+  points: the counts already pin p_A (sd 0.03–0.07), so κ = 20 recovers ~0.1, κ = 100 ~1/3.
+- Simulation (`lab_queue.sh`, `lab_queue_seeds.sh`, `lab_queue_p3.sh`; analysis
+  `lab_prior_sim.py` → `tables/lab_prior_{map,nuts}.csv`, `lab_prior_map_summary.md`,
+  `figures/founder_sim_heatmap.png`, report tables `report_exact_gw/tables/founder_sim_*.tex`):
+  MAP on the same 12 datasets as est/known; NUTS at κ = 100 for T1 S2/S4, P3 S2 and the wrong
+  prior for T1 S4. With multi-cell seeding (S2, S4) the MAP reaches about the known error for
+  T1 and T3 (T1 S4 all-12 MAE 0.076 flat → 0.037, known 0.035); P3 unchanged; S3 (1–3 cells,
+  p_A 0.9) B→A not improved. The wrong prior leaves p_A 0.13–0.15 off (not detected), still
+  better than flat for multi-cell seeding but worse for single founders. None of the 20 NUTS
+  runs met all stopping targets in 400 draws per chain (rank R-hat 1.01–1.26).
+
 ## Caveats
 
 - Fisher numbers are asymptotic (local, Gaussian). At n = 512 per endpoint the estimated
