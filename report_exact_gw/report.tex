@@ -53,6 +53,9 @@
 \newcommand{\fig}[3]{\begin{figure}[H]\centering\includegraphics[width=#2\linewidth]{#1}\caption{#3}\label{fig:#1}\end{figure}}
 \hypersetup{pdftitle={BIO-SBI: exact likelihood for Galton-Watson and the XG2 experiment},pdfauthor={BIO-SBI}}
 
+\makeatletter
+\newcommand{\tabinput}[1]{\@@input #1 }% table rows from a file (expandable inside tabular)
+\makeatother
 \begin{document}
 
 % ====================================================================== title
@@ -1011,25 +1014,29 @@ $(\text{gain}_\kappa - \text{gain}_E) / (\text{gain}_K - \text{gain}_E)$: 0 = no
 \end{itemize}
 
 \subsection{Checks by simulation ($n$ = 512 per endpoint)}
-\begin{center}\footnotesize\setlength{\tabcolsep}{3pt}
-\begin{tabular}{@{}llll@{}}\toprule
-truth & seeding (true founder distribution) & \BA{} RMSE & all 12: mean $|$error$|$\\
- & & estimated / known & estimated / known\\\midrule
-T1 & single, $p_A$ 1.0 & 0.09 / 0.18 & 0.025 / 0.033\\
- & mostly single, $p_A$ 0.7 & 0.26 / 0.12 & 0.048 / 0.029\\
- & 1--3 cells, $p_A$ 0.9 & 0.29 / 0.08 & 0.059 / 0.027\\
- & 1--5 cells, $p_A$ 0.5 & 0.37 / 0.12 & 0.076 / 0.035\\
-T3 & single, $p_A$ 1.0 & 0.21 / 0.14 & 0.052 / 0.043\\
- & mostly single, $p_A$ 0.7 & 0.20 / 0.07 & 0.060 / 0.039\\
- & 1--3 cells, $p_A$ 0.9 & 0.26 / 0.27 & 0.072 / 0.071\\
- & 1--5 cells, $p_A$ 0.5 & 0.30 / 0.15 & 0.100 / 0.062\\
-P3 & single, $p_A$ 1.0 & 0.16 / 0.12 & 0.099 / 0.083\\
- & mostly single, $p_A$ 0.7 & 0.12 / 0.14 & 0.101 / 0.104\\
- & 1--3 cells, $p_A$ 0.9 & 0.12 / 0.12 & 0.108 / 0.110\\
- & 1--5 cells, $p_A$ 0.5 & 0.19 / 0.16 & 0.141 / 0.128\\\bottomrule
+Same datasets for every model: truths T1, T3, P3; 512 detected clones per XG2 endpoint. Models: founder distribution \emph{estimated} with a flat prior (maximum likelihood, or NUTS), estimated with \emph{lab knowledge} (MAP: the likelihood times the informative founder prior of \S\ref{sec:labprior}, $\kappa$ = 20 or 100), with a \emph{wrong} confident prior ($\kappa$ = 100, $p_A$ centred 0.15 below the truth), or \emph{known} (fixed at the truth). The transitions keep their flat prior in every model, so the MAP differs from the MLE only through the founder prior.
+
+\textbf{Point estimates} (12 datasets per case): \BA{} RMSE and mean absolute error over the 12 probabilities.
+\begin{center}\scriptsize\setlength{\tabcolsep}{2.2pt}
+\begin{tabular}{@{}llccccc|ccccc@{}}\toprule
+ & & \multicolumn{5}{c|}{\BA{} RMSE} & \multicolumn{5}{c}{all 12: mean $|$estimate $-$ truth$|$} \\
+truth & seeding & MLE & MAP & MAP & MAP & known & MLE & MAP & MAP & MAP & known \\
+ & & flat & $\kappa$ 20 & $\kappa$ 100 & wrong & & flat & $\kappa$ 20 & $\kappa$ 100 & wrong & \\\midrule
+\tabinput{tables/founder_sim_point.tex}\bottomrule
 \end{tabular}
 
-Maximum likelihood, 12 datasets per case; ``estimated'': founder size probabilities and $p_A$ fitted with the transitions; ``known'': fixed at the truth. All 12: mean over the 12 probabilities and the datasets of $|$MLE $-$ truth$|$. Table: \res{report_exact_gw/tables/all12_founder_mle.csv}.
+Known = MLE with the founder distribution fixed at the truth. Tables: \res{docs/founder_distribution/tables/lab_prior_map_summary.md}.
+\end{center}
+
+\textbf{Posterior means} (NUTS, dataset 0, one run per case): $|$posterior mean $-$ truth$|$ for \BA{} and averaged over the 12 probabilities.
+\begin{center}\scriptsize\setlength{\tabcolsep}{2.5pt}
+\begin{tabular}{@{}llcccc|cccc@{}}\toprule
+ & & \multicolumn{4}{c|}{\BA{}: $|$posterior mean $-$ truth$|$} & \multicolumn{4}{c}{all 12: mean $|$posterior mean $-$ truth$|$} \\
+truth & seeding & flat & $\kappa$ 100 & wrong & known & flat & $\kappa$ 100 & wrong & known \\\midrule
+\tabinput{tables/founder_sim_nuts.tex}\bottomrule
+\end{tabular}
+
+$^*$ the 90\% posterior interval of \BA{} misses the truth; --- = not run. Table: \res{docs/founder_distribution/tables/lab_prior_nuts.csv}.
 \end{center}
 \begin{itemize}
 \item \textbf{Maximum likelihood} (12 datasets per case; T1, T3, P3): with the founder distribution estimated, the \BA{} error grows from 0.08--0.12 (known) to 0.26 / 0.29 / 0.37 for T1 with mostly single / 1--3 / 1--5 cells, because 25--42\% of the fits with multi-cell seeding land on the other branch of the parent-swap ridge; P3 is barely affected (0.12--0.19 either way). Over all 12 probabilities the mean absolute error with the founder distribution estimated vs known is 0.025--0.076 vs 0.027--0.035 for T1, 0.052--0.100 vs 0.039--0.071 for T3 and 0.10--0.14 vs 0.08--0.13 for P3 (same order of seedings; single cells cost little, multi-cell seeding up to twice the error). The mean founder size is recovered (error 0.04--0.37 cells); $p_A$ is not (error 0.20--0.63), except for T1 with single cells (0.06).
