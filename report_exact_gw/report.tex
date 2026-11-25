@@ -1015,6 +1015,7 @@ $(\text{gain}_\kappa - \text{gain}_E) / (\text{gain}_K - \text{gain}_E)$: 0 = no
 
 \subsection{Checks by simulation ($n$ = 512 per endpoint)}
 Same datasets for every model: truths T1, T3, P3; 512 detected clones per XG2 endpoint. Models: founder distribution \emph{estimated} with a flat prior (maximum likelihood, or NUTS), estimated with \emph{lab knowledge} (MAP: the likelihood times the informative founder prior of \S\ref{sec:labprior}, $\kappa$ = 20 or 100), with a \emph{wrong} confident prior ($\kappa$ = 100, $p_A$ centred 0.15 below the truth), or \emph{known} (fixed at the truth). The transitions keep their flat prior in every model, so the MAP differs from the MLE only through the founder prior.
+\fig{founder_sim_heatmap}{1.0}{Errors of the simulation check as heatmaps (the numbers of the two tables below). Rows: truth and seeding; columns: founder model. Left: point estimates (MLE with flat founder prior, MAP with lab knowledge $\kappa$ = 20 / 100, MAP with a wrong confident prior, MLE with known founders), 12 datasets per cell; right: NUTS posterior means, dataset 0. Top: \BA{}; bottom: mean absolute error over the 12 probabilities. One colour scale per measure, shared by left and right; lighter = smaller error. $\ast$: the 90\% interval of \BA{} misses the truth; grey: not run.}
 
 \textbf{Point estimates} (12 datasets per case): \BA{} RMSE and mean absolute error over the 12 probabilities.
 \begin{center}\scriptsize\setlength{\tabcolsep}{2.2pt}

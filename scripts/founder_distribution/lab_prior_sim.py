@@ -127,6 +127,94 @@ def latex_nuts(nt: pd.DataFrame) -> str:
     return "\n".join(out) + "\n"
 
 
+SEEDPLAIN = {"S1_pA1.0": "single, p_A 1.0", "S2_pA0.7": "mostly single, p_A 0.7",
+             "S3_pA0.9": "1-3 cells, p_A 0.9", "S4_pA0.5": "1-5 cells, p_A 0.5"}  # fmt: skip
+MODEL_LAB = {"est": "flat\n(MLE)", "lab20": "lab κ 20\n(±0.10)", "lab100": "lab κ 100\n(±0.045)",
+             "labw100": "wrong κ 100\n(−0.15)", "known": "known"}  # fmt: skip
+RAMP = ["#f7fafe", "#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#0d366b"]
+
+
+def heatmap(s: pd.DataFrame, nt: pd.DataFrame) -> None:
+    """Point-estimate and NUTS errors as heatmaps (rows: truth x seeding; columns: models)."""
+    import matplotlib  # noqa: PLC0415
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt  # noqa: PLC0415
+    from matplotlib.colors import LinearSegmentedColormap, PowerNorm  # noqa: PLC0415
+
+    cmap = LinearSegmentedColormap.from_list("seq_blue", RAMP)
+    cmap.set_bad("#e9e8e4")
+    rows_pt = [(t, d) for t in TRUTHS for d in DISTS]
+    nkeys = set(zip(nt.truth, nt.dist, strict=True))
+    rows_nu = [(t, d) for t, d in rows_pt if (t, d) in nkeys]
+    nmods = ["est", "lab100", "labw100", "known"]
+
+    def grid(rows, mods, fn):
+        return np.array([[fn(t, d, m) for m in mods] for t, d in rows], float)
+
+    def pt(v):
+        idx = s.set_index(["truth", "dist", "model"])[v]
+        return lambda t, d, m: idx.get((t, d, m), np.nan)
+
+    nidx = nt.set_index(["truth", "dist", "model"])
+
+    def nu(kind):
+        def f(t, d, m):
+            if (t, d, m) not in nidx.index:
+                return np.nan
+            r = nidx.loc[(t, d, m)]
+            return abs(r.BtoA_mean - r.BtoA_truth) if kind == "BtoA" else r.mae12
+        return f
+
+    miss = grid(rows_nu, nmods, lambda t, d, m: float((t, d, m) in nidx.index
+                                                      and not nidx.loc[(t, d, m)].BtoA_cover90))
+    panels = [
+        (0, 0, grid(rows_pt, MODELS, pt("rmse_BtoA")), rows_pt, MODELS, "B→A: RMSE of the point estimate\n(MLE / MAP, 12 datasets)", "b", None),
+        (0, 1, grid(rows_nu, nmods, nu("BtoA")), rows_nu, nmods, "B→A: |posterior mean − truth|\n(NUTS, dataset 0)", "b", miss),
+        (1, 0, grid(rows_pt, MODELS, pt("mae12")), rows_pt, MODELS, "All 12: mean |estimate − truth|\n(MLE / MAP, 12 datasets)", "a", None),
+        (1, 1, grid(rows_nu, nmods, nu("all12")), rows_nu, nmods, "All 12: mean |posterior mean − truth|\n(NUTS, dataset 0)", "a", None),
+    ]  # fmt: skip
+    vmax = {"b": np.nanmax([np.nanmax(p[2]) for p in panels if p[6] == "b"]),
+            "a": np.nanmax([np.nanmax(p[2]) for p in panels if p[6] == "a"])}
+    fig, axes = plt.subplots(2, 2, figsize=(12, 11.5), constrained_layout=True,
+                             gridspec_kw={"width_ratios": [5, 4]})  # fmt: skip
+    for i, j, M, rows, mods, title, key, mk in panels:
+        ax = axes[i, j]
+        norm = PowerNorm(0.6, vmin=0, vmax=vmax[key])
+        im = ax.imshow(np.ma.masked_invalid(M), cmap=cmap, norm=norm, aspect="auto")
+        for a in range(M.shape[0]):
+            for b in range(M.shape[1]):
+                v = M[a, b]
+                if not np.isfinite(v):
+                    ax.text(b, a, "—", ha="center", va="center", fontsize=8, color="#8a8984")
+                    continue
+                dark = norm(v) > 0.55
+                txt = f"{v:.2f}" if key == "b" else f"{v:.3f}"
+                if mk is not None and mk[a, b]:
+                    txt += "✱"
+                ax.text(b, a, txt, ha="center", va="center", fontsize=8,
+                        color="white" if dark else "#1f1f1d")  # fmt: skip
+        labs = [MODEL_LAB[m] if not (m == "est" and j == 1) else "flat" for m in mods]
+        ax.set_xticks(range(len(mods)), labs, fontsize=8)
+        ax.xaxis.tick_top()
+        ax.set_yticks(range(len(rows)), [f"{TLAB[t]}  {SEEDPLAIN[d]}" for t, d in rows], fontsize=8)
+        for k in range(1, len(rows)):
+            if rows[k][0] != rows[k - 1][0]:
+                ax.axhline(k - 0.5, color="white", lw=3)
+        ax.set_xticks(np.arange(len(mods)) - 0.5, minor=True)
+        ax.tick_params(which="both", length=0)
+        for sp in ax.spines.values():
+            sp.set_visible(False)
+        ax.set_title(title, fontsize=10, pad=8)
+        fig.colorbar(im, ax=ax, shrink=0.8, pad=0.02, label="error (lighter = smaller)")
+    fig.suptitle("Founder distribution estimated with a flat prior, with lab knowledge, with a "
+                 "wrong prior, or known: error by truth and seeding\n(n = 512 clones per XG2 "
+                 "endpoint; ✱ = 90% interval of B→A misses the truth; — = not run)", fontsize=11)  # fmt: skip
+    fig.savefig(ROOT / "docs" / "founder_distribution" / "figures" / "founder_sim_heatmap.png",
+                dpi=150)  # fmt: skip
+    plt.close(fig)
+
+
 def main() -> None:
     TAB.mkdir(parents=True, exist_ok=True)
     df = map_table()
@@ -145,6 +233,7 @@ def main() -> None:
     REPORT_TAB.mkdir(parents=True, exist_ok=True)
     (REPORT_TAB / "founder_sim_point.tex").write_text(latex_map(s))
     (REPORT_TAB / "founder_sim_nuts.tex").write_text(latex_nuts(nt))
+    heatmap(s, nt)
 
 
 if __name__ == "__main__":
