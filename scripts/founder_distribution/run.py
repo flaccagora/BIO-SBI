@@ -9,6 +9,13 @@ Models (``inference=exact_gw``, flat priors):
 ``est``   = founder.A and the founder-size probabilities on the true support free
             (S1: sizes {1}; S3: {1, 2, 3}; S2, S4: {1..5}), Uniform / flat Dirichlet;
 ``known`` = founder rows fixed at the truth (the reference: known founder distribution).
+``lab<k>`` = as ``est`` with lab knowledge as an informative prior (founder-row
+            Dirichlet concentrations ``1 + k * truth``, mode at the truth): founder.A ~
+            Beta(1 + k p_A, 1 + k (1 - p_A)), sizes ~ Dirichlet(1 + k pi) on the true support;
+            k = 20: p_A known to about +-0.1, k = 100: to about +-0.045.
+``labw<k>`` = as ``lab<k>`` but the p_A prior centred 0.15 too low (confident, wrong).
+MLE of the ``lab`` models = MAP: log-likelihood + log founder-row prior density in the
+physical probabilities (zero for the flat ``est`` rows; transitions stay unpenalised).
 
 NUTS as the free-founder study (adjoint kernel, 4 chains from the best of 8 L-BFGS optima,
 300 warmup, tree depth <= 7, ESS/R-hat stopping rule, <= 500 draws per chain); per-clone
@@ -115,12 +122,43 @@ def make_sim(dist: str, model: str):
     law = yaml.safe_load(conf.read_text())
     if model == "est":
         law.update(fixed={}, founder_sizes=sizes)
+    elif model.startswith("lab"):
+        k, pc = lab_prior(model, pa)
+        law.update(fixed={}, founder_sizes=sizes, concentration={
+            "founder": {"A": 1 + k * pc, "B": 1 + k * (1 - pc)},
+            "founder_size": {str(m): 1 + k * float(pi[m - 1]) for m in sizes}})  # fmt: skip
     else:
         fixed = {"founder": {"A": pa, "B": 1 - pa}}
         if len(sizes) > 1:
             fixed["founder_size"] = {str(m): float(pi[m - 1]) for m in sizes}
         law.update(fixed=fixed, founder_sizes=sizes)
     return GaltonWatson(law)
+
+
+def lab_prior(model: str, pa: float) -> tuple[float, float]:
+    """(kappa, prior mode of p_A) of a ``lab<k>`` / ``labw<k>`` model."""
+    if model.startswith("labw"):
+        return float(model[4:]), max(pa - 0.15, 0.0)
+    return float(model[3:]), pa
+
+
+def founder_log_prior(lik, theta: np.ndarray) -> tuple[float, np.ndarray]:
+    """Log Dirichlet density of the free founder rows in the physical probabilities
+    (``sum (alpha_i - 1) log pi_i``) and its gradient in ``theta`` (stick coordinates).
+    """
+    lp, g = 0.0, np.zeros_like(theta)
+    for r, t in lik.founder_rows:
+        a = np.asarray(r.alpha, float) - 1.0
+        ns = r.n_sticks
+        if ns == 0 or not np.any(a):
+            continue
+        s = theta[t : t + ns]
+        tail = np.concatenate([[0.0], np.cumsum(np.log1p(-s))])
+        logp = np.concatenate([np.log(s) + tail[:-1], tail[-1:]])
+        lp += float(a @ logp)
+        later = np.cumsum(a[::-1])[::-1][1:]  # sum_{i > j} a_i
+        g[t : t + ns] = a[:-1] / s - later / (1 - s)
+    return lp, g
 
 
 def make_lik(dist, model, cohorts, kernel="adjoint"):
@@ -227,7 +265,7 @@ def nuts_job(gt: str, dist: str, model: str, seed: int, threads: int, out_dir: P
         truth = truth_dict(dist, gt)
         res = {"gt": gt, "dist": dist, "model": model, "seed": seed, "draws": int(len(phys)),
                "stats": {k: stats_of(v, truth.get(k)) for k, v in cols.items()}}  # fmt: skip
-        if model == "est":
+        if model != "known":
             res["corr"] = {f"founder.A~{k}": float(np.corrcoef(cols["founder.A"], cols[k])[0, 1])
                            for k in ("B.to_A", "m_BA", "mean_size", "rho")
                            if np.std(cols[k]) > 0}  # fmt: skip
@@ -270,7 +308,8 @@ def mle_fit(lik, sim, dist: str, gt: str, rng, n_random: int = 4, maxiter: int =
         ll, g = lik.log_likelihood(th)
         if not np.isfinite(ll):
             return 1e300, np.zeros_like(u)
-        return -ll, -g * th * (1 - th)
+        lp, gp = founder_log_prior(lik, th)
+        return -(ll + lp), -(g + gp) * th * (1 - th)
 
     t_true = truth_theta(sim, dist, gt)
     starts = [t_true]
