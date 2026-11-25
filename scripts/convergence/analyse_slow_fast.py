@@ -228,6 +228,10 @@ def run_summary(path: Path, label: str, group: str) -> dict | None:
         out["all12_mae_mle"] = float(np.mean(np.abs(mle - truth)))
         se = (m.get("se") or {}).get("B.to_A")
         out["btoa_mle_se"] = se if se is not None else np.nan
+        out["btoa_mle_cov90"] = bool(abs(out["btoa_mle_err"]) <= 1.645 * out["btoa_mle_se"])
+        ses = np.array([(m.get("se") or {}).get(k) or np.nan for k in NAMES], float)
+        ok = np.isfinite(ses)
+        out["all12_mle_cov90"] = float(np.mean(np.abs(mle - truth)[ok] <= 1.645 * ses[ok]))
     return out
 
 
@@ -249,8 +253,8 @@ def nuts_part() -> pd.DataFrame:
         return df
     df.to_csv(TAB / "nuts.csv", index=False)
     cols = [c for c in ["set", "seed", "group", "btoa_truth", "btoa_mean", "btoa_sd", "btoa_err",
-                        "btoa_z", "btoa_cov90", "btoa_mle", "btoa_mle_err", "btoa_mle_se",
-                        "all12_mae", "all12_mae_mle", "all12_cov90", "all12_cov95", "max_rhat",
+                        "btoa_z", "btoa_cov90", "btoa_mle", "btoa_mle_err", "btoa_mle_se", "btoa_mle_cov90",
+                        "all12_mae", "all12_mae_mle", "all12_cov90", "all12_cov95", "all12_mle_cov90", "max_rhat",
                         "min_ess", "divergences", "stop_reason", "draws_per_chain", "minutes"]
             if c in df.columns]  # fmt: skip
     md = df[df["group"] != "XG2"][cols].round(3).to_markdown(index=False)
@@ -267,7 +271,12 @@ def nuts_part() -> pd.DataFrame:
         "seed": "count",
     }
     if "btoa_mle_err" in df.columns:
-        agg |= {"btoa_mle_err": lambda x: np.nanmean(np.abs(x)), "all12_mae_mle": "mean"}
+        agg |= {
+            "btoa_mle_err": lambda x: np.nanmean(np.abs(x)),
+            "all12_mae_mle": "mean",
+            "btoa_mle_cov90": "mean",
+            "all12_mle_cov90": "mean",
+        }
     g = df.groupby("set", sort=False).agg(agg).rename(columns={
         "btoa_err": "btoa_abs_err", "btoa_z": "btoa_abs_z", "btoa_mle_err": "btoa_mle_abs_err",
         "seed": "datasets"})  # fmt: skip
@@ -342,7 +351,8 @@ def fig(info: pd.DataFrame, ph: pd.DataFrame, nuts: pd.DataFrame) -> None:
             f"{a} s{b}" if g != "XG2" else a
             for a, b, g in zip(nn["set"], nn["seed"], nn["group"], strict=True)
         ]
-        nn = nn.reset_index(drop=True)
+        nn["_g"] = nn["group"].map({"slow": 0, "fast (F1)": 1, "XG2": 2})
+        nn = nn.sort_values(["_g", "set"], kind="stable").reset_index(drop=True)
         colors = [{"slow": "C3", "fast (F1)": "C0"}.get(g, "k") for g in nn["group"]]
         ax = axs[1, 1]
         for i, r in nn.iterrows():
@@ -359,7 +369,7 @@ def fig(info: pd.DataFrame, ph: pd.DataFrame, nuts: pd.DataFrame) -> None:
         ax.plot([], [], "o-", color="k", label="posterior mean, 90% interval")
         ax.plot([], [], "x", color="k", label="MLE")
         ax.legend(fontsize=8)
-        ax.set(xlabel="B→A estimate − truth (n = 512 per endpoint, dataset 0)",
+        ax.set(xlabel="B→A estimate − truth (n = 512 per endpoint; XG2: dataset 0)",
                title="(e) exact-GW NUTS: slow (red), fast F1 (blue), XG2 (black)")  # fmt: skip
         ax = axs[1, 2]
         x = np.arange(len(nn))
@@ -371,7 +381,7 @@ def fig(info: pd.DataFrame, ph: pd.DataFrame, nuts: pd.DataFrame) -> None:
             ax.annotate(f"{r['all12_cov90']:.2f}", (i - 0.2, r["all12_mae"]), xytext=(0, 2),
                         textcoords="offset points", ha="center", fontsize=7)  # fmt: skip
         ax.set_xticks(x)
-        ax.set_xticklabels(nn["set"], fontsize=8)
+        ax.set_xticklabels(nn["set"], fontsize=8, rotation=90)
         ax.set(ylabel="mean |estimate − truth| over the 12 probabilities",
                title="(f) all-12 error (numbers: 90% coverage of the 12)")  # fmt: skip
         ax.legend(fontsize=8)

@@ -52,8 +52,18 @@ composition mean for inference of the interconversion rates?
   direction (Spearman −0.42) and with a smaller relative sd of c (Spearman −0.65).
   **B→A itself is not easier in relative terms** (relative sd 0.43–1.06 for the slow sets
   against 0.74 for F1; Spearman −0.09): how c splits between switching (B→A) and dividing
-  into A (B→AA, B→AB) remains a parent-swap-type weak direction. Exact-GW NUTS at n = 512
-  (§3b) confirms this.
+  into A (B→AA, B→AB) remains a parent-swap-type weak direction.
+* **Exact-GW NUTS at n = 512 (3 datasets per set) confirms this.**
+  * Slow sets: every one of the 9 B→A 90% intervals covers the truth, with posterior sd
+    0.005–0.021 and |error| 0.000–0.010.
+  * Slow sets: the all-12 mean absolute error is **0.005–0.021 (mean 0.011)**, against
+    **0.031–0.055 (mean 0.040)** for F1 and 0.012–0.080 for the XG2 truths. The 12-parameter
+    90% coverage is 0.75–1.
+  * F1: B→A is covered 3/3, with sd 0.10–0.13 and |error| up to 0.08. Its relative sd (0.36) is
+    as good as the slow sets' (0.4–0.6), so B→A is not easier there in relative terms.
+  * None of the slow-set posteriors shows the systematic downward B→A bias of T1–T4.
+  * The Wald intervals of the MLE fail for the smallest B→A: the MLE sits at 0 for S1, and B→A
+    coverage is 2/3 for S0 and 1/3 for S1. The posterior does not have this problem.
 * **Practical readout.** Three signs show that the composition has not converged by generation
   10:
   1. The pooled A fraction still drifts between endpoints. At n = 512 per endpoint its SE is
@@ -154,11 +164,35 @@ Further observations (`figures/truths_composition.png`):
 Setup: 2000 flat-prior draws, with the same stream and filter as the XG2 / optimal-design
 prior draws (`PRIOR_SEED = 20261122`, 30–300 expected cells at generation 10, 2000 accepted
 of 5515). N_mean comes from the closed form for all 2000 draws. N_clone comes from the exact law
-for EXACT_N draws: every 10th draw, plus every draw with N_mean ≥ 9, with the grid capped at
-2500² (h up to 12–15; beyond that, extrapolated with the fitted rate). Tables:
+for all 2000 draws, with the grid capped at 2500² (h up to 11–15; N_clone(0.05) is extrapolated
+with the fitted rate for 11% of the draws). Tables:
 `tables/prior_draws.csv` and `tables/prior_summary.md`.
 
-PRIOR_TABLE
+| quantity | 5% | 25% | 50% | 75% | 95% | 99% | max |
+|---|---|---|---|---|---|---|---|
+| ρ | 1.41 | 1.46 | 1.52 | 1.59 | 1.71 | 1.76 | 1.84 |
+| λ₂ | −0.60 | −0.25 | 0.02 | 0.26 | 0.62 | 0.86 | 1.31 |
+| r = \|λ₂\|/ρ | 0.02 | 0.08 | 0.17 | 0.29 | 0.47 | 0.62 | 0.74 |
+| λ₂²/ρ | 0.00 | 0.01 | 0.04 | 0.13 | 0.34 | 0.59 | 0.97 |
+| N_mean (0.01) | 1 | 2 | 3 | 4 | 6 | 9 | 14 |
+| N_mean (0.001) | 2 | 3 | 4 | 5 | 9 | 14 | 22 |
+| N_clone (sd < 0.10) | 7 | 8 | 9 | 10 | 12 | 13 | 17 |
+| N_clone (sd < 0.05) | 9 | 11 | 13 | 14 | 16 | 17 | 22 |
+
+| share of plausible draws with | N > 4 | N > 10 | N > 20 |
+|---|---|---|---|
+| N_mean (0.01) | 12.2% | 0.5% | 0% |
+| N_mean (0.001) | 38.8% | 2.4% | 0.15% |
+| N_clone (sd < 0.10) | 99.7% | 23.8% | 0% |
+| N_clone (sd < 0.05) | 100% | 85.4% | 0.05% |
+
+Regime check: λ₂² < ρ in **all** 2000 draws (max λ₂²/ρ = 0.97). The fitted per-clone sd
+shrink factor is within 0.1–1.3% of √ρ (5–95%; median −0.6%: the approach to √ρ is from
+below, pre-asymptotic). The median N_clone(0.10) is 11 / 10 / 8 / 7 generations for
+ρ in (1.3, 1.45] / (1.45, 1.55] / (1.55, 1.65] / (1.65, 1.9]. No-dedifferentiation limit
+(B→A, B→AA, B→AB set to 0, B row rescaled; not re-filtered for clone size): median r 0.58,
+N_mean(0.01) median 8, 35% > 10, 15% > 20; in 77% of draws B then outgrows A (d > a) and the
+composition drifts to all B (u_A = 0).
 
 **Drivers.**
 * N_mean is a function of r alone (Spearman 0.93; the scatter in the middle panel is the
@@ -202,7 +236,25 @@ otherwise favours small-B→A truths. XG2 truths T1/T2/T4 use the ε = 0.01 vari
 earlier studies. Full table: `tables/info.md`; per-generation values:
 `tables/info_by_generation.csv`.
 
-INFO_TABLE
+| set | B→A | ρ | r | N_mean | 1/λ₁ | 1/λ₄ | sd B→A (n=512) | rel. sd B→A | rel. sd c | weak-4 decay/gen (ρ; 1/max(ρ⁻¹,r²)) | weak-4 share h8+h10 | retained, worst dir. | retained, B→A |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| T1 | 0.8 | 1.55 | 0.18 | 2 | 153 | 38 | 0.067 | 0.08 | 0.09 | 1.52 (1.55; 1.55) | 0.12 | 0.0039% | 0.080% |
+| T2 | 0.5 | 1.46 | 0.02 | 1 | 384 | 74 | 0.107 | 0.21 | 0.12 | 1.51 (1.46; 1.46) | 0.14 | 0.0037% | 0.050% |
+| T3 | 0.6 | 1.59 | 0.02 | 1 | 301 | 55 | 0.089 | 0.15 | 0.12 | 1.46 (1.59; 1.59) | 0.14 | 0.0058% | 0.049% |
+| T4 | 0.8 | 1.44 | 0.26 | 3 | 169 | 58 | 0.059 | 0.07 | 0.12 | 1.57 (1.44; 1.44) | 0.11 | 0.0059% | 0.132% |
+| T5 | 0.1 | 1.69 | 0.59 | 8 | 96 | 12 | 0.029 | 0.29 | 0.06 | 1.71 (1.69; 1.69) | 0.08 | 0.0159% | 0.076% |
+| P1 | 0.111 | 1.41 | 0.22 | 3 | 1793 | 497 | 0.109 | 0.98 | 0.25 | 1.55 (1.41; 1.41) | 0.12 | 0.0021% | 0.021% |
+| P2 | 0.123 | 1.46 | 0.11 | 2 | 366 | 50 | 0.059 | 0.48 | 0.16 | 1.52 (1.46; 1.46) | 0.14 | 0.0026% | 0.058% |
+| P3 | 0.272 | 1.61 | 0.30 | 4 | 2996 | 263 | 0.128 | 0.47 | 0.22 | 1.71 (1.61; 1.61) | 0.06 | 0.0007% | 0.014% |
+| P4 | 0.112 | 1.52 | 0.14 | 2 | 2793 | 437 | 0.163 | 1.45 | 0.41 | 1.59 (1.52; 1.52) | 0.12 | 0.0013% | 0.009% |
+| S0 | 0.01 | 1.46 | 0.87 | 27 | 48 | 5 | 0.011 | 1.06 | 0.13 | 1.30 (1.46; 1.32) | 0.24 | 0.0535% | 0.107% |
+| S1 | 0.02 | 1.47 | 0.81 | 19 | 51 | 8 | 0.014 | 0.72 | 0.10 | 1.34 (1.47; 1.47) | 0.21 | 0.0581% | 0.122% |
+| S3 | 0.05 | 1.56 | 0.70 | 12 | 55 | 14 | 0.022 | 0.43 | 0.07 | 1.54 (1.56; 1.56) | 0.13 | 0.0421% | 0.103% |
+| F1 | 0.3 | 1.53 | 0.26 | 3 | 2317 | 189 | 0.223 | 0.74 | 0.29 | 1.48 (1.53; 1.53) | 0.15 | 0.0038% | 0.012% |
+| S1→F1 t=0.10 | 0.048 | 1.49 | 0.74 | 13 | 71 | 12 | 0.023 | 0.48 | 0.10 | 1.37 (1.49; 1.49) | 0.19 | 0.0430% | 0.124% |
+| S1→F1 t=0.20 | 0.076 | 1.50 | 0.68 | 10 | 103 | 17 | 0.033 | 0.43 | 0.11 | 1.40 (1.50; 1.50) | 0.19 | 0.0318% | 0.103% |
+| S1→F1 t=0.35 | 0.118 | 1.51 | 0.59 | 7 | 184 | 28 | 0.051 | 0.43 | 0.13 | 1.42 (1.51; 1.51) | 0.18 | 0.0209% | 0.072% |
+| S1→F1 t=0.50 | 0.16 | 1.51 | 0.51 | 6 | 334 | 43 | 0.075 | 0.47 | 0.15 | 1.40 (1.51; 1.51) | 0.18 | 0.0141% | 0.049% |
 
 What this shows:
 * The weakest direction needs 48–55 clones per endpoint for the slow sets, against 2317 for F1
@@ -224,7 +276,57 @@ Setup:
 * MLE: `scripts/exact_gw_mle.py`. Standard errors: `scripts/exact_gw_mle_se.py`.
 * Comparison: the XG2 n = 512 runs (report §7; these used the older fixed-length sampler).
 
-NUTS_TABLE
+| set | dataset | B→A truth | posterior mean ± sd | 90% CI covers | MLE (Wald se) | all-12 MAE post / MLE | all-12 90% cov. post / Wald | max R-hat | stop rule (draws/chain) | min |
+|---|---|---|---|---|---|---|---|---|---|---|
+| F1 | 0 | 0.30 | 0.304 ± 0.129 | yes | 0.415 (0.172) | 0.031 / 0.068 | 1.00 / 1.00 | 1.009 | targets_met (850) | 39 |
+| F1 | 1 | 0.30 | 0.253 ± 0.100 | yes | 0.392 (0.105) | 0.034 / 0.067 | 1.00 / 0.70 | 1.008 | targets_met (950) | 31 |
+| F1 | 2 | 0.30 | 0.217 ± 0.095 | yes | 0.149 (0.100) | 0.055 / 0.088 | 1.00 / 0.70 | 1.007 | targets_met (650) | 20 |
+| S0 | 0 | 0.01 | 0.011 ± 0.006 | yes | 0.015 (0.017) | 0.021 / 0.022 | 0.75 / 1.00 | 1.008 | targets_met (550) | 11 |
+| S0 | 1 | 0.01 | 0.010 ± 0.005 | yes | 0.010 (0.011) | 0.005 / 0.006 | 1.00 / 1.00 | 1.009 | targets_met (400) | 9 |
+| S0 | 2 | 0.01 | 0.012 ± 0.005 | yes | 0.018 (0.003) | 0.012 / 0.017 | 0.92 / 0.55 | 1.005 | targets_met (750) | 8 |
+| S1 | 0 | 0.02 | 0.019 ± 0.011 | yes | 0.015 (0.017) | 0.010 / 0.009 | 1.00 / 1.00 | 1.006 | targets_met (1000) | 22 |
+| S1 | 1 | 0.02 | 0.010 ± 0.007 | yes | 0.001 (0.009) | 0.007 / 0.009 | 1.00 / 0.92 | 1.013 | max_draws (1000) | 13 |
+| S1 | 2 | 0.02 | 0.010 ± 0.007 | yes | 0.000 | 0.008 / 0.013 | 0.92 / 0.82 | 1.008 | targets_met (700) | 11 |
+| S3 | 0 | 0.05 | 0.059 ± 0.021 | yes | 0.060 (0.025) | 0.015 / 0.014 | 1.00 / 1.00 | 1.006 | max_draws (1000) | 29 |
+| S3 | 1 | 0.05 | 0.058 ± 0.020 | yes | 0.059 (0.022) | 0.013 / 0.011 | 1.00 / 1.00 | 1.017 | max_draws (1000) | 28 |
+| S3 | 2 | 0.05 | 0.044 ± 0.020 | yes | 0.044 (0.021) | 0.010 / 0.012 | 1.00 / 1.00 | 1.021 | max_draws (1000) | 15 |
+
+Mean over the 3 datasets (XG2 rows: the n = 512 runs of report §7, fixed-length sampler):
+
+| set | B→A | mean posterior sd | mean \|post. err\| | B→A 90% cov. | mean \|MLE err\| | all-12 MAE post / MLE | all-12 90% cov. post / Wald |
+|---|---|---|---|---|---|---|---|
+| S0 | 0.01 | 0.006 | 0.001 | 1.00 | 0.005 | 0.013 / 0.015 | 0.89 / 0.85 |
+| S1 | 0.02 | 0.009 | 0.007 | 1.00 | 0.015 | 0.008 / 0.010 | 0.97 / 0.91 |
+| S3 | 0.05 | 0.020 | 0.008 | 1.00 | 0.008 | 0.012 / 0.012 | 1.00 / 1.00 |
+| F1 | 0.3 | 0.108 | 0.045 | 1.00 | 0.119 | 0.040 / 0.074 | 1.00 / 0.80 |
+| T1 | 0.8 | 0.095 | 0.121 | 0.33 | 0.032 | 0.036 / 0.018 | 0.61 / 0.93 |
+| T2 | 0.5 | 0.069 | 0.149 | 0.00 | 0.032 | 0.038 / 0.018 | 0.64 / 1.00 |
+| T3 | 0.6 | 0.114 | 0.263 | 0.00 | 0.086 | 0.067 / 0.045 | 0.78 / 0.80 |
+| T4 | 0.8 | 0.064 | 0.081 | 0.67 | 0.007 | 0.035 / 0.016 | 0.64 / 1.00 |
+| T5 | 0.1 | 0.024 | 0.018 | 1.00 | 0.022 | 0.018 / 0.024 | 0.92 / 0.86 |
+| P1 | 0.111 | 0.059 | 0.054 | 0.67 | 0.094 | 0.038 / 0.103 | 0.97 / 0.62 |
+| P2 | 0.123 | 0.072 | 0.086 | 0.67 | 0.036 | 0.057 / 0.032 | 0.69 / 0.78 |
+| P3 | 0.272 | 0.053 | 0.066 | 0.67 | 0.062 | 0.050 / 0.118 | 0.97 / 0.44 |
+| P4 | 0.112 | 0.060 | 0.034 | 1.00 | 0.081 | 0.058 / 0.093 | 0.97 / 0.63 |
+
+Reading of the NUTS runs:
+* **Slow sets.** The posteriors are tight and well calibrated.
+  * B→A: the 90% interval covers in 9/9 runs; mean |z| is 0.2–1.0.
+  * All-12 error: the mean over datasets is 0.008–0.013, 3–5× smaller than F1 (0.040) and
+    smaller than every XG2 truth (0.018–0.067).
+  * Sampling: R-hat ≤ 1.021. In 4 of the 9 runs (all three S3 runs and S1 dataset 1) the stop
+    rule's ESS target was not met by 1000 draws per chain. There are 3–133 divergences.
+* **Matched fast set F1.** All three runs cover B→A, but the posterior sd is 0.10–0.13 against
+  a truth of 0.3. The MLE misses B→A by 0.09–0.15 and its all-12 error (0.074) is twice the
+  posterior's, the pattern of a weakly identified, curved likelihood (report §6–7).
+* **B→A relative to its size.** The slow sets do not do better: the posterior sd over the
+  truth is 0.4–0.6 against 0.36 for F1.
+* **What the slow sets gain.** The A-output of B cells, c, is pinned down. B→A is identified
+  only inside the small total c, which is still informative, since it rules out a large
+  KRT20⁺ → LGR5⁺ flux.
+* **MLE near the boundary.** With B→A = 0.01–0.02 the MLE often sits at B→A = 0 (S1 datasets 1
+  and 2). The Wald intervals then under-cover (B→A 2/3 for S0, 1/3 for S1), while the posterior
+  covers 6/6.
 
 ![slow vs fast](figures/slow_vs_fast.png)
 
@@ -232,7 +334,23 @@ NUTS_TABLE
 
 All numbers use the exact law at n = 512 clones per endpoint (`tables/readout.md`):
 
-READOUT_TABLE
+| set | u_A | f₄ | f₆ | f₈ | f₁₀ | SE(f₁₀) | z(f₁₀ − f₈) | z(f₁₀ − f₄) | sd shrink/gen ÷ √growth | P(all B) h=8 | P(all B) h=10 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| T1 | 0.681 | 0.682 | 0.681 | 0.681 | 0.681 | 0.003 | -0.0 | -0.0 | 0.991 | 0.001 | 0.000 |
+| T2 | 0.640 | 0.640 | 0.640 | 0.640 | 0.640 | 0.003 | -0.0 | -0.0 | 0.976 | 0.009 | 0.003 |
+| T3 | 0.630 | 0.630 | 0.630 | 0.630 | 0.630 | 0.003 | -0.0 | -0.0 | 0.994 | 0.001 | 0.000 |
+| T4 | 0.626 | 0.627 | 0.626 | 0.626 | 0.626 | 0.004 | -0.0 | -0.1 | 0.986 | 0.005 | 0.001 |
+| T5 | 0.360 | 0.436 | 0.387 | 0.370 | 0.364 | 0.002 | -1.3 | -6.4 | 0.993 | 0.002 | 0.000 |
+| P1 | 0.538 | 0.540 | 0.539 | 0.538 | 0.538 | 0.003 | -0.0 | -0.1 | 0.986 | 0.011 | 0.004 |
+| P2 | 0.547 | 0.547 | 0.547 | 0.547 | 0.547 | 0.004 | -0.0 | -0.0 | 0.984 | 0.009 | 0.003 |
+| P3 | 0.493 | 0.497 | 0.493 | 0.493 | 0.493 | 0.002 | -0.0 | -0.5 | 0.996 | 0.001 | 0.000 |
+| P4 | 0.681 | 0.681 | 0.681 | 0.681 | 0.681 | 0.002 | -0.0 | -0.0 | 0.992 | 0.001 | 0.000 |
+| S0 | 0.231 | 0.535 | 0.439 | 0.378 | 0.337 | 0.006 | -4.1 | -13.3 | 0.922 | 0.124 | 0.068 |
+| S1 | 0.287 | 0.516 | 0.428 | 0.376 | 0.344 | 0.005 | -3.5 | -12.1 | 0.943 | 0.079 | 0.033 |
+| S3 | 0.300 | 0.451 | 0.373 | 0.336 | 0.318 | 0.004 | -2.7 | -10.1 | 0.976 | 0.021 | 0.004 |
+| F1 | 0.743 | 0.744 | 0.743 | 0.743 | 0.743 | 0.002 | -0.0 | -0.1 | 0.990 | 0.002 | 0.000 |
+
+z = expected drift / SE of the difference (independent clones per endpoint).
 
 How to tell from data whether the composition has converged within the observation window:
 

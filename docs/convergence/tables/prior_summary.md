@@ -1,6 +1,6 @@
 # Plausible flat-prior draws (n = 2000, accepted of 5515 drawn: 30-300 expected cells at generation 10, A founder)
 
-Exact per-clone law available for 113 draws.
+Exact per-clone law available for 2000 draws.
 
 ## Quantiles
 
@@ -15,9 +15,9 @@ Exact per-clone law available for 113 draws.
 | u_A                 |  0.251 |  0.406 |  0.5   |  0.595 |  0.74  |  0.842 |  0.972 |
 | N_mean_01           |  1     |  2     |  3     |  4     |  6     |  9     | 14     |
 | N_mean_001          |  2     |  3     |  4     |  5     |  9     | 14     | 22     |
-| N_clone_10          |  7     |  8     |  9     | 11     | 12     | 12     | 15     |
-| N_clone_05          | 10     | 12     | 13     | 15     | 16     | 17     | 20     |
-| sd_rate_fit         |  1.174 |  1.194 |  1.217 |  1.249 |  1.308 |  1.327 |  1.332 |
+| N_clone_10          |  7     |  8     |  9     | 10     | 12     | 13     | 17     |
+| N_clone_05          |  9     | 11     | 13     | 14     | 16     | 17     | 22     |
+| sd_rate_fit         |  1.174 |  1.198 |  1.224 |  1.258 |  1.306 |  1.324 |  1.367 |
 | sd_rate_theory      |  1.187 |  1.208 |  1.231 |  1.262 |  1.308 |  1.325 |  1.356 |
 
 ## Share of plausible parameter sets with N above 4 / 10 / 20 generations
@@ -26,8 +26,8 @@ Exact per-clone law available for 113 draws.
 |:-----------|-----:|-------:|-------:|-------:|
 | N_mean_01  | 2000 | 0.1215 | 0.005  | 0      |
 | N_mean_001 | 2000 | 0.3875 | 0.024  | 0.0015 |
-| N_clone_10 |  113 | 1      | 0.2655 | 0      |
-| N_clone_05 |  113 | 1      | 0.885  | 0      |
+| N_clone_10 | 2000 | 0.997  | 0.2375 | 0      |
+| N_clone_05 | 2000 | 1      | 0.854  | 0.0005 |
 
 Regime: lambda2^2 < rho (CLT fluctuations rho^(-h/2)) in 100.0% of draws.
 
@@ -35,12 +35,12 @@ Regime: lambda2^2 < rho (CLT fluctuations rho^(-h/2)) in 100.0% of draws.
 
 | x             |   N_clone_05 |   N_mean_01 |
 |:--------------|-------------:|------------:|
-| coupling      |       -0.262 |       0.005 |
-| disc_over_rho |       -0.15  |      -0.012 |
-| r             |        0.224 |       0.932 |
-| rho           |       -0.895 |       0.033 |
-| u_A           |        0.047 |      -0.144 |
-| |a-d|         |       -0.239 |      -0.143 |
+| coupling      |       -0.086 |       0.005 |
+| disc_over_rho |        0.035 |      -0.012 |
+| r             |        0.105 |       0.932 |
+| rho           |       -0.892 |       0.033 |
+| u_A           |        0.027 |      -0.144 |
+| |a-d|         |       -0.213 |      -0.143 |
 
 ## No-dedifferentiation limit c = 0 (B->A, B->AA, B->AB set to 0, B row rescaled)
 
