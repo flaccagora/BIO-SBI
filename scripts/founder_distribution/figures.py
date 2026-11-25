@@ -1,6 +1,6 @@
 """Figures of the founder-distribution study (Fisher part; the NUTS figure is in analyse_sim.py).
 
-  uv run python scripts/founder_distribution/figures.py
+uv run python scripts/founder_distribution/figures.py
 """
 
 from __future__ import annotations

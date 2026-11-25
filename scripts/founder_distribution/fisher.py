@@ -32,7 +32,9 @@ import fd_common as F  # noqa: E402
 from fd_common import od  # noqa: E402
 
 from bio_sbi.inference.gw_exact import (  # noqa: E402
-    GridSpec, _loop_single_founder, detection_and_grad,
+    GridSpec,
+    _loop_single_founder,
+    detection_and_grad,
 )  # fmt: skip
 from bio_sbi.inference.gw_fisher import grid_size  # noqa: E402
 

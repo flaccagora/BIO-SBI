@@ -41,7 +41,10 @@ def fisher_sd() -> pd.DataFrame:
                             "sd_stableA": "stableA", "sd_pA_joint": "founder.A",
                             "sd_mean_size_joint": "mean_size"})  # fmt: skip
     df["model"] = df["mode"].map({"K": "known", "E": "est"})
-    return df.set_index(["truth", "dist", "model"])[KEYS]
+    for k in ("B.to_A", "m_BA", "rho"):
+        df[f"prior_{k}"] = df[f"sdprior_{k}"]
+    return df.set_index(["truth", "dist", "model"])[KEYS + ["prior_B.to_A", "prior_m_BA",
+                                                            "prior_rho"]]
 
 
 def auc(score: np.ndarray, label: np.ndarray) -> float:
@@ -109,12 +112,42 @@ def mle_table(fs: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     d = pd.DataFrame(rows)
     g = d.groupby(["truth", "dist", "model"])
     s = g.agg(n=("seed", "size")).reset_index()
+    s["frac_BtoA_off_0.3"] = g["err_B.to_A"].apply(lambda v: float(np.mean(np.abs(v) > 0.3))).values
     for k in KEYS:
         s[f"bias_{k}"] = g[f"err_{k}"].mean().values
         s[f"rmse_{k}"] = g[f"err_{k}"].apply(lambda v: float(np.sqrt(np.mean(v**2)))).values
         s[f"fisher_sd_{k}"] = [fs.loc[(t, dd, m), k] if (t, dd, m) in fs.index else np.nan
                                for t, dd, m in zip(s.truth, s.dist, s.model, strict=True)]  # fmt: skip
     return d, s, pd.DataFrame(prog)
+
+
+def multi_table() -> pd.DataFrame:
+    """Joint MLE of two conditions (0.9 + 0.3) vs one condition at p_A 0.6 (multi.py)."""
+    rows = []
+    for f in sorted((RES / "multi").glob("*/*.json")):
+        r = json.loads(f.read_text())
+        row = {"setup": r["setup"], "truth": SHORT[r["gt"]], "seed": r["seed"],
+               **{f"err_{k}": v for k, v in r["err"].items()}}  # fmt: skip
+        for i, (c, e) in enumerate(zip(r["conditions"], r["err_founder"], strict=True)):
+            row[f"err_pA_{i + 1}"] = e
+            row[f"mean_size_{i + 1}"] = c["mean_size"]
+        rows.append(row)
+    d = pd.DataFrame(rows)
+    if d.empty:
+        return d
+    out = []
+    for (setup, t), x in d.groupby(["setup", "truth"]):
+        o = {"setup": setup, "truth": t, "n": len(x)}
+        for k in ("B.to_A", "m_BA", "rho"):
+            o[f"bias_{k}"] = x[f"err_{k}"].mean()
+            o[f"rmse_{k}"] = float(np.sqrt(np.mean(x[f"err_{k}"] ** 2)))
+        o["frac_BtoA_off_0.3"] = float(np.mean(np.abs(x["err_B.to_A"]) > 0.3))
+        for i in (1, 2):
+            if f"err_pA_{i}" in x and x[f"err_pA_{i}"].notna().any():
+                o[f"rmse_pA_{i}"] = float(np.sqrt(np.mean(x[f"err_pA_{i}"] ** 2)))
+                o[f"mean_size_{i}"] = x[f"mean_size_{i}"].mean()
+        out.append(o)
+    return pd.DataFrame(out)
 
 
 def mixing_flags(c: dict) -> list[str]:
@@ -145,6 +178,9 @@ def nuts_table(fs: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
                          "truth_value": st["truth"], "mean": st["mean"], "sd": st["sd"],
                          "q05": st["q05"], "q95": st["q95"], "z": st.get("z"),
                          "cover90": st.get("cover90"), "fisher_sd": fisher,
+                         "fisher_sd_with_prior": fs.loc[(t, r["dist"], r["model"]), f"prior_{k}"]
+                         if (t, r["dist"], r["model"]) in fs.index and f"prior_{k}" in fs.columns
+                         else np.nan,
                          "mixing": "poor: " + ", ".join(fl) if fl else "ok",
                          "minutes": r["seconds"] / 60, "draws": r["draws"],
                          "divergences": c.get("divergences")})  # fmt: skip
@@ -187,7 +223,7 @@ def fig_nuts(nt: pd.DataFrame, md: pd.DataFrame) -> None:
     h = [Line2D([], [], color=SERIES[0], lw=2, marker="o", label="founder distribution known"),
          Line2D([], [], color=SERIES[1], lw=2, marker="o", label="estimated"),
          Line2D([], [], color=INK2, lw=0, marker="o", mfc="white", label="poorly mixed run"),
-         Line2D([], [], color=INK2, lw=0, marker=".", label="MLE, datasets 0-5"),
+         Line2D([], [], color=INK2, lw=0, marker=".", label=f"MLE, datasets 0–{int(md.seed.max())}"),
          Line2D([], [], color=INK, lw=0, marker="|", ms=10, label="truth")]  # fmt: skip
     fig.legend(handles=h, loc="lower center", ncol=5, bbox_to_anchor=(0.5, -0.06), fontsize=8)
     fig.suptitle("Simulation check (n = 512 per endpoint 4/6/8/10): NUTS 90% intervals "
@@ -206,7 +242,7 @@ def main() -> None:
     mle_d, mle_s, mle_p = mle_table(fs)
     mle_d.to_csv(F.TAB / "mle_datasets.csv", index=False)
     mle_s.to_csv(F.TAB / "mle_summary.csv", index=False)
-    cols = ["truth", "dist", "model", "n"] + [f"{a}_{k}" for k in ("B.to_A", "m_BA", "rho",
+    cols = ["truth", "dist", "model", "n", "frac_BtoA_off_0.3"] + [f"{a}_{k}" for k in ("B.to_A", "m_BA", "rho",
                                                                     "founder.A", "mean_size")
                                               for a in ("bias", "rmse", "fisher_sd")]  # fmt: skip
     md(mle_s[cols], F.TAB / "mle_summary.md")
@@ -225,6 +261,11 @@ def main() -> None:
     if "reliability_multi" in prog:
         prog[prog.method == "NUTS average"][["truth", "dist", "model", "reliability_multi"]].to_json(
             F.TAB / "progenitor_reliability.json", orient="records", indent=1)
+    mm = multi_table()
+    if not mm.empty:
+        mm.to_csv(F.TAB / "multi_mle.csv", index=False)
+        md(mm, F.TAB / "multi_mle.md")
+        print(mm.round(3).to_string())
     fig_nuts(nt, mle_d)
     pd.set_option("display.width", 250)
     pd.set_option("display.max_columns", 40)

@@ -104,7 +104,21 @@ def job(gt: str, setup: str, seed: int, out_dir: Path):
         rng = np.random.default_rng([seed, 9, C.GTS.index(gt)])
         tt = [R.truth_theta(s, d, gt) for s, (d, _) in zip(sims, conds, strict=True)]
         t_true = np.concatenate([tt[0][: J.nr]] + [t[J.nr :] for t in tt])
-        starts = [t_true] + [np.clip(rng.uniform(size=J.dim), 1e-3, 1 - 1e-3) for _ in range(4)]
+        # same start strategy as run.mle_fit: truth, 4 prior draws, and the "B founders
+        # replace dedifferentiation" branch (every condition's p_A high, B->A low)
+        pa_ = np.concatenate([liks[0].prior_a[: J.nr]] + [lk.prior_a[J.nr :] for lk in liks])
+        pb_ = np.concatenate([liks[0].prior_b[: J.nr]] + [lk.prior_b[J.nr :] for lk in liks])
+        starts = [t_true] + [np.clip(rng.beta(pa_, pb_), 1e-4, 1 - 1e-4) for _ in range(4)]
+        hi = []
+        for sim, (dist, _) in zip(sims, conds, strict=True):
+            names = list(sim.space.names)
+            ph = sim.space.decode(R.truth_theta(sim, dist, gt))
+            bta = ph[names.index("B.to_A")]
+            ph[names.index("founder.A")], ph[names.index("founder.B")] = 0.95, 0.05
+            ph[names.index("B.to_A")] = 0.1 * bta
+            ph[names.index("B.death")] += 0.9 * bta
+            hi.append(np.clip(sim.space.encode(ph).astype(float), 1e-6, 1 - 1e-6))
+        starts.append(np.concatenate([hi[0][: J.nr]] + [h[J.nr :] for h in hi]))
 
         def neg(u):
             th = 1 / (1 + np.exp(-u))
