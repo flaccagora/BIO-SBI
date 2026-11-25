@@ -90,10 +90,11 @@ def cohort_info(Ls: dict, shares: dict, w: float, nuisance: bool) -> np.ndarray:
     return th / PRIOR_PREC
 
 
-def summarise(K: np.ndarray, c: np.ndarray) -> tuple[float, float]:
+def summarise(K: np.ndarray, c: np.ndarray) -> tuple[float, float, float]:
     lam = float(np.linalg.eigvalsh(K)[0])
     var = float(c @ np.linalg.solve(N_TOTAL * PRIOR_PREC * K, c))
-    return lam, float(np.sqrt(max(var, 0.0)))
+    tr = float(np.trace(np.linalg.inv(K)))  # summed variance of the 12 (up to 1/(42 n))
+    return lam, float(np.sqrt(max(var, 0.0))), tr
 
 
 def scenarios(Ls: dict) -> dict:
@@ -125,14 +126,16 @@ def main() -> None:
         p12 = design_truth(gt)
         Ls = {h: laws(p12, h, U) for h in GENS}
         for name, K in scenarios(Ls).items():
-            lam, sd = summarise(K, c)
+            lam, sd, tr = summarise(K, c)
             rows.append({"truth": SHORTNAME.get(gt, gt), "scenario": name, "lam_min": lam,
-                         "inv_lam_min": 1 / lam if lam > 0 else np.inf, "sd_BtoA_N512": sd})  # fmt: skip
+                         "inv_lam_min": 1 / lam if lam > 0 else np.inf, "sd_BtoA_N512": sd,
+                         "trace12": tr})  # fmt: skip
         print(gt, "done", flush=True)
     df = pd.DataFrame(rows)
     ref = df[df.scenario == "current, A founders recorded"].set_index("truth")
     df["gain_lam_vs_current"] = df.lam_min / df.truth.map(ref.lam_min)
     df["gain_var_BtoA_vs_current"] = (df.truth.map(ref.sd_BtoA_N512) / df.sd_BtoA_N512) ** 2
+    df["gain_all12_vs_current"] = df.truth.map(ref.trace12) / df.trace12
     TAB.mkdir(parents=True, exist_ok=True)
     df.to_csv(TAB / "founder_uncertainty.csv", index=False)
     summ = df.groupby("scenario", sort=False).agg(
@@ -142,6 +145,9 @@ def main() -> None:
         gain_var_min=("gain_var_BtoA_vs_current", "min"),
         gain_var_max=("gain_var_BtoA_vs_current", "max"),
         sd_min=("sd_BtoA_N512", "min"), sd_max=("sd_BtoA_N512", "max"),
+        gain_all12_median=("gain_all12_vs_current", "median"),
+        gain_all12_min=("gain_all12_vs_current", "min"),
+        gain_all12_max=("gain_all12_vs_current", "max"),
     ).reset_index()  # fmt: skip
     summ.to_csv(TAB / "founder_uncertainty_summary.csv", index=False)
     (TAB / "founder_uncertainty_summary.md").write_text(summ.round(3).to_markdown(index=False))

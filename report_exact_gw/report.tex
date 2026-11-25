@@ -693,21 +693,21 @@ A design is the share of clones observed at each generation $h$ = 1--12 and foun
 
 \subsection{Practical protocols}
 The robust optimum is about 0.30 A2, 0.27 B3, 0.20 B1, 0.14 B2, 0.04 each A1 and A12 (worst-case efficiency 0.61 for both criteria). Rounded to four time points with shares in eighths:
-\begin{center}\scriptsize\setlength{\tabcolsep}{2.5pt}
-\begin{tabular}{@{}llllll@{}}\toprule
-protocol & gain on $\lambda_{\min}$ & gain on var(\BA) & efficiency & sd(\BA), & clones for \\
- & median (range) & median (range) & E / c (worst) & $N$ = 512 & sd $\le$ 0.05 \\\midrule
-current: A at 4/6/8/10 & 1 & 1 & 0.02 / 0.01 & 0.058--0.33 & 700--21\,700 \\
-A at 1/2/3/4 & 5.7 (1.1--15) & 6.6 (2.3--30) & 0.07 / 0.09 & 0.039--0.084 & 300--1\,430 \\
-A+B at 1/2/3/4 (50/50) & 7.9 (3.7--20) & 16 (5.9--64) & 0.34 / 0.39 & 0.016--0.053 & 54--580 \\
-A at 4/6/8/10 + B at 2/4 & 3.5 (2.3--9.6) & 7.8 (2.5--12) & 0.09 / 0.06 & 0.020--0.12 & 86--2\,790 \\
-A+B at 4/6/8/10 & 1.2 (1.1--5.0) & 2.4 (1.0--5.2) & 0.02 / 0.01 & 0.035--0.31 & 260--19\,400 \\
-\textbf{R1}: $\tfrac38$ A2 + $\tfrac14$ B1 + $\tfrac14$ B2 + $\tfrac18$ A10 & \textbf{8.1} (6.4--32) & \textbf{21} (6.5--89) & \textbf{0.56 / 0.53} & \textbf{0.016--0.046} & \textbf{51--440} \\
-R2 (no gen.\ 1): $\tfrac14$ A2 + $\tfrac58$ B2 + $\tfrac18$ A10 & 8.2 (5.4--21) & 15 (5.0--37) & 0.35 / 0.23 & 0.013--0.064 & 35--850 \\
-R3 (no B sort): $\tfrac18$ A1 + $\tfrac38$ A3 + $\tfrac38$ A4 + $\tfrac18$ A6 & 3.6 (2.0--6.1) & 4.5 (2.8--26) & 0.11 / 0.11 & 0.035--0.10 & 250--2\,100 \\\bottomrule
+\begin{center}\scriptsize\setlength{\tabcolsep}{1.5pt}
+\begin{tabular}{@{}lllllll@{}}\toprule
+protocol & gain, $\lambda_{\min}$ & gain, var(\BA) & gain, all 12 & efficiency & sd(\BA), & clones for \\
+ & median (range) & median (range) & median (range) & E / c (worst) & $N$ = 512 & sd $\le$ 0.05 \\\midrule
+current: A at 4/6/8/10 & 1 & 1 & 1 & 0.02 / 0.01 & 0.058--0.33 & 700--21\,700 \\
+A at 1/2/3/4 & 5.7 (1.1--15) & 6.6 (2.3--30) & 6.6 (3.0--22) & 0.07 / 0.09 & 0.039--0.084 & 300--1\,430 \\
+A+B at 1/2/3/4 (50/50) & 7.9 (3.7--20) & 16 (5.9--64) & 14 (5.6--30) & 0.34 / 0.39 & 0.016--0.053 & 54--580 \\
+A at 4/6/8/10 + B at 2/4 & 3.5 (2.3--9.6) & 7.8 (2.5--12) & 4.9 (2.3--8.4) & 0.09 / 0.06 & 0.020--0.12 & 86--2\,790 \\
+A+B at 4/6/8/10 & 1.2 (1.1--5.0) & 2.4 (1.0--5.2) & 1.1 (1.1--3.7) & 0.02 / 0.01 & 0.035--0.31 & 260--19\,400 \\
+\textbf{R1}: $\tfrac38$ A2 + $\tfrac14$ B1 + $\tfrac14$ B2 + $\tfrac18$ A10 & \textbf{8.1} (6.4--32) & \textbf{21} (6.5--89) & \textbf{15} (7.0--42) & \textbf{0.56 / 0.53} & \textbf{0.016--0.046} & \textbf{51--440} \\
+R2 (no gen.\ 1): $\tfrac14$ A2 + $\tfrac58$ B2 + $\tfrac18$ A10 & 8.2 (5.4--21) & 15 (5.0--37) & 11 (6.5--27) & 0.35 / 0.23 & 0.013--0.064 & 35--850 \\
+R3 (no B sort): $\tfrac18$ A1 + $\tfrac38$ A3 + $\tfrac38$ A4 + $\tfrac18$ A6 & 3.6 (2.0--6.1) & 4.5 (2.8--26) & 4.3 (3.5--9.5) & 0.11 / 0.11 & 0.035--0.10 & 250--2\,100 \\\bottomrule
 \end{tabular}
 
-Over the 9 truths; A2 = A-founded clones observed at generation 2, etc. Gains relative to the current design at the same number of detected clones; efficiency relative to each truth's own optimum (worst truth). Prior-free asymptotic sd. Detected clones per founder seeded: 0.75--0.93 for R1 (0.60--0.95 for the current design).
+Over the 9 truths; A2 = A-founded clones observed at generation 2, etc. Gains relative to the current design at the same number of detected clones (``all 12'': total variance of the 12 probabilities); efficiency relative to each truth's own optimum (worst truth). Prior-free asymptotic sd. Detected clones per founder seeded: 0.75--0.93 for R1 (0.60--0.95 for the current design).
 \end{center}
 \fig{btoa_sd_vs_N}{0.95}{Predicted sd of \BA{} against the total number of detected clones for the practical protocols, per truth (no prior). Dashed: sd = 0.05.}
 \begin{itemize}
@@ -718,18 +718,20 @@ Over the 9 truths; A2 = A-founded clones observed at generation 2, etc. Gains re
 \end{itemize}
 \textbf{If the founder type is not perfectly known.} The gains above assume that the type of every founder is recorded (sorted single LGR5$^+$ and KRT20$^+$ cells). Otherwise each clone's law is the mixture over its hidden founder, $w\,p_A(c) + (1-w)\,p_B(c)$, with $w$ = P(founder is A) in that cohort. We recomputed the information with the founder weight either known or estimated from the same data (a nuisance parameter; script \code{scripts/optimal_design/founder_uncertainty.py}; check: with $w$ = 1 or 0 it reproduces the cached information to $10^{-13}$):
 \begin{center}\footnotesize\setlength{\tabcolsep}{3pt}
-\begin{tabular}{@{}lll@{}}\toprule
-design, founder information & gain on var(\BA) vs current, median (range) & \BA{} sd at $N$ = 512 \\\midrule
-R1, founders recorded & 21 (6.5--89) & 0.016--0.046 \\
-R1, sorted, purity 95\% / 80\%, purity known & 19 / 16 & 0.017--0.049 \\
-R1, sorted, purity 90\% / 80\%, purity estimated & 10 (3.3--57) / 8 (2.5--46) & 0.018--0.085 \\
-R1 time points, unsorted ($p_A$ = 0.7 estimated) & 5.6 (2.0--17) & 0.038--0.126 \\
-current design, unsorted ($p_A$ = 0.7 estimated) & 0.77 (0.37--1.2) & 0.054--0.42 \\\bottomrule
+\begin{tabular}{@{}llll@{}}\toprule
+design, founder information & gain on var(\BA) vs current & gain, all 12 & \BA{} sd at $N$ = 512 \\
+ & median (range) & median (range) & \\\midrule
+R1, founders recorded & 21 (6.5--89) & 15 (7.0--42) & 0.016--0.046 \\
+R1, sorted, purity 95\% / 80\%, purity known & 19 / 16 & 14 / 11 & 0.017--0.049 \\
+R1, sorted, purity 90\% / 80\%, purity estimated & 10 (3.3--57) / 8 (2.5--46) & 6.7 / 5.5 & 0.018--0.085 \\
+R1 time points, unsorted ($p_A$ = 0.7 estimated) & 5.6 (2.0--17) & 4.6 (3.3--14) & 0.038--0.126 \\
+current design, unsorted ($p_A$ = 0.7 estimated) & 0.77 (0.37--1.2) & 0.81 (0.71--0.95) & 0.054--0.42 \\\bottomrule
 \end{tabular}
 
 Same total number of detected clones; ``current'' = A-founded clones at generations 4/6/8/10 with known founders; R1 = $\tfrac38$ A2 + $\tfrac14$ B1 + $\tfrac14$ B2 + $\tfrac18$ A10; unsorted R1 = the same time points (1/4 at generation 1, 5/8 at 2, 1/8 at 10) without founder labels.
 \end{center}
 \begin{itemize}
+\item \textbf{Over all 12 probabilities} (total variance) the gains are a little smaller but the ranking is the same: R1 15$\times$ (7--42) with recorded founders, 11--14$\times$ with measured purity, 5.5--6.7$\times$ with estimated purity, 4.6$\times$ unsorted; the current time points with unsorted founders keep 0.81 of today's precision.
 \item \textbf{Imperfect sorting costs little if the purity is measured}: at 80\% purity R1 still gives a 16-fold smaller \BA{} variance than the current design. \textbf{An unmeasured purity costs about half the gain} (8--10-fold), because the impurity trades off against B's own fate along the parent-swap direction.
 \item \textbf{Without any founder information, early observation still helps}: the R1 time points with unsorted founders give a 5.6-fold (2--17) smaller \BA{} variance than the current design with known A founders; the current time points with unsorted founders are worse than now (0.77). Early endpoints carry the information; sorted founders multiply it by another 2--4.
 \item These are asymptotic (Fisher) numbers. With unsorted founders the posterior can have two branches along the parent-swap ridge (\S\ref{sec:freefounder}), so the real precision at a few hundred clones is lower than predicted. \textbf{Recommendation:} sort founders and measure the sort purity on the same day (e.g.\ re-stain a sample of sorted cells); if sorting is impossible, still observe early.
@@ -912,17 +914,18 @@ In real organoids the progenitor of a clone is not observed; only its endpoint c
 \fig{founder_posteriors}{0.82}{Posterior mean and 90\% interval of $p_A$ (left) and of the doublet fraction $\pi_2$ (right) per scenario and truth; dashed: truth.}
 \fig{b_to_a}{1.0}{\BA{} under the free-progenitor model (blue: $p_A$ free; green: $p_A$ and $\pi_2$ free) and under the all-A model (orange, NUTS of the misspecification study), with the MLEs of the all-A ($\times$) and extended (+) models; bars: posterior mean and 90\% interval; black: truth.}
 \begin{center}\footnotesize\setlength{\tabcolsep}{3pt}
-\begin{tabular}{@{}lrrrrrr@{}}\toprule
- & \multicolumn{3}{c}{\BA} & \multicolumn{3}{c}{90\% coverage (of 9 truths)} \\
-data, model & mean bias & max $|$bias$|$ & max $|z|$ & \BA & $m_{BA}$ & $\rho$ \\\midrule
-founders 70/30, all-A model & $-0.24$ & 0.78 & 38.6 & 5 & 6 & 5 \\
-founders 70/30, $p_A$ free & $-0.09$ & 0.28 & 2.8 & 5 & 9 & 7 \\
-doublets + 70/30, $p_A$ and $\pi_2$ free & $-0.08$ & 0.26 & 2.4 & 7 & 9 & 9 \\
-doublets (A founders), $p_A$ and $\pi_2$ free & $-0.17$ & 0.61 & 3.5 & 4 & 9 & 8 \\
-all-A data, $p_A$ free & $-0.17$ & 0.54 & 3.2 & 6 & 6 & 9 \\\bottomrule
+\begin{tabular}{@{}lrrrrrrl@{}}\toprule
+ & \multicolumn{3}{c}{\BA} & \multicolumn{3}{c}{90\% coverage (of 9 truths)} & all 12: MAE \\
+data, model & mean bias & max $|$bias$|$ & max $|z|$ & \BA & $m_{BA}$ & $\rho$ & (covered) \\\midrule
+founders 70/30, all-A model & $-0.24$ & 0.78 & 38.6 & 5 & 6 & 5 & 0.085 (66\%) \\
+founders 70/30, $p_A$ free & $-0.09$ & 0.28 & 2.8 & 5 & 9 & 7 & 0.046 (79\%) \\
+doublets + 70/30, $p_A$ and $\pi_2$ free & $-0.08$ & 0.26 & 2.4 & 7 & 9 & 9 & 0.063 (82\%) \\
+doublets (A founders), $p_A$ and $\pi_2$ free & $-0.17$ & 0.61 & 3.5 & 4 & 9 & 8 & 0.065 (82\%) \\
+all-A data, $p_A$ free & $-0.17$ & 0.54 & 3.2 & 6 & 6 & 9 & 0.074 (69\%) \\\bottomrule
 \end{tabular}
 \end{center}
 \begin{itemize}
+\item \textbf{Over all 12 probabilities} (last column: mean absolute error of the posterior mean, share of the 12 covered by the 90\% interval) a free $p_A$ also helps: 0.046 (79\%) against 0.085 (66\%) for the all-A model on 70/30 data; with doublets 0.063--0.065 (82\%); on all-A data a free $p_A$ costs a little (0.074, 69\%; the all-A MLE on these data: 0.059).
 \item \textbf{The confidently wrong answer disappears.} With 30\% B founders, \BA{} for T1 moves from 0.02 ($z = -39$, all-A model) to 0.52 [0.36, 0.69]; T3 from 0.06 to 0.38, T4 from 0.04 to 0.57; the worst $|z|$ drops from 39 to 2.4--3.5, and $m_{BA}$ is covered in every truth.
 \item \textbf{But the progenitor fraction is hardly learnable from endpoint counts}, as expected from the parent-swap theory (\S\ref{sec:weakdirs}): for the prior draws the posterior of $p_A$ is close to its prior (90\% intervals about [0.05, 0.95]); for T1--T4 it settles at 0.2--0.4 against 0.7. The doublet fraction, in contrast, is identified (covered in 5--7 of 9 truths) and the model does not invent doublets where there are none ($\pi_2$ = 0.005 [0, 0.014] for T1).
 \item \textbf{Freedom has a price.} \BA{} of T1--T4 stays 0.15--0.35 below the truth (two branches along the parent-swap ridge: $p_A \approx$ 0.2--0.6 with \BA{} near the truth, and $p_A \approx$ 0.9 with \BA{} $\approx$ 0, 3--12 nats lower), and on correctly specified all-A data a free $p_A$ widens and lowers \BA{} (T1: 0.26 [0.03, 0.62] against 0.80) where the all-A model was nearly unbiased. Growth rate and stable composition stay robust (bias $\le$ 0.02 and 0.005).
@@ -946,31 +949,31 @@ Each clone is founded by $m$ cells with probability $\pi_m$ ($m$ = 1--5), each f
 \textbf{Information.} The Fisher information was extended to founders of size 1--5 (the $m$-founder law is $S^m$ on the FFT grid, $S = p_A F_A + (1-p_A)F_B$), in 15 coordinates: the 10 transition directions, $p_A$ and four size coordinates. ``Known'' uses only the transition block; ``estimated'' removes the founder parameters as nuisances (Schur complement). Validation: single A founders reproduce the earlier information to $3\times10^{-13}$, single mixed founders the computation of \S\ref{sec:design} to $3\times10^{-13}$, and the score matches the exact log-likelihood gradient ($7\times10^{-14}$) and finite differences ($10^{-8}$). The whole grid (9 truths $\times$ 32 founder distributions $\times$ 2 designs $\times$ known/estimated) takes two minutes.
 
 \subsection{How the founder distribution changes the information}
-\begin{center}\scriptsize\setlength{\tabcolsep}{2.6pt}
-\begin{tabular}{@{}llrrrrrrll@{}}\toprule
- & & \multicolumn{2}{c}{known} & \multicolumn{4}{c}{estimated} & \multicolumn{2}{c}{founder parameters (sd, T / P truths)} \\
-design & founders & $\lambda_{\min}$ & var(\BA) & $\lambda_{\min}$ & var(\BA) & var($m_{BA}$) & var($\rho$) & $p_A$ & mean size \\\midrule
-XG2 & single, $p_A$ 1.0 (reference) & 1 & 1 & 0.86 & 0.94 & 0.82 & 0.92 & 0.09 / 1.15 & --- \\
- & single, $p_A$ 0.7 & 1.05 & 1.03 & 0.76 & 0.77 & 0.77 & 0.90 & 0.12 / 0.86 & --- \\
- & single, $p_A$ 0.5 & 1.04 & 1.35 & 0.73 & 0.72 & 0.82 & 0.90 & 0.14 / 0.91 & --- \\
- & single, $p_A$ 0 (all B) & 1.07 & 3.00 & 0.88 & 1.27 & 1.01 & 0.86 & 0.08 / 1.72 & --- \\
- & mostly single, $p_A$ 1.0 & 0.79 & 0.72 & 0.46 & 0.55 & 0.34 & 0.53 & 0.12 / 1.69 & 0.06 / 0.23 \\
- & mostly single, $p_A$ 0.7 & 0.67 & 0.68 & 0.35 & 0.40 & 0.34 & 0.52 & 0.18 / 1.34 & 0.07 / 0.14 \\
- & 1--3 cells, $p_A$ 0.9 & 0.52 & 0.41 & 0.24 & 0.32 & 0.24 & 0.77 & 0.17 / 2.22 & 0.15 / 0.47 \\
- & 1--5 cells, $p_A$ 0.9 & 0.34 & 0.28 & 0.14 & 0.18 & 0.12 & 0.78 & 0.22 / 3.17 & 0.37 / 1.22 \\
- & 1--5 cells, $p_A$ 0.5 & 0.29 & 0.26 & 0.15 & 0.15 & 0.13 & 0.76 & 0.38 / 2.53 & 0.49 / 0.63 \\\midrule
-R1 & single, $p_A$ 1.0 (reference) & 1 & 1 & 0.94 & 0.84 & 0.77 & 0.98 & 0.02 / 0.16 & --- \\
- & single, $p_A$ 0.7 & 0.82 & 0.70 & 0.53 & 0.46 & 0.49 & 0.84 & 0.03 / 0.09 & --- \\
- & mostly single, $p_A$ 0.9 & 0.94 & 0.64 & 0.52 & 0.52 & 0.49 & 0.60 & 0.03 / 0.14 & 0.02 / 0.04 \\
- & 1--5 cells, $p_A$ 0.5 & 0.21 & 0.24 & 0.08 & 0.09 & 0.10 & 0.93 & 0.07 / 0.08 & 0.13 / 0.08 \\\bottomrule
+\begin{center}\scriptsize\setlength{\tabcolsep}{2pt}
+\begin{tabular}{@{}llrrrrrrrrll@{}}\toprule
+ & & \multicolumn{3}{c}{known} & \multicolumn{5}{c}{estimated} & \multicolumn{2}{c}{founder param.\ (sd, T / P)} \\
+design & founders & $\lambda_{\min}$ & var(\BA) & all 12 & $\lambda_{\min}$ & var(\BA) & var($m_{BA}$) & var($\rho$) & all 12 & $p_A$ & mean size \\\midrule
+XG2 & single, $p_A$ 1.0 (reference) & 1 & 1 & 1 & 0.86 & 0.94 & 0.82 & 0.92 & 0.90 & 0.09 / 1.15 & --- \\
+ & single, $p_A$ 0.7 & 1.05 & 1.03 & 0.62 & 0.76 & 0.77 & 0.77 & 0.90 & 0.46 & 0.12 / 0.86 & --- \\
+ & single, $p_A$ 0.5 & 1.04 & 1.35 & 1.03 & 0.73 & 0.72 & 0.82 & 0.90 & 0.87 & 0.14 / 0.91 & --- \\
+ & single, $p_A$ 0 (all B) & 1.07 & 3.00 & 1.03 & 0.88 & 1.27 & 1.01 & 0.86 & 0.95 & 0.08 / 1.72 & --- \\
+ & mostly single, $p_A$ 1.0 & 0.79 & 0.72 & 0.83 & 0.46 & 0.55 & 0.34 & 0.53 & 0.51 & 0.12 / 1.69 & 0.06 / 0.23 \\
+ & mostly single, $p_A$ 0.7 & 0.67 & 0.68 & 0.68 & 0.35 & 0.40 & 0.34 & 0.52 & 0.47 & 0.18 / 1.34 & 0.07 / 0.14 \\
+ & 1--3 cells, $p_A$ 0.9 & 0.52 & 0.41 & 0.56 & 0.24 & 0.32 & 0.24 & 0.77 & 0.32 & 0.17 / 2.22 & 0.15 / 0.47 \\
+ & 1--5 cells, $p_A$ 0.9 & 0.34 & 0.28 & 0.40 & 0.14 & 0.18 & 0.12 & 0.78 & 0.17 & 0.22 / 3.17 & 0.37 / 1.22 \\
+ & 1--5 cells, $p_A$ 0.5 & 0.29 & 0.26 & 0.18 & 0.15 & 0.15 & 0.13 & 0.76 & 0.10 & 0.38 / 2.53 & 0.49 / 0.63 \\\midrule
+R1 & single, $p_A$ 1.0 (reference) & 1 & 1 & 1 & 0.94 & 0.84 & 0.77 & 0.98 & 0.88 & 0.02 / 0.16 & --- \\
+ & single, $p_A$ 0.7 & 0.82 & 0.70 & 0.62 & 0.53 & 0.46 & 0.49 & 0.84 & 0.46 & 0.03 / 0.09 & --- \\
+ & mostly single, $p_A$ 0.9 & 0.94 & 0.64 & 0.76 & 0.52 & 0.52 & 0.49 & 0.60 & 0.47 & 0.03 / 0.14 & 0.02 / 0.04 \\
+ & 1--5 cells, $p_A$ 0.5 & 0.21 & 0.24 & 0.18 & 0.08 & 0.09 & 0.10 & 0.93 & 0.10 & 0.07 / 0.08 & 0.13 / 0.08 \\\bottomrule
 \end{tabular}
 
-Median over the 9 truths of the information relative to single, known A founders on the same design and the same total number of clones: $\lambda_{\min}$ = weakest prior-whitened eigenvalue; var($\cdot$) columns give reference variance / variance, so 1 = as precise as the reference, below 1 = worse. Founder-parameter sd at $n$ = 512 clones per endpoint (sd $\gg$ 0.3 means not identified). Full grid: \res{docs/founder_distribution/tables/fisher_key.md}.
+Median over the 9 truths of the information relative to single, known A founders on the same design and the same total number of clones: $\lambda_{\min}$ = weakest prior-whitened eigenvalue; var($\cdot$) columns give reference variance / variance, so 1 = as precise as the reference, below 1 = worse; ``all 12'' = total variance of the 12 probabilities (reference / setting). Founder-parameter sd at $n$ = 512 clones per endpoint (sd $\gg$ 0.3 means not identified). Full grid: \res{docs/founder_distribution/tables/fisher_key.md}.
 \end{center}
 \fig{info_btoa}{1.0}{Information on \BA{} (1/variance, median over truths) relative to single known A founders, over founder size distribution (rows) and share of A founders $p_A$ (columns), for the XG2 design (top) and the early R1 time points (bottom), founders known (left) or estimated (right). Blue: more information than the reference; red: less.}
 \begin{itemize}
 \item \textbf{Number of founders matters most.} Even when known, seeding several cells dilutes the information: mostly single cells keep 67--80\% of the weakest-direction information, 1--3 cells about half, 1--5 cells about a third. A clone founded by several cells mixes their lineages, which is exactly the ``which parent'' ambiguity of \S\ref{sec:weakdirs}.
-\item \textbf{Estimating the founder distribution costs about as much again}: the weakest direction drops to 0.73--0.88 of the reference with single cells of unknown type, 0.35--0.46 with mostly single cells, 0.24--0.26 with 1--3 and 0.13--0.15 with 1--5 cells. \BA{} and $m_{BA}$ lose most; the growth rate and the stable composition lose little (0.5--0.9).
+\item \textbf{Estimating the founder distribution costs about as much again}: the weakest direction drops to 0.73--0.88 of the reference with single cells of unknown type, 0.35--0.46 with mostly single cells, 0.24--0.26 with 1--3 and 0.13--0.15 with 1--5 cells. \BA{} and $m_{BA}$ lose most; the growth rate and the stable composition lose little (0.5--0.9). \textbf{Over all 12 probabilities} (total variance) the picture is milder but the same: for $p_A \ge 0.5$, single cells of unknown type keep 0.80--0.90 of the reference precision, mostly single cells 0.46--0.51, 1--3 cells 0.30--0.32 and 1--5 cells 0.16--0.18 (known: 1.0, 0.66--0.83, 0.42--0.63, 0.28--0.45).
 \item \textbf{A known mixture of single A and B founders can be more informative than A founders alone}: on the XG2 endpoints, \BA{} is up to 3$\times$ better determined with single B founders (4.5$\times$ for T1--T4, no gain for the prior draws), because a B-founded clone shows B's fate directly. On the early time points, where A founders are already very informative, a mixture is worse (0.58--0.96).
 \item \textbf{What can be learnt about the founders from endpoint counts}: the mean number of founder cells, for mostly-single seeding (sd 0.06--0.23 clones); the type proportion $p_A$ only for T1--T5 on the XG2 endpoints (sd 0.08--0.14; for P1--P4 the posterior stays at the prior), but for all truths with the early time points (sd 0.02--0.16).
 \end{itemize}
@@ -981,8 +984,8 @@ Combining an A-enriched ($p_A$ = 0.9) and an A-depleted condition (0.3), each wi
 
 \subsection{Checks by simulation ($n$ = 512 per endpoint)}
 \begin{itemize}
-\item \textbf{Maximum likelihood} (12 datasets per case; T1, T3, P3): with the founder distribution estimated, the \BA{} error grows from 0.08--0.12 (known) to 0.26 / 0.29 / 0.37 for T1 with mostly single / 1--3 / 1--5 cells, because 25--42\% of the fits with multi-cell seeding land on the other branch of the parent-swap ridge; P3 is barely affected (0.12--0.19 either way). The mean founder size is recovered (error 0.04--0.37 cells); $p_A$ is not (error 0.20--0.63), except for T1 with single cells (0.06).
-\item \textbf{NUTS} (16 runs, dataset 0; reduced to fit on one machine): the \BA{} 90\% interval covers the truth in 6 of 8 runs with the founders known and 3 of 8 with them estimated; the misses are T1 and T3, biased low, as with unknown single founders (\S\ref{sec:freefounder}). Where the posterior has one mode (P3, and the growth rate everywhere) its sd matches the Fisher prediction; for T1 and T3 it is 1.1--3$\times$ wider. 11 of 16 runs mixed poorly, so single runs are indicative.
+\item \textbf{Maximum likelihood} (12 datasets per case; T1, T3, P3): with the founder distribution estimated, the \BA{} error grows from 0.08--0.12 (known) to 0.26 / 0.29 / 0.37 for T1 with mostly single / 1--3 / 1--5 cells, because 25--42\% of the fits with multi-cell seeding land on the other branch of the parent-swap ridge; P3 is barely affected (0.12--0.19 either way). Over all 12 probabilities the mean absolute error with the founder distribution estimated vs known is 0.025--0.076 vs 0.027--0.035 for T1, 0.052--0.100 vs 0.039--0.071 for T3 and 0.10--0.14 vs 0.08--0.13 for P3 (same order of seedings; single cells cost little, multi-cell seeding up to twice the error). The mean founder size is recovered (error 0.04--0.37 cells); $p_A$ is not (error 0.20--0.63), except for T1 with single cells (0.06).
+\item \textbf{NUTS} (16 runs, dataset 0; reduced to fit on one machine): the \BA{} 90\% interval covers the truth in 6 of 8 runs with the founders known and 3 of 8 with them estimated (all 12 probabilities: mean absolute error 0.060 vs 0.075, 74\% vs 75\% of them covered); the misses are T1 and T3, biased low, as with unknown single founders (\S\ref{sec:freefounder}). Where the posterior has one mode (P3, and the growth rate everywhere) its sd matches the Fisher prediction; for T1 and T3 it is 1.1--3$\times$ wider. 11 of 16 runs mixed poorly, so single runs are indicative.
 \item \textbf{Per-clone founders}: the number of founder cells of a clone is recognisable from its counts (AUC 0.86--0.94); its founder types are not (AUC 0.53--0.73), and with $p_A$ estimated those probabilities are poorly calibrated.
 \end{itemize}
 
