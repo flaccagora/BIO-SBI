@@ -37,9 +37,34 @@ import common as W  # noqa: E402  (weak_directions.common)
 import dfcommon as D  # noqa: E402
 
 N_EP = 512  # clones per endpoint
-FACE = W.row_contrasts(np.array([i not in D.I_DEATH for i in range(12)]))
 FULL = W.row_contrasts()
-SETTINGS = {"orig": ("orig", FULL), "D0 free": ("D0", FULL), "D0 nodeath": ("D0", FACE)}
+
+
+def tied_basis() -> np.ndarray:
+    """Orthonormal basis (12, 5) of the mirror-tied directions (A change c, B change = c
+    moved to the mirrored entries)."""
+    cols = []
+    for c in np.linalg.qr(np.eye(6) - 1 / 6)[0][:, :5].T:
+        v = np.zeros(12)
+        v[:6] = c
+        v[6 + np.array(D.MIRROR_B_OF_A)] = c
+        cols.append(v / np.linalg.norm(v))
+    return np.array(cols).T
+
+
+BASIS = {"free": FULL,
+         "nodeath": W.row_contrasts(np.array([i not in D.I_DEATH for i in range(12)])),
+         "noswitch": W.row_contrasts(np.array([i not in D.I_SWITCH for i in range(12)])),
+         "tied": tied_basis()}  # fmt: skip
+LABEL = {"nodeath": "death fixed 0", "noswitch": "switch fixed 0", "tied": "B tied to A"}
+TITLE = {"D0": "no death (D0)", "S0": "no switching (S0)", "M": "mirror roles (M)"}
+
+
+def settings(kind: str) -> dict[str, tuple[str, np.ndarray]]:
+    """Setting label -> (truth kind, basis): original, kind free, kind constrained."""
+    con = D.CONSTRAINED[kind]
+    return {"orig": ("orig", FULL), f"{kind} free": (kind, FULL),
+            f"{kind} {con}": (kind, BASIS[con])}  # fmt: skip
 
 
 def info_K(kind: str, gt: str) -> np.ndarray:
@@ -47,7 +72,7 @@ def info_K(kind: str, gt: str) -> np.ndarray:
     if kind == "orig":
         info = WA.load_info(gt)
     else:
-        info = W.info_cache(f"D0_{gt}", D.truth(gt, "D0").ravel(), gens=W.HORIZONS,
+        info = W.info_cache(f"{kind}_{gt}", D.truth(gt, kind).ravel(), gens=W.HORIZONS,
                             founders=("A",))  # fmt: skip
     return WA.design_info(info, WA.BASE) / W.PRIOR_PREC
 
@@ -94,8 +119,8 @@ def directions(p12: np.ndarray) -> dict[str, np.ndarray]:
     return out
 
 
-def analyse(gt: str, setting: str) -> tuple[dict, dict]:
-    kind, B = SETTINGS[setting]
+def analyse(gt: str, setting: str, sets: dict) -> tuple[dict, dict]:
+    kind, B = sets[setting]
     p12 = D.truth(gt, kind).ravel()
     K = info_K(kind, gt)
     lam, V = W.eig_tangent(K, B)
@@ -111,22 +136,23 @@ def analyse(gt: str, setting: str) -> tuple[dict, dict]:
            "n_weak_le_512": int(np.sum(1 / lam > N_EP))}  # fmt: skip
     nh = {"truth": D.SHORT[gt], "setting": setting}
     for name, d in directions(p12).items():
-        # death fixed: directions that are mostly death (>= half the squared norm) do not
-        # exist; others lose their death component (projected on the face)
-        death_share = float(np.sum(d[list(D.I_DEATH)] ** 2))
-        nh[name] = np.nan if (B is FACE and death_share >= 0.5 - 1e-9) else n_half(K, B, d)
+        # constrained models: a direction mostly outside the model (>= half its squared
+        # norm) does not exist; others are projected on the model's directions
+        inside = float(np.sum((B.T @ d) ** 2))
+        nh[name] = np.nan if inside <= 0.5 + 1e-9 and B is not FULL else n_half(K, B, d)
     return row, {**nh, "_lam": lam}
 
 
-def figure(tab: pd.DataFrame, nh: pd.DataFrame, spectra: dict) -> None:
+def figure(kind: str, tab: pd.DataFrame, nh: pd.DataFrame, spectra: dict) -> None:
     import matplotlib  # noqa: PLC0415
 
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt  # noqa: PLC0415
     from matplotlib.colors import LinearSegmentedColormap, LogNorm  # noqa: PLC0415
 
-    cols = {"orig": "#8a8984", "D0 free": "#2a78d6", "D0 nodeath": "#eb6834"}
-    truths = list(D.SHORT.values())
+    SETTINGS = settings(kind)
+    cols = dict(zip(SETTINGS, ["#8a8984", "#2a78d6", "#eb6834"], strict=True))
+    truths = [D.SHORT[g] for g in D.gts(kind)]
     fig = plt.figure(figsize=(13, 10), constrained_layout=True)
     gs = fig.add_gridspec(2, 3, height_ratios=[1, 1.25])
     # (a) 1/lambda spectra
@@ -179,34 +205,41 @@ def figure(tab: pd.DataFrame, nh: pd.DataFrame, spectra: dict) -> None:
         ax.set_yticks(range(len(truths)), truths if k == 0 else [""] * len(truths), fontsize=8)
         ax.tick_params(length=0)
         ax.set_title(f"(c) {s}: clones / endpoint to halve the prior variance", fontsize=9)
-    fig.suptitle("Death-free truths (D0): information on the weak directions, "
-                 "death estimated vs death fixed at 0 (grey: original truth)", fontsize=11)
+    con = LABEL[D.CONSTRAINED[kind]]
+    fig.suptitle(f"Structured truths, {TITLE[kind]}: information on the weak directions, "
+                 f"standard model (blue) vs {con} (orange); grey: original truth", fontsize=11)
     out = D.DOCS / "figures"
     out.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out / "fisher_d0.png", dpi=150)
+    fig.savefig(out / f"fisher_{kind}.png", dpi=150)
     plt.close(fig)
 
 
 def main() -> None:
-    rows, nhs, spectra = [], [], {}
-    for gt in D.GTS:
-        t0 = time.time()
-        for s in SETTINGS:
-            r, nh = analyse(gt, s)
-            rows.append(r)
-            spectra[(r["truth"], s)] = nh.pop("_lam")
-            nhs.append(nh)
-        print(f"{gt}: {time.time() - t0:.0f} s", flush=True)
-    tab, nh = pd.DataFrame(rows), pd.DataFrame(nhs)
-    tdir = D.DOCS / "tables"
-    tdir.mkdir(parents=True, exist_ok=True)
-    tab.to_csv(tdir / "fisher_summary.csv", index=False)
-    nh.to_csv(tdir / "fisher_n_half.csv", index=False)
-    figure(tab, nh, spectra)
+    import argparse
+
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--kinds", default=",".join(D.KINDS))
     pd.set_option("display.width", 250)
     pd.set_option("display.max_colwidth", 60)
-    print(tab.round(4).to_string())
-    print(nh.round(0).to_string())
+    for kind in ap.parse_args().kinds.split(","):
+        sets = settings(kind)
+        rows, nhs, spectra = [], [], {}
+        for gt in D.gts(kind):
+            t0 = time.time()
+            for s in sets:
+                r, nh = analyse(gt, s, sets)
+                rows.append(r)
+                spectra[(r["truth"], s)] = nh.pop("_lam")
+                nhs.append(nh)
+            print(f"{kind} {gt}: {time.time() - t0:.0f} s", flush=True)
+        tab, nh = pd.DataFrame(rows), pd.DataFrame(nhs)
+        tdir = D.DOCS / "tables"
+        tdir.mkdir(parents=True, exist_ok=True)
+        tab.to_csv(tdir / f"fisher_summary_{kind}.csv", index=False)
+        nh.to_csv(tdir / f"fisher_n_half_{kind}.csv", index=False)
+        figure(kind, tab, nh, spectra)
+        print(tab.round(4).to_string())
+        print(nh.round(0).to_string())
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-"""Death-free dataset D0: maximum likelihood and NUTS at n = 512 per endpoint.
+"""Structured truths D0 / S0 / M: maximum likelihood and NUTS at n = 512 per endpoint.
 
 MLE (``mle``): D0 datasets 0-9 of every truth, models ``free`` (12 probabilities) and
 ``nodeath`` (death fixed at 0); the multistart of ``dfcommon.fit_mle`` (as the
@@ -54,27 +54,27 @@ def truth_dict(gt: str, kind: str) -> dict:
 
 
 # ---------------------------------------------------------------------- MLE
-def mle_job(gt: str, seed: int, model: str) -> tuple:
+def mle_job(gt: str, seed: int, kind: str, model: str) -> tuple:
     t0 = time.perf_counter()
-    out = D.OUT / "mle" / f"D0_{model}" / f"{gt}_s{seed}.json"
+    out = D.OUT / "mle" / f"{kind}_{model}" / f"{gt}_s{seed}.json"
     if not _lock(out):
-        return gt, seed, model, 0.0, "locked"
+        return gt, seed, f"{kind}:{model}", 0.0, "locked"
     try:
-        data = D.dataset(gt, seed, "D0")
+        data = D.dataset(gt, seed, kind)
         lik = C.make_lik(data)
         f = D.fit_mle(lik, np.random.default_rng([seed, 99]), model)
-        P = D.truth(gt, "D0")
-        res = {"gt": gt, "seed": seed, "model": model, "kind": "D0",
-               "truth": truth_dict(gt, "D0"), "P": C.pdict(f["P"]), "summ": C.summaries(f["P"]),
-               "ll": f["ll"], "ll_truth": float(D.dl.loglik(lik, D.FREE, D.FREE.encode(P), False)[0]),
+        P = D.truth(gt, kind)
+        res = {"gt": gt, "seed": seed, "model": model, "kind": kind,
+               "truth": truth_dict(gt, kind), "P": C.pdict(f["P"]), "summ": C.summaries(f["P"]),
+               "ll": f["ll"], "ll_truth": D.loglik_at(lik, P),
                "start": f["start"], "n_tied": f["n_tied"], "second_ll": f["second_ll"],
                "mean_cells": [float(c.counts.sum(1).mean()) for c in data],
                "seconds": time.perf_counter() - t0}  # fmt: skip
         out.write_text(json.dumps(res, default=float, indent=1))
-        return gt, seed, model, res["seconds"], None
+        return gt, seed, f"{kind}:{model}", res["seconds"], None
     except Exception as exc:  # noqa: BLE001
         out.with_suffix(".err").write_text(traceback.format_exc())
-        return gt, seed, model, 0.0, repr(exc)
+        return gt, seed, f"{kind}:{model}", 0.0, repr(exc)
 
 
 # ---------------------------------------------------------------------- NUTS
@@ -86,6 +86,10 @@ def make_sim(model: str):
     law = yaml.safe_load((D.ROOT / "src" / "bio_sbi" / "conf" / "law" / "two_type.yaml").read_text())
     if model == "nodeath":
         law["fixed"] = {"founder": {"A": 1.0}, "A": {"death": 0.0}, "B": {"death": 0.0}}
+    elif model == "noswitch":
+        law["fixed"] = {"founder": {"A": 1.0}, "A": {"to_B": 0.0}, "B": {"to_A": 0.0}}
+    elif model != "free":
+        raise ValueError(f"NUTS: model {model} not expressible as a law (rows cannot be tied)")
     sim = GaltonWatson(law)
     assert list(sim.space.names)[:12] == D.NAMES, sim.space.names
     return sim
@@ -140,26 +144,29 @@ def nuts_job(gt: str, kind: str, model: str, threads: int, seed: int = 0) -> tup
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("kind", choices=["mle", "nuts"])
-    ap.add_argument("--jobs", default="all", help="mle: all | gt:model,...; nuts: kind:model,...")
+    ap.add_argument("--jobs", default="all", help="nuts: kind:model,...")
+    ap.add_argument("--kinds", default=",".join(D.KINDS), help="mle: datasets")
     ap.add_argument("--truths", default=",".join(D.GTS))
     ap.add_argument("--seeds", default="0-9")
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--threads", type=int, default=4)
     args = ap.parse_args()
-    gts = args.truths.split(",")
+    sel = set(args.truths.split(","))
     lo, hi = (int(x) for x in args.seeds.split("-")) if "-" in args.seeds else (int(args.seeds),) * 2
     todo = []
     if args.kind == "mle":
         for seed in range(lo, hi + 1):
-            for model in ("free", "nodeath"):
-                for gt in gts:
-                    f = D.OUT / "mle" / f"D0_{model}" / f"{gt}_s{seed}"
-                    if not f.with_suffix(".json").exists() and not f.with_suffix(".lock").exists():
-                        todo.append((mle_job, (gt, seed, model)))
+            for kind in args.kinds.split(","):
+                for model in ("free", D.CONSTRAINED[kind]):
+                    for gt in (g for g in D.gts(kind) if g in sel):
+                        f = D.OUT / "mle" / f"{kind}_{model}" / f"{gt}_s{seed}"
+                        if not (f.with_suffix(".json").exists()
+                                or f.with_suffix(".lock").exists()):
+                            todo.append((mle_job, (gt, seed, kind, model)))
     else:
         for km in args.jobs.split(","):
             kind, model = km.split(":")
-            for gt in gts:
+            for gt in (g for g in D.gts("M" if kind == "M" else "D0") if g in sel):
                 f = D.OUT / "nuts" / f"{kind}_{model}" / f"{gt}_s0"
                 if not f.with_suffix(".json").exists() and not f.with_suffix(".lock").exists():
                     todo.append((nuts_job, (gt, kind, model, args.threads)))
