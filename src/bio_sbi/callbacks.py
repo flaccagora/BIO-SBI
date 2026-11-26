@@ -87,7 +87,7 @@ def render_info(config: DictConfig) -> str:
         f"| law (inference model) | {show('law', f'`{config.law.name}`')} |",
         f"| data model | {data} |",
         f"| inference | {show('inference', f'`{config.inference.name}`')}, "
-        f"rounds={config.inference.method.rounds} |",
+        f"rounds={config.inference.method.get('rounds', 'n/a')} |",
         f"| design | {show('design', f'`{design_name}`')} |",
         f"| seed | {show('seed', str(config.seed))} |",
         f"| budget | {_fmt(config.budget)} |",

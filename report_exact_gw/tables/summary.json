@@ -1,0 +1,14 @@
+{
+  "runs": 132,
+  "kernel_adjoint": 33,
+  "rhat_gt_105": 9,
+  "rhat_gt_110": 5,
+  "missed_optimum": 3,
+  "ll_gap_truth_median_range": [
+    1.384993643658163,
+    4.46545023318231,
+    10.657643659733367
+  ],
+  "psis_pairs_unreliable": 263,
+  "psis_pairs": 682
+}

@@ -1,0 +1,119 @@
+# @package _global_
+# XG2 - how much data does the exact GW likelihood need? Galton-Watson, all transitions
+# free (two_type, 10 free probabilities), generations 4/6/8/10 jointly, n clones per
+# endpoint in {128, 256, 512, 1024}, flat (uniform Dirichlet) prior, exact NUTS.
+# 8 ground truths (gt) x 3 datasets (seed = data_seed) x 4 sizes = 96 runs:
+#   bio-sbi -m +experiment=exact_gw_data_size hydra.sweep.dir=results/exact_gw/data_size
+# Datasets are NESTED across n: at fixed (gt, seed) the n = 128 clones of every endpoint
+# are the first 128 of the n = 1024 dataset (checked), so each (gt, seed) is one
+# convergence curve in n.
+# Prior sensitivity: posteriors under the other priors below come from Pareto-smoothed
+# importance reweighting of the flat-prior draws (scripts/analyse_exact_gw_data_size.py);
+# where Pareto k > 0.7 the script prints the rerun command, e.g.
+#   bio-sbi -m +experiment=exact_gw_data_size prior=wrong gt=T3_Bdiv seed=0 \
+#     design.clones=256 hydra.sweep.dir=results/exact_gw/data_size_reruns
+# Cost: ~40 ms per likelihood + gradient on {4,6,8,10} (almost independent of n);
+# expect 20-60 min per run on 4 threads (small n: curved / multimodal posteriors).
+defaults:
+  - override /simulator: galton_watson
+  - override /law: two_type
+  - override /observation: perfect
+  - override /inference: exact_gw
+  - override /budget: dev
+
+# ---- ground truths (swept by name). Curated truths fix every free entry not listed to the
+# law reference (A row 0.03/0.03/0.05/0.55/0.05/0.29; B: death 0.1, persist 0.1,
+# to_A 0.8, no divisions). Expected cells per clone at gen 10 in brackets.
+gt: T1_ref
+truths:
+  T1_ref:      # reference [96]; B divisions = 0 (on the simplex boundary)
+    source: reference
+    seed: null
+    values: {}
+  T2_toA05:    # weaker switch-back, B divisions = 0 [56]
+    source: reference
+    seed: null
+    values: {B: {death: 0.25, persist: 0.25, to_A: 0.5}}
+  T3_Bdiv:     # B divides (mass 0.22), every B entry interior [118]
+    source: reference
+    seed: null
+    values: {B: {death: 0.10, persist: 0.08, to_A: 0.60, div_AA: 0.02, div_AB: 0.05, div_BB: 0.15}}
+  T4_slowA:    # less A self-renewal, more A loss [45]
+    source: reference
+    seed: null
+    values: {A: {death: 0.06, persist: 0.06, to_B: 0.06, div_AA: 0.40, div_AB: 0.10, div_BB: 0.32}}
+  P1:          # draws from the flat prior with 30-300 expected cells at gen 10;
+    source: prior   # truth.seed fixes the draw, data_seed (= seed) the dataset
+    seed: 1001
+    values: {}
+  P2:
+    source: prior
+    seed: 1002
+    values: {}
+  P3:
+    source: prior
+    seed: 1003
+    values: {}
+  P4:
+    source: prior
+    seed: 1004
+    values: {}
+truth:
+  source: ${truths.${gt}.source}
+  seed: ${truths.${gt}.seed}
+  values: ${truths.${gt}.values}
+  mean_cells: {horizon: 10, min: 30, max: 300}   # plausibility filter (prior draws only)
+
+# ---- inference prior (law.concentration, Dirichlet alpha per entry; default 1 = flat).
+# The main sweep is flat; the others are for reweighting and targeted reruns.
+prior: flat
+priors:
+  flat: {}
+  sparse:      # symmetric Dirichlet(0.2): favours sparse rows
+    A: {death: 0.2, persist: 0.2, to_B: 0.2, div_AA: 0.2, div_AB: 0.2, div_BB: 0.2}
+    B: {death: 0.2, persist: 0.2, to_A: 0.2, div_AA: 0.2, div_AB: 0.2, div_BB: 0.2}
+  jeffreys:    # symmetric Dirichlet(1/2)
+    A: {death: 0.5, persist: 0.5, to_B: 0.5, div_AA: 0.5, div_AB: 0.5, div_BB: 0.5}
+    B: {death: 0.5, persist: 0.5, to_A: 0.5, div_AA: 0.5, div_AB: 0.5, div_BB: 0.5}
+  smooth:      # symmetric Dirichlet(2)
+    A: {death: 2, persist: 2, to_B: 2, div_AA: 2, div_AB: 2, div_BB: 2}
+    B: {death: 2, persist: 2, to_A: 2, div_AA: 2, div_AB: 2, div_BB: 2}
+  central:     # symmetric Dirichlet(5): pulls every row towards 1/6 each
+    A: {death: 5, persist: 5, to_B: 5, div_AA: 5, div_AB: 5, div_BB: 5}
+    B: {death: 5, persist: 5, to_A: 5, div_AA: 5, div_AB: 5, div_BB: 5}
+  flat_btoa:   # B->A marginal Uniform(0,1): B row Dirichlet(to_A 1, other outcomes 0.2);
+    B: {death: 0.2, persist: 0.2, to_A: 1, div_AA: 0.2, div_AB: 0.2, div_BB: 0.2}  # A row flat
+  wrong:       # concentrated (total 20) on a wrong biology: A rarely self-renews,
+    A: {death: 2, persist: 2, to_B: 2, div_AA: 6, div_AB: 4, div_BB: 4}   # B dies / divides
+    B: {death: 6, persist: 4, to_A: 4, div_AA: 2, div_AB: 2, div_BB: 2}   # (B.to_A mean 0.2)
+law:
+  concentration: ${priors.${prior}}
+
+design:
+  name: data_size
+  horizons: [4, 6, 8, 10]
+  clones: 128
+inference:
+  sbc_cases: 0       # coverage comes from the truths x datasets panel instead
+  method:
+    init_starts: 16  # small n: multimodal posteriors (see exact_gw.chain_means)
+    warmup: 500
+    draws: 500       # 4 chains x 500 = 2000 draws = budget.posterior_samples (all kept)
+workers: 4
+info:
+  title: "XG2: exact GW likelihood, data size, ground truth and prior sensitivity"
+  question: |
+    With all transitions free and the exact likelihood, how many clones per endpoint
+    (generations 4/6/8/10 jointly) are needed for the posterior to converge (contract,
+    cover the truth, stop depending on the prior, sd scaling as n^-1/2), and how much
+    does that depend on the ground truth and on the dataset?
+  notes: |
+    Flat prior; other priors by PSIS reweighting (reruns where Pareto k > 0.7).
+    Datasets nested across n at fixed (gt, seed). SBC off. Analysis:
+    uv run python scripts/analyse_exact_gw_data_size.py results/exact_gw/data_size
+hydra:
+  sweeper:
+    params:
+      gt: T1_ref,T2_toA05,T3_Bdiv,T4_slowA,P1,P2,P3,P4
+      design.clones: 128,256,512,1024
+      seed: 0,1,2

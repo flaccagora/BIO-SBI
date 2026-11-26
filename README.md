@@ -345,7 +345,16 @@ the posterior of the **raw counts** (no summary, no simulations) with NUTS
 * likelihood = product over clones and horizons of `p(A, B | theta)`, conditioned on
   `Z != (0, 0)` for `selection=detected` (detection probability in complement form);
   counts are histogrammed per horizon; probabilities floored at `1e-15`;
-* exact gradients by forward mode through the pgf recursion;
+* exact gradients by forward mode through the pgf recursion (default
+  `inference.method.kernel=loop`); `kernel=adjoint` evaluates the offspring pgfs in
+  polynomial form with row-vectorised (SIMD) Numba loops and takes the gradient in
+  reverse mode (adjoint of the inverse FFT, one backward sweep per grid point for all
+  coordinates). Same values (bit-identical for the shipped laws) and gradients up to
+  round-off; ~3-5x faster objective and gradient calls (`scripts/gw_speedup/`). Opt-in
+  because NUTS draws then differ from `loop` runs at round-off level. A GPU prototype
+  (`scripts/gw_speedup/gpu_numba.py`, many parameter vectors in lockstep, float64) reached
+  only ~3x the CPU adjoint kernel at 2 threads on an RTX A1000 (FP64-bound), so it is not
+  wired into the pipeline;
 * same `theta` coordinates and prior as NPE (stick-breaking Betas of the Dirichlet rows),
   sampled on `logit(theta)`; chains start at the best of `init_starts` L-BFGS optima;
   Stan-style warmup (dual averaging, dense mass matrix); split R-hat, ESS, divergences
@@ -378,6 +387,107 @@ trees); see `TODO.md` (section XG). Multimodal posteriors show up as R-hat >> 1
 (`exact_gw.chain_means` per chain).
 Presets: `exact_gw_e0_4096`, `exact_gw_e0`, `exact_gw_real_like`, `exact_gw_early`
 (reference datasets identical to the NPE runs they compare with).
+
+**Cheaper runs: warm start and adaptive run length** (both opt-in; with the defaults the
+draws are bit-identical to the plain sampler). Settings in `conf/inference/exact_gw.yaml`:
+
+* `inference.method.warm_start=<previous run dir | posterior.pt | posterior_samples.csv.gz>`
+  starts from the posterior of the same model on a dataset this one extends (e.g. the XG2
+  datasets, nested in `n`). The chains start at well-separated previous draws (k-means in
+  whitened logit space, so separate modes of the previous posterior get their own chains);
+  the initial inverse mass matrix is the previous *within-chain* covariance (not inflated
+  by mode separation) times `n_prev / n` (posterior sd ~ `n^-1/2`; `n` = total clones,
+  `n_prev` from the previous run's diagnostics; `warm_start_options.scale` / `.n_prev`
+  override); the initial step size is the previous median. No L-BFGS initialisation, and a
+  short warmup (`warm_start_options.warmup`, default 150 = 25 step-size iterations, one
+  mass-matrix window shrunk towards the scaled covariance with weight `mass_prior`, 50
+  terminal step-size iterations). `warm_start_options.check_starts > 0` also runs that many
+  L-BFGS starts and warns if an optimum lies above every draw (a mode the previous run did
+  not have). Details in `metrics.json` `exact_gw.warm_start`.
+* `inference.method.stop.enabled=true` draws `stop.block` iterations per chain at a time
+  (chains in lockstep) and stops when, for every stick coordinate and free physical
+  probability, the rank-normalised split R-hat (bulk and folded, also on the log density)
+  `<= stop.rhat`, bulk ESS `>= stop.ess`, tail ESS `>= stop.tail_ess` and the chain means
+  (rank-normalised) agree within `stop.max_mean_spread` posterior sd - chains in different
+  modes fail the last two even when every chain is internally well mixed - or at
+  `stop.max_draws` per chain (`exact_gw.stop.reason = max_draws` and the failed criteria;
+  warning in the log). `exact_gw.stop.trajectory` holds R-hat / ESS / spread per check.
+  Reference fit only (SBC cases keep their fixed settings).
+
+Every run now also records `warmup_gradient_evals` / `sampling_gradient_evals`, rank
+R-hat, bulk / tail ESS, the chain-mean spread and `idle_fraction` (share of the chain
+threads' time spent waiting for the slowest chain). Benchmark on the XG2 datasets:
+`scripts/exact_gw_sampler_bench/` (`run.py` launches baseline / warm / warm+stop chains
+over `n`, `analyse.py` prints the tables).
+Measured (XG2 `T1_ref` and `T5_C7`, seed 0, n = 128 -> 1024, adjoint kernel, 4 runs of 4
+threads at a time; `results/exact_gw/sampler_bench/bench_analysis.txt`): warm start cuts
+warmup gradient evaluations ~3x (150-220k -> 37-77k per run) and total evaluations over
+n = 256-1024 to 0.57x (`T1_ref`) / 0.75x (`T5_C7`) of the cold baseline, posteriors within
+MC error of the baseline (max |dmean| <= 2.1 MCSE). A warm run without the stopping rule
+can come out worse mixed (`T1_ref` n = 256: min ESS 63, tail 14), so use the two together.
+The stopping rule reaches ESS 400 / tail 200 / R-hat 1.01 at 470-825 evaluations per unit
+of min bulk ESS (cold baseline 640-2180, and the baseline usually misses those targets),
+but costs more evaluations than 4 x 500 draws when the targets are hard (`T5_C7` n = 256
+ran to `max_draws` on `A.to_B`'s tail ESS). At `T1_ref` n = 1024 a warm-started chain
+landed in the second B-row branch ("B divides", `B.to_A` ~0.34) that every cold baseline
+chain missed (baseline R-hat 1.02 looks converged; XG2's run had R-hat 1.31); the stopping
+rule refused to stop (R-hat 1.40, chain-mean spread 1.5). The idle-thread fraction did
+not drop (lockstep blocks: 15 %, cold free-running chains: 15 %, warm 12 %).
+
+**Point estimates (MLE / physical MAP)** - `src/bio_sbi/inference/gw_optimise.py`,
+settings `inference.method.optimise.*` (off by default; NUTS unchanged):
+
+* `objective=mle` maximises the exact log likelihood above; `objective=map` adds the
+  Dirichlet log prior of the *normalised free probabilities*
+  `sum_k sum_j (alpha_kj - 1) log(p_kj / m_k)` (no coordinate Jacobian: this is not
+  NUTS's `log_posterior_u`; with the default `alpha = 1` the MAP is the MLE). With any
+  `alpha < 1` the density is unbounded at the boundary, so `map` needs
+  `boundary_eps > 0` and is reported as `map_eps_restricted`.
+* search in the stick coordinates on `[eps, 1 - eps]^dim` (default `[0, 1]`: exact
+  endpoints are evaluable), decoded by `ParameterSpace` (row sums and fixed entries hold
+  by construction): `method=pso` = `restarts` global-best swarms from the prior
+  (objective-only likelihood calls, `workers` threads, reproducible from `seed`), then
+  bounded L-BFGS-B with analytic gradients on the `refine_top` best distinct candidates;
+  `method=multistart` = L-BFGS-B from `starts` prior draws; `method=sgd` = Adam
+  (`sgd_optimizer=adam`) or heavy-ball momentum (`momentum`) from the same `starts`
+  prior draws as multistart, on the objective / total clones, `sgd_iter` steps with a
+  `sgd_schedule` (cosine) learning rate and stagnation stopping, in sticks with
+  projection (`sgd_coords=box`) or in `logit(stick)` (`logit`, no Jacobian: the MLE is
+  invariant; boundary faces only approached), optionally on minibatches of clones
+  (`sgd_batch` = fraction per horizon; unbiased rescaled counts), then (`sgd_polish`)
+  L-BFGS-B on the `refine_top` best distinct endpoints.
+* output `optimisation.json` (never in the posterior draws): value, sticks, probabilities,
+  log likelihood / log prior, candidates with pre/post-refinement values, evaluation
+  counts, timings, boundary proximity and `validation` (constraints; objective on 2x/4x
+  grids; floors x1e-3/x1e3; floored cells; `grid_check`; eps/10; `flags`).
+
+```bash
+# alongside NUTS (pipeline run):
+bio-sbi inference=exact_gw law=reversible_ab inference.method.optimise.enabled=true
+# alone, on a simulated dataset or a finished run's reference.npz:
+uv run python scripts/exact_gw_optimise.py --out opt/mle law=reversible_ab design.horizons=[4,6] design.clones=128
+uv run python scripts/exact_gw_optimise.py --out opt/map law=two_type inference.method.optimise.objective=map +law.concentration.B.to_A=3
+uv run python scripts/exact_gw_optimise.py --run-dir RUN --out RUN/opt inference.method.optimise.method=multistart
+uv run python scripts/exact_gw_optimise.py --out opt/adam law=two_type inference.method.optimise.method=sgd
+```
+
+Benchmark (`scripts/pso_benchmark/`, 6 small cases x 5 seeds, 2 threads, all methods in
+one session; `results.md` and convergence plots there; hit = within 0.01 nats of the
+best value any method found): 8-start L-BFGS-B 27/30 in 0.4-2.5 s (worst miss 0.16
+nats); Adam + polish 28/30, Adam in logit coordinates + polish 29/30, momentum + polish
+23/30, minibatch Adam + polish 26/30, all in 2-16 s with ~4000 gradient calls; PSO +
+refinement 25/30 in 3-9 s; SGD alone (no polish, 500 steps) 12/30 (Adam), 10/30
+(momentum), 0/30 (logit, minibatch), up to 7-8 nats short in 10 dimensions; PSO alone
+7/30. First-order steps crawl along the ill-conditioned, boundary-faced ridges of the B
+row; their value is diverse endpoints for the polish, not accuracy. Minibatching does
+not save time: a step costs the pgf recursion + FFTs regardless of the batch (one
+gradient call 36 ms at 128 and 41 ms at 1024 clones per horizon on generations
+4/6/8/10, ~93% of it in the pgf / FFT law, for any batch fraction 0.01-1), so it only
+adds noise. The misses of all methods are
+distinct local optima on different boundary faces of B's row (`two_type` at 64 clones:
+`B.to_A` = 0.62 / 0.47 / 0 within 1.5 nats), i.e. the B-row non-identifiability. On
+these designs, prefer `method=multistart` with more starts (fastest per hit); SGD +
+polish and PSO + refinement are slower diversity checks.
 
 #### Exact likelihood for Bellman-Harris (`inference=exact_bh`)
 

@@ -1,0 +1,1162 @@
+\documentclass[10pt,a4paper]{article}
+% ---------------------------------------------------------------- packages
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage[a4paper,margin=2.1cm,top=2.0cm,bottom=2.2cm]{geometry}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{amsmath,amssymb}
+\usepackage[most]{tcolorbox}
+\usepackage{caption}
+\usepackage{titlesec}
+\usepackage{float}
+\usepackage{needspace}
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\newcolumntype{P}[1]{>{\raggedright\arraybackslash}p{#1}}
+\usepackage[hidelinks]{hyperref}
+\usepackage{xurl}
+
+\setlist{nosep,leftmargin=1.3em,topsep=2pt}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{3pt}
+\captionsetup{font=small,labelfont=bf,skip=4pt}
+\renewcommand{\arraystretch}{1.12}
+\titleformat{\section}{\large\bfseries\sffamily}{\thesection}{0.6em}{}
+\titleformat{\subsection}{\normalsize\bfseries\sffamily}{\thesubsection}{0.6em}{}
+\titlespacing*{\section}{0pt}{10pt}{4pt}
+\titlespacing*{\subsection}{0pt}{8pt}{3pt}
+\raggedbottom
+
+\definecolor{cblue}{HTML}{2A78D6}
+\definecolor{corange}{HTML}{EB6834}
+\definecolor{caqua}{HTML}{1BAF7A}
+\definecolor{inkgray}{HTML}{52514E}
+\definecolor{gridgray}{HTML}{E1E0D9}
+\definecolor{pendbg}{HTML}{FFF4E5}
+
+\DeclareUrlCommand\code{\urlstyle{tt}}  % breakable at / _ .
+\DeclareUrlCommand\res{\urlstyle{tt}}
+\newcommand{\BA}{B$\to$A}
+\newcommand{\blk}[1]{\par\Needspace*{5\baselineskip}\smallskip{\sffamily\bfseries\color{inkgray}#1}\par}
+\newtcolorbox{keybox}{colback=gridgray!35,colframe=gridgray!90!black,boxrule=0.5pt,arc=2pt,
+  left=5pt,right=5pt,top=3pt,bottom=3pt,fontupper=\small}
+\newtcolorbox{caveat}{colback=pendbg,colframe=corange,boxrule=0.6pt,arc=2pt,
+  left=5pt,right=5pt,top=3pt,bottom=3pt,fontupper=\small}
+\graphicspath{{figures/}{../docs/dediff_test/figures/}{../docs/jeffreys/figures/}{../docs/weak_directions/figures/}{../docs/optimal_design/figures/}{../docs/spike_slab/figures/}{../docs/profile_intervals/figures/}{../docs/misspecification/figures/}{../docs/free_founder/figures/}{../docs/convergence/figures/}{../docs/founder_distribution/figures/}{../docs/death_free/figures/}}
+\makeatletter\newcommand{\tabin}[1]{\@@input #1 }\makeatother  % expandable \input for table rows
+\newcommand{\fig}[3]{\begin{figure}[H]\centering\includegraphics[width=#2\linewidth]{#1}\caption{#3}\label{fig:#1}\end{figure}}
+\hypersetup{pdftitle={BIO-SBI: exact likelihood for Galton-Watson and the XG2 experiment},pdfauthor={BIO-SBI}}
+
+\makeatletter
+\newcommand{\tabinput}[1]{\@@input #1 }% table rows from a file (expandable inside tabular)
+\makeatother
+\begin{document}
+
+% ====================================================================== title
+\begin{titlepage}
+\centering
+\vspace*{3cm}
+{\sffamily\Huge\bfseries BIO-SBI\par}
+\vspace{0.5cm}
+{\sffamily\LARGE Exact likelihood for the two-type\\ Galton--Watson model\par}
+\vspace{0.4cm}
+{\sffamily\Large\color{inkgray} Method, point estimates, and how much data the full transition model needs (XG2)\par}
+\vspace{1.5cm}
+\begin{tabular}{@{}ll@{}}
+Status of results & 22 November 2026 (XG2 and all follow-ups in this report) \\
+Repository & \code{BIO-SBI}, branch \code{worktree-exact-gw-data-size} \\
+Results & \res{results/exact_gw/data_size/} (XG2), \res{results/exact_gw/} (XG) \\
+Companions & \code{report_sequential/report.pdf} (all experiments; \S ``Exact likelihood (XG)'') \\
+Data & synthetic only \\
+\end{tabular}
+\vfill
+\begin{minipage}{0.84\linewidth}\small
+\textbf{How to read this report.} The summary (p.~\pageref{sec:summary}) is self-contained. Section~\ref{sec:model} fixes the model and notation, Section~\ref{sec:method} describes the exact likelihood, its sampler and point estimators, Section~\ref{sec:xg} recalls the earlier exact-GW results, Sections~\ref{sec:xg2design}--\ref{sec:why} present the XG2 experiment and why its posteriors behave as they do, Section~\ref{sec:conclusions} gives conclusions and follow-ups. Parameters: A = LGR5$^+$ (stem-like), B = KRT20$^+$ (differentiated); A$\to$AB etc.\ are outcome probabilities per cell and generation.
+\end{minipage}
+\end{titlepage}
+
+% ====================================================================== summary
+\section*{Summary}\label{sec:summary}
+\begin{keybox}
+\textbf{Question.} With the exact likelihood (no simulations, no summaries) and \emph{all} transitions free, how many clones per endpoint (generations 4/6/8/10 jointly) does the two-type Galton--Watson model need before its posterior converges --- contracts, covers the truth, scales like $n^{-1/2}$ and stops depending on the prior --- and how much does that depend on the ground truth and on the dataset? (XG2: 9 truths $\times$ 3 datasets $\times$ $n \in \{128, 256, 512, 1024\}$, 108 NUTS posteriors, plus the maximum-likelihood estimate of every run.)
+\end{keybox}
+
+\textbf{Findings.}
+\begin{enumerate}
+\item \textbf{The sampler is not the bottleneck.} 99 of 108 posteriors mixed (split $\hat R \le 1.05$; min ESS per run median 276, 5--95\% range 127--490); the Monte Carlo error of the posterior means is $\approx$\,0.05 posterior sd. The other 9 are bimodal or slow along one ridge (5 with $\hat R > 1.1$). A new reverse-mode (\emph{adjoint}) likelihood kernel makes every evaluation 4--5$\times$ cheaper with identical values; one NUTS run went from 2205\,s to 414\,s.
+\item \textbf{A's row converges fast, B's row does not.} For the curated truths every A parameter is narrowed about tenfold relative to the prior by $n$ = 512--1024 (Fig.~\ref{fig:contraction}). B's switch back to A (\BA) is the bottleneck: where the true \BA{} is large (0.5--0.8) the posterior mean is pulled down by 1--2 posterior sd and approaches the truth only slowly (T1: 0.36 / 0.45 / 0.68 / 0.69 at $n$ = 128 / 256 / 512 / 1024, truth 0.80). Where \BA{} is small (prior draws P1--P4, T5) it is recovered at every $n$.
+\item \textbf{Convergence depends strongly on the ground truth.} Large clones help most: T5 (about 200 cells per clone at generation 10) has every parameter contracted by $\ge$\,0.82 and \BA{} within 0.03 already at $n$ = 128. Interior truths drawn from the prior are recovered on average but individual division types can stay barely identified (P3: mixed divisions A$\to$AB vs B$\to$AB trade off with correlation $-0.98$).
+\item \textbf{The prior still matters at 1024 clones per endpoint.} Under other symmetric Dirichlet priors the posterior mean of \BA{} still moves by 0.2 (P1, P4) to 1.2 (T1) posterior sd; under a concentrated wrong prior by 0.3--0.9 sd. In this sense no truth has fully converged by $n = 1024$ (4096 clones in total).
+\item \textbf{MLE vs posterior mean.} The MLE of \BA{} is much closer to the truth than the posterior mean where \BA{} is large (T1, T2, T4: error 0.01--0.06 vs 0.07--0.44); the posterior mean is better for the prior-drawn truths at small $n$. Neither dominates. The mean squared errors (\S\ref{sec:mse}) show the posterior mean's error for B's row is mostly bias, which its width does not reflect: for T1--T4 its RMSE exceeds its sd by 1.5--2.0$\times$ at $n$ = 128 and 1.3--1.6$\times$ at 1024 (T5 and prior draws: 0.7--1.4$\times$). The truth lies inside the 95\% likelihood region in 107 of 108 runs (1.4--10.7 nats\footnote{A nat is the unit of a natural-log likelihood: a difference of $\Delta$ nats between two fits means a likelihood ratio $e^{\Delta}$ (1 nat $\approx$ 2.7$\times$, 1.92 nats $\approx$ 6.8$\times$, 5 nats $\approx$ 150$\times$). See the Glossary.} below the maximum, median 4.4).
+\item \textbf{Why} (Section~\ref{sec:why}). The likelihood is flat --- often two-branched --- along ``B switches back to A'' versus ``B is lost'' (divides or dies); the flat Dirichlet prior gives \BA{} a Beta(1,\,5) marginal with mean 1/6, and on a flat ridge that volume pulls the posterior mean down. This holds whether or not the truth sits on the boundary (T3, all entries interior, is as biased as T1). The 95\% \emph{profile-likelihood} interval of \BA{} covers the truth in 95\% of all 132 runs, the flat posterior's in 67\% (\S\ref{sec:fu-profile}). A likelihood-ratio test of ``B never divides'' picked the right sub-model in 37/37 runs, already at $n$ = 128, and cut the \BA{} error to 0.02--0.06 (posterior mean: 0.28--0.37). More generally (\S\ref{sec:weakdirs}), all weakly identified directions are ``parent swaps'': the counts show what the average cell does, not whether an A or a B cell did it; 1/$\lambda$ = 30--330 clones per endpoint for T1--T4, up to 3000 for the prior draws. Information on them comes from early endpoints (generation 4 gives 57--91\%).
+\end{enumerate}
+
+\textbf{Follow-ups} (\S\ref{sec:fu}). B's switch back reaches an error below 0.05 at 2048--4096 clones per endpoint for T1, T3, T4 (T2 not by 4096), but where B never divides the posterior stays 1--2 sd low at every $n$. A flat prior on \BA{} cuts the \BA{} error of T1--T4 by 1.7--5$\times$ and, at $n$ = 128, up to doubles it for the small-\BA{} truths. Reparametrising B's row helps modestly within a branch (0.8--1.6$\times$); T1's posterior at $n$ = 1024 has a second ``B divides'' branch holding about 17\% of the mass, which single NUTS runs weight anywhere between 2\% and 28\%. Two other ``uninformative'' priors do not fix the \BA{} bias either (\S\ref{sec:fu-jeffreys}): the exact Jeffreys prior is proper but concentrates on B self-renewal and \BA{} $\approx$ 0 (bias $-$0.13 at $n$ = 128, $-$0.04 at 1024); Dirichlet(\textonehalf) is the best symmetric prior (RMSE 0.19 $\to$ 0.07), and at 1024 the priors still differ by more than 0.25 posterior sd in most cells.
+
+\textbf{Dedifferentiation test} (\S\ref{sec:dediff}). A likelihood-ratio test of ``B never gives rise to A'' is well calibrated with per-dataset boundary ($\bar\chi^2$) critical values (1--6.5\% false positives) and, with perfect typing, detects $m_{BA} \approx 0.003$ A cells per B cell per generation already at 128 clones per endpoint. But 0.5\% of KRT20$^+$ cells mis-scored as LGR5$^+$, if not modelled, gives 75--100\% false positives, and assuming a rate only 10--20\% too low can still give most of them; assuming it 50--100\% too high costs little power. Measure an upper limit of the typing error ($\pm$25\% is enough) and test at that limit.
+
+\textbf{Composition convergence} (\S\ref{sec:convergence}). The pooled A/B composition reaches its stable value by generation 1--4 for eight of nine truths (gap $\times |\lambda_2|/\rho$ per generation); single clones keep varying (spread $\times 1/\sqrt\rho$ per generation, sd 0.06--0.11 at generation 10). Slow pooled convergence (beyond generation 10) needs rare, symmetric interconversion and is rare among plausible parameters (0.5\%), but where it occurs it makes the coupling far easier to infer, and a pooled composition still drifting between late endpoints is a model-free sign of it.
+
+\textbf{Misspecification} (\S\ref{sec:misspec}). Simulated data that break one assumption at a time show that cell-typing errors are invisible in the data yet make the dedifferentiation test reject in 98--100\% of experiments without dedifferentiation; unmodelled founders, doublets, organoid heterogeneity and asynchronous divisions bias \BA{} down by up to 0.8 with confident posteriors. Growth rate and stable composition are robust to assay problems. Modelling founders and typing errors fixes them; heterogeneity and asynchrony are detectable but not yet modelled. Treating each clone's progenitor as unknown in the posterior (free founder distribution, \S\ref{sec:freefounder}) removes the confidently wrong \BA{} (T1: 0.02 $\to$ 0.52 for a truth of 0.80) but the progenitor fraction itself is barely learnable from endpoint counts, so \BA{} stays uncertain: recording founders at seeding is what identifies it.
+
+\textbf{Founder distribution} (\S\ref{sec:founders}). With clones seeded by 1--5 cells of unknown type and only endpoint counts, estimating the founder distribution with the transitions costs 12--27\% of the information on the weakest direction for single cells of unknown type, 54--65\% for mostly single cells and 85--87\% for 1--5 cells, against single known A founders; \BA{} loses most, growth rate and composition little. The number of founder cells is learnable from the counts, their types mostly not (except with early time points). Seed single cells.
+
+\textbf{Recommendations.}
+\begin{itemize}
+\item \textbf{Report profile-likelihood intervals for \BA}, next to posterior intervals for B's row: over all 132 runs the 95\% profile interval covered \BA{} in 95\% of cases, against 67\% for the flat posterior and 80--88\% for the other priors, at the same width (\S\ref{sec:fu-profile}); where they disagree the prior drives the result.
+\item \textbf{Decide whether B divides before estimating \BA}, or average over both answers: a prior with probability $\tfrac12$ on ``B never divides'' removes the boundary bias (\BA{} RMSE 0.22 $\to$ 0.10, coverage 0.41 $\to$ 0.89 for T1, T2, T4) at no cost where B divides (\S\ref{sec:spikeslab}). Model comparison (two\_type vs B divisions = 0) works from 128 clones per endpoint; otherwise B's row needs $\gg$\,1024 clones per endpoint (earlier: 4096 on three endpoints gave 0.78 $\pm$ 0.02).
+\item \textbf{Report identifiable combinations} (growth rate, stable type fraction, division mass per row, \BA) rather than individual division types.
+\item \textbf{Observe early}: the weakly identified directions are all ``which type of parent did it'' (\S\ref{sec:weakdirs}), and the information on them comes from early endpoints. Endpoints at generations 1--4, ideally with clones founded by single A and by single B cells, give 4--20$\times$ more information on the weakest direction than generations 4--10 with the same number of clones. Theory explains the rule: parent swaps leave the growth rate and stable composition unchanged, and their information per clone falls like $\rho^{-h}$, so each generation later costs a factor $\rho \approx$ 1.4--1.7 in clones. The optimal design (\S\ref{sec:design}): $\tfrac38$ A-founded clones at generation 2, $\tfrac14$ B-founded at generation 1, $\tfrac14$ B-founded at generation 2 and $\tfrac18$ A-founded at generation 10 needs 6--90$\times$ fewer clones than the current design for the same precision on \BA.
+\item \textbf{For the sampler}: use \code{kernel=adjoint} and the ESS/$\hat R$ stopping rule, warm starts across nested $n$; for B-row posteriors check for a second branch and estimate branch masses by per-branch SMC evidence (\S\ref{sec:fu-sampler}).
+\end{itemize}
+
+% ====================================================================== model
+\section{Model and notation}\label{sec:model}
+Two cell types, A and B. In each generation every living cell has exactly one event, with type-specific probabilities over six outcomes:
+\begin{center}\small
+\begin{tabular}{@{}lll@{}}\toprule
+A cell & B cell & meaning \\\midrule
+A death & B death & cell lost \\
+A persist & B persist & cell stays, no division \\
+A$\to$B & \BA & cell switches type \\
+A$\to$AA, A$\to$AB, A$\to$BB & B$\to$AA, B$\to$AB, B$\to$BB & division with the given daughters \\\bottomrule
+\end{tabular}
+\end{center}
+\textbf{Full transition model} (\code{law=two_type}): all 12 entries free, 5 free probabilities per row, 10 in total; each clone starts from one A cell. \textbf{Data}: for each endpoint (generation 4, 6, 8, 10) the A and B counts of $n$ clones, conditioned on detection (a clone with no cell is not observed). \textbf{Prior}: uniform Dirichlet on each row (``flat''), so every outcome has a Beta(1,\,5) marginal with mean 1/6. \textbf{Coordinates}: stick breaking (exact Dirichlet reparametrisation); NUTS runs in logit-sticks.
+
+% ====================================================================== method
+\section{The exact likelihood and inference on it}\label{sec:method}
+\subsection{Likelihood}
+\begin{itemize}
+\item \textbf{Clone law.} With $f_A, f_B$ the offspring probability generating functions (pgfs) of one generation, the pgf of a clone after $g$ generations is the $g$-fold iterate $F_g = f(F_{g-1})$. It is evaluated on an $L_x \times L_y$ grid of damped roots of unity and inverted by a 2-D FFT, giving $p(a, b \mid \theta, g)$ for every observed count pair. The grid is sized from the data ($L = $ next fast length of $1.25\times$ the largest count $+16$; largest grid here $\approx 270 \times 420$ at generation 10); the damping radius bounds round-off amplification by $10^4$.
+\item \textbf{Likelihood.} Product over clones and endpoints of $p(a,b\mid\theta,g) / P(\text{detected}\mid\theta,g)$, with probability floor $10^{-15}$; clones are grouped into a histogram so the cost hardly depends on $n$.
+\item \textbf{Gradients.} Original kernel (\code{kernel=loop}, default): forward mode, one tangent per free parameter carried through the recursion. New kernel (\code{kernel=adjoint}, opt-in): vectorised recursion (bit-identical values, 3.4$\times$ faster) and \emph{reverse-mode} gradient --- one backward pass through the stored recursion gives all 10 derivatives, so the cost no longer grows with the number of parameters.
+\item \textbf{Validation.} Law at the posterior median vs an undamped grid twice as large: relative error $\le 1.1\times 10^{-6}$ on observed cells in every run. \code{adjoint} vs \code{loop}: identical log likelihoods at all 305 test points (5 designs) and on XG2 datasets; gradients agree to $\le 2\times10^{-8}$ relative near the data (both kernels are dominated by FFT round-off far from it).
+\end{itemize}
+
+\begin{center}\footnotesize
+\begin{tabular}{@{}lrrrr@{}}\toprule
+two\_type, 10 parameters, 1 thread & \multicolumn{2}{c}{log likelihood (ms)} & \multicolumn{2}{c}{log likelihood + gradient (ms)} \\
+design & loop & adjoint & loop & adjoint \\\midrule
+generations 4,6,8,10 $\times$ 128 & 13.3 & 3.2 & 33.7 & 7.6 \\
+generations 4,6,8,10 $\times$ 1024 & 14.6 & 3.7 & 38.3 & 9.3 \\
+generations 4,6,10 $\times$ 1024 & 11.3 & 2.9 & 41.6 & 9.0 \\
+XG2 T5 (large clones), 1024 & --- & --- & 145 & 27 \\\bottomrule
+\end{tabular}
+
+End-to-end NUTS (2 chains $\times$ 600 iterations, same data and seed): 2205\,s (\code{loop}) vs 414\,s (\code{adjoint}). Machine loaded; ratios stable, absolute times $\pm 20\%$. Scripts and outputs: \code{scripts/gw_speedup/}.
+\end{center}
+
+A GPU version (RTX A1000, float64 at 1/32 rate) was prototyped: at 16--256 chains in lockstep it reaches only 2.5--3$\times$ the new CPU kernel on 2 threads --- not pursued.
+
+\subsection{Posterior sampling}
+NUTS with Stan-style warmup and a dense mass matrix, 4 chains $\times$ (500 warmup + 500 draws), started at the best of 16 L-BFGS optima of the log posterior, one chain per thread (\code{inference=exact_gw}). Diagnostics: rank-normalised split $\hat R$, bulk ESS, divergences, per-chain means (to spot chains in different modes). Posteriors under other priors are obtained by Pareto-smoothed importance sampling (PSIS) of the flat-prior draws (weights $\prod p_i^{\alpha_i - 1}$), reliable when the Pareto $k \le 0.7$.
+
+\subsection{Point estimates}
+The MLE maximises the log likelihood alone (no prior), by multistart L-BFGS-B in stick coordinates (bounds $[10^{-9}, 1-10^{-9}]$), started from the 4 NUTS chain means, the posterior mean and 24 prior draws (29 starts; the truth is never a start, it is used only to check for a missed optimum). Standard errors of the MLE come from the observed Fisher information (central differences of the analytic gradient at the MLE; stick coordinates at a bound, and sticks with no effect on any probability, held fixed). A physical-probability MAP (Dirichlet prior on the normalised free probabilities, no Jacobian) is also available. Global optimisers were benchmarked on six small designs $\times$ 5 seeds (``hit'' = within 0.01 nats of the best value any method found):
+\begin{center}\footnotesize
+\begin{tabular}{@{}lrrr@{}}\toprule
+method & hits & worst gap (nats) & median time \\\midrule
+multistart L-BFGS-B & 27/30 & 0.16 & 0.8\,s \\
+particle swarm (PSO) + L-BFGS-B refinement & 25/30 & 1.39 & 4.4\,s \\
+Adam (logit coordinates) + L-BFGS-B polish & 29/30 & 0.14 & 5.4\,s \\
+PSO alone / Adam alone & 7/30 / 12/30 & 7.3 / 7.4 & 4.1 / 5.1\,s \\\bottomrule
+\end{tabular}
+
+Minibatching clones does not help: each step recomputes the full clone law, so step cost is independent of the batch size. Details: \code{scripts/pso_benchmark/results.md}.
+\end{center}
+Multistart L-BFGS-B is the default. All methods share one weakness: in stick coordinates the multistart is biased toward the ``B switches back'' basin, and a better optimum on the low-\BA{} branch can be missed (2 of 37 runs checked by pinning \BA, Section~\ref{sec:why}).
+
+% ====================================================================== XG
+\section{Earlier exact-GW results (XG)}\label{sec:xg}
+On the reference truth (\BA{} = 0.8, B divisions 0), on datasets identical to earlier NPE runs (5 seeds each; full account in the sequential report):
+\begin{center}\footnotesize\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}llrrrr@{}}\toprule
+GW design, B divisions & method & \BA{} (0.8) & post.\ sd & covered & B-division mass (0) \\\midrule
+generations \{4,6,10\} $\times$ 4096, free & \textbf{exact} & \textbf{0.78} & 0.020 & 4/5 & \textbf{0.04} \\
+ & NPE 20k / 5k & 0.34 / 0.27 & 0.12 / 0.14 & 0/5 & 0.49 / 0.56 \\
+\{4,8,12\} $\times$ 32, free & exact & 0.27 & 0.17 & 0/5 & 0.52 \\
+real-like \{6,10\} $\times$ 165/101, free & exact & 0.25 & 0.16 & 0/5 & 0.56 \\
+real-like, fixed to 0 & exact & 0.77 & 0.08 & 5/5 & --- \\
+early \{2,3\} $\times$ 133, free & exact & 0.56 & 0.15 & 1/5 & 0.18 \\\bottomrule
+\end{tabular}
+\end{center}
+B's row is identified at 4096 clones on three endpoints (the earlier NPE failure there was NPE's), but prior-dominated at realistic sizes; with B divisions fixed it is recovered. XG2 maps the range in between.
+
+% ====================================================================== XG2 design
+\section{XG2: design}\label{sec:xg2design}
+\begin{center}\footnotesize\setlength{\tabcolsep}{3pt}
+\begin{tabularx}{\linewidth}{@{}lP{4.4cm}P{4.6cm}rY@{}}\toprule
+truth & A row (death, persist, $\to$B, $\to$AA, $\to$AB, $\to$BB) & B row (death, persist, $\to$A, $\to$AA, $\to$AB, $\to$BB) & cells$^a$ & note \\\midrule
+T1 reference & .03 .03 .05 .55 .05 .29 & .10 .10 .80 0 0 0 & 96 & reference biology; B never divides \\
+T2 & as T1 & .25 .25 .50 0 0 0 & 56 & weaker switch back \\
+T4 slow A & .06 .06 .06 .40 .10 .32 & as T1 & 45 & less A self-renewal \\
+T3 B divides & as T1 & .10 .08 .60 .02 .05 .15 & 118 & B divides (mass 0.22); interior \\
+T5 (C7) & .05 .10 .10 .50 .15 .10 & .08 .05 .10 .05 .05 .67 & 196 & large clones; B self-renews \\
+P1 & .098 .061 .301 .115 .341 .084 & .191 .145 .111 .262 .266 .024 & 31 & flat-prior draw \\
+P2 & .289 .131 .008 .305 .035 .231 & .032 .134 .123 .350 .004 .358 & 39 & flat-prior draw \\
+P3 & .035 .138 .101 .117 .212 .396 & .082 .035 .272 .195 .334 .083 & 120 & flat-prior draw \\
+P4 & .219 .045 .058 .368 .282 .028 & .058 .130 .112 .175 .506 .018 & 61 & flat-prior draw \\\bottomrule
+\end{tabularx}
+
+$^a$ expected living cells per seeded clone at generation 10. P1--P4: draws from the flat prior with 30--300 expected cells at generation 10 (\code{truth.mean_cells}), fixed by \code{truth.seed} 1001--1004 (values rounded).
+\end{center}
+\begin{itemize}
+\item \textbf{Design}: generations \{4, 6, 8, 10\} jointly, $n \in \{128, 256, 512, 1024\}$ clones per endpoint. For each truth, 3 datasets (\code{seed} = \code{data_seed} = 0, 1, 2); datasets are \emph{nested} across $n$ (the 128 clones are the first 128 of the 1024), so each (truth, dataset) is one convergence curve.
+\item \textbf{Inference}: flat prior, NUTS as above; other priors by PSIS reweighting: symmetric Dirichlet 0.2 (sparse), 0.5 (Jeffreys), 2 (smooth), 5 (central), and a concentrated wrong prior (total concentration 20; \BA{} prior mean 0.2, B dividing).
+\item \textbf{Kernels}: 99 runs with \code{loop}, the last 9 (P3 and T5 at $n \ge 512$ and one P3 at 256) with \code{adjoint} --- identical likelihood, different sampler trajectories.
+\item \textbf{Runs}: \res{results/exact_gw/data_size/<truth>/n<n>_s<dataset>/}; index \res{runs_index.csv}; tables \res{xg2_*.csv}; analysis \code{scripts/analyse_exact_gw_data_size.py}; MLE \code{scripts/exact_gw_mle.py} (\res{mle.json} per run; the MLE is drawn in each run's \res{figures/posterior.png}).
+\end{itemize}
+
+% ====================================================================== XG2 results
+\section{XG2: results}\label{sec:xg2results}
+\subsection{Sampler and cost}
+\begin{center}\scriptsize\setlength{\tabcolsep}{2.2pt}
+\begin{tabular}{@{}llrrrrrrrrr@{}}\toprule
+truth & kernel & runs & h/run (range) & grad.\ ev. & ms/ev. & depth & max $\hat R$ & \#$\hat R{>}1.05$ & min ESS & max div. \\\midrule
+\tabin{tables/sampler.tex}
+\bottomrule
+\end{tabular}
+
+Per-run medians; ms/eval as measured on a shared, partly oversubscribed machine; \code{loop} T5 runs used 2 threads (others 4). Gradient evaluations per run depend on the posterior, not the kernel (the \code{adjoint} P3 runs are the larger $n$).
+\end{center}
+\begin{itemize}
+\item 99/108 runs mixed. Nine have $\hat R > 1.05$ (Table~\ref{tab:bad}); in the worst (T1, $n$ = 256, dataset 1, $\hat R$ = 3.75) two chains sit in a ``B switches back'' mode (\BA{} $\approx$ 0.6, B$\to$BB $\approx$ 0.03), one in a ``B divides'' mode (0.13, 0.42), one in between, with mean log posteriors within 2.5 nats: the pooled draws weight the modes by chain count, not by mass.
+\item Every run needs 200--600k gradient evaluations (tree depth 5.5--7): NUTS crawls along one or two weak directions. Cost per run is set by clone size (grid) and posterior geometry, hardly by $n$.
+\end{itemize}
+\begin{table}[H]\centering\footnotesize
+\begin{tabular}{@{}lrrrrl@{}}\toprule
+truth & $n$ & dataset & max $\hat R$ & divergences & kernel \\\midrule
+\tabin{tables/badruns.tex}
+\bottomrule
+\end{tabular}
+\caption{Runs with split $\hat R > 1.05$. Their posterior summaries are unreliable in the relative weight of modes; they are kept in the tables (excluding them changes no conclusion).}\label{tab:bad}
+\end{table}
+
+\subsection{What converges}
+\fig{contraction}{1.0}{Posterior sd relative to prior sd for every parameter (rows), truth and $n$ (columns; geometric mean over 3 datasets). Blue = narrowed, white = as wide as the prior, red = wider than the prior marginal (possible when the posterior sits in the prior's tail).}
+\begin{itemize}
+\item \textbf{A's row}: narrowed $\approx$\,3--10$\times$ already at $n$ = 128 for the curated truths, $\approx$\,10--30$\times$ at 1024.
+\item \textbf{B's row}: \BA{} is the slowest parameter for T1, T3 and T4 (wider than its prior marginal at $n \le 256$: the posterior sits away from the prior's bulk at 1/6 but has not yet concentrated) and B's division types follow. For P1--P4 individual division types stay weakly identified at every $n$ (Section~\ref{sec:p3}).
+\item \textbf{Large clones (T5)} are informative everywhere: every parameter is narrowed by $\ge 2.4\times$ in sd at $n$ = 128.
+\end{itemize}
+\fig{contraction_mle}{1.0}{The same for the maximum-likelihood estimate: Wald standard error from the observed Fisher information at the MLE (inverse Hessian of the log likelihood, mapped to the probabilities), relative to the prior sd; geometric mean over the datasets with a defined standard error. Grey: the MLE is exactly 0 in every dataset (no standard error on the boundary). Dot: the standard error is undefined in some datasets (MLE 0, or no curvature). Dark red: no curvature wherever the MLE is nonzero (one cell: T2, $n$ = 512, B$\to$AA). Same colour scale as Fig.~\ref{fig:contraction}. Values: \texttt{tables/mle\_se.csv}; computed by \texttt{scripts/exact\_gw\_mle\_se.py} (stored as \texttt{se} in each run's \texttt{mle.json}).}
+\begin{itemize}
+\item \textbf{Where the posterior is close to Gaussian the two agree}: over the 1083 estimates with a defined standard error, the median ratio of MLE standard error to posterior sd is 0.96 (1.01 at $n$ = 1024; T5: 1.08). For T5 at $n$ = 1024 the standard errors of A$\to$AA, \BA{} and B$\to$BB (0.015, 0.019, 0.011) match the posterior sds (0.014, 0.017, 0.011).
+\item \textbf{Where the likelihood is flat or two-branched the MLE's standard error is far too small}: for T1, \BA{} has a standard error of 0.52 prior sd at $n$ = 128 where the posterior sd is 1.53 (median ratio 0.45 over T1's \BA{} estimates). The curvature at the peak does not see the second branch (Section~\ref{sec:why}), so Wald intervals around the MLE are overconfident there; use profile-likelihood intervals instead.
+\item \textbf{201 of the 1296 estimates (16\%) are exactly 0} and have no standard error: mostly B's divisions for T1, T2 and T4 (true value 0) and small entries of the prior draws (e.g.\ \BA{} for P1).
+\item \textbf{One stored MLE is a saddle} (T2, $n$ = 512, dataset 1: smallest curvature $-0.54$; 1 of 29 starts reached it): the multistart stopped at a stationary point that is not a maximum.
+\item For P1 at $n$ = 1024 the MLE's standard error is larger than the posterior sd (\BA{}: 0.67 vs 0.32 prior sd): near the \BA{} = 0 boundary the prior narrows the posterior.
+\end{itemize}
+
+\subsection{B's switch back to A}
+\fig{btoa_vs_n}{1.0}{\BA{} per dataset against $n$: posterior mean $\pm$ sd (blue, three datasets side by side) and MLE (orange diamonds); dashed = truth. Datasets are nested across $n$.}
+\begin{center}\footnotesize\setlength{\tabcolsep}{2.6pt}
+\begin{tabular}{@{}lrrrrrrrrr@{}}\toprule
+ & & \multicolumn{2}{c}{$n$ = 128} & \multicolumn{2}{c}{256} & \multicolumn{2}{c}{512} & \multicolumn{2}{c}{1024} \\
+truth & \BA & post.\ (sd) & MLE & post.\ (sd) & MLE & post.\ (sd) & MLE & post.\ (sd) & MLE \\\midrule
+\tabin{tables/btoa.tex}
+\bottomrule
+\end{tabular}
+
+Means over the 3 datasets of the posterior mean, posterior sd and MLE of \BA.
+\end{center}
+\begin{itemize}
+\item \textbf{Large \BA{} (T1, T2, T4, T3)}: the posterior mean starts near the prior side (0.17--0.40) and climbs slowly; at 1024 it is still 0.07--0.17 below the truth (z $\approx$ $-1$ to $-2$, the same sign in every dataset).
+\item \textbf{Small \BA{} (P1--P4, T5)}: recovered at every $n$ (within $\approx$\,1 posterior sd).
+\item The MLE tracks the truth for large \BA{} from $n$ = 256 on but jumps between near-equal optima for small \BA{} (several P runs have an MLE of exactly 0).
+\end{itemize}
+
+\subsection{Calibration and contraction}\label{sec:calibration}
+\textbf{Which parameters are hard?} The table ranks the 12 probabilities from hardest to easiest on seven measures (flat prior, all 9 truths $\times$ 3 datasets, $n$ = 128--1024). Every probability has the same flat-prior marginal, Beta(1,\,5) with sd 0.141, so absolute errors are comparable across parameters.
+\begin{center}\scriptsize\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}rlrrrrrrrrlr@{}}\toprule
+ & & \multicolumn{3}{c}{RMSE post.\ mean} & sd / prior sd & 90\% & mean $|z|$ & prior shift & RMSE MLE & hardest truth & mean \\
+rank & parameter & $n$ = 128 & 512 & 1024 & 1024 & coverage & 1024 & 1024 (sd) & 1024 & (RMSE 1024) & rank \\\midrule
+\tabin{tables/param_rank.tex}
+\bottomrule
+\end{tabular}
+
+Coverage over truth $>0$ and all $n$; mean $|z|$ $\approx$ 0.8 if calibrated. Prior shift: largest reliable shift of the posterior mean under the other symmetric priors (PSIS, $k \le 0.7$), in posterior sd, median over datasets. Rank 12 = hardest on each measure; ``mean rank'' averages the seven. Script: \code{report_exact_gw/make_param_ranking.py}.
+\end{center}
+\begin{itemize}
+\item \textbf{\BA{} is the hardest parameter on six of the seven measures}: largest error at every $n$ (RMSE 0.260 / 0.127 / 0.095 at $n$ = 128 / 512 / 1024), least narrowed, most prior-sensitive, and its 90\% intervals cover the truth in only 60\% of runs (35\% for T1--T4). The exception is the MLE, which estimates it about as well as most parameters (rank 6).
+\item \textbf{Next come B's three division types}, then A's B+B division and A's death. All of B's row except ``persists'' is in the hardest seven. The reason is the same weak direction (\S\ref{sec:why}): \BA{} trades off against ``B is lost'' (B dies, or B's divisions replace it), and among divisions the data barely tell which parent produced a mixed one (\S\ref{sec:p3}). For the MLE the mixed divisions (B$\to$AB, A$\to$AB) are the hardest.
+\item \textbf{A's row is easy}: A's switch to B, self-renewal and persistence are recovered within about 0.03 at $n$ = 1024 with near-nominal coverage, because A founds every clone and its offspring dominate the counts.
+\end{itemize}
+\textbf{Why the report focuses on \BA.} It is both the hardest parameter and the biological question: whether and how often KRT20$^+$ cells return to the LGR5$^+$ state. The B-row parameters that follow it are hard for the same reason, so what improves \BA{} (more clones, earlier endpoints, B-founded clones, a prior-free analysis) improves them too.
+
+\begin{center}\footnotesize\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}lrrrrrrrr@{}}\toprule
+ & \multicolumn{4}{c}{worst-parameter contraction} & \multicolumn{2}{c}{$n$ = 128} & \multicolumn{2}{c}{$n$ = 1024} \\
+truth & 128 & 256 & 512 & 1024 & 90\% coverage & mean $|z|$ & 90\% coverage & mean $|z|$ \\\midrule
+\tabin{tables/calibration.tex}
+\bottomrule
+\end{tabular}
+
+Contraction $= 1 - \mathrm{var}_{\rm post}/\mathrm{var}_{\rm prior}$ of the least contracted parameter (mean over datasets). Coverage and $|z|$ over parameters with truth $>0$ (an equal-tailed interval cannot contain an exact 0) and the 3 datasets.
+\end{center}
+Coverage of the 90\% intervals is 70--85\% for the curated truths (\BA{} is the parameter that misses most: 60\% over $n$ = 128--1024, 35\% for T1--T4) and 75--100\% for the prior draws and T5. Mean $|z|$ near 0.8 would be expected for a calibrated posterior.
+
+\subsection{Large-sample regime}
+\fig{sd_sqrt_n}{1.0}{Posterior sd $\times \sqrt{n}$ against $n$ (mean over datasets). In the Gaussian (Bernstein--von Mises) regime the curve is flat at the Cram\'er--Rao value.}
+A's self-renewal reaches the $n^{-1/2}$ regime by 256--512 for T1, T2, T4 and T5. \BA{} and B's division types do not for most truths: sd$\cdot\sqrt n$ still grows or jumps at 1024 (posterior still prior- or boundary-limited), except for T5 and partly T4.
+
+\subsection{Prior sensitivity}
+\fig{prior_shift}{1.0}{Largest shift of the posterior mean of \BA{} under reliable reweightings (Pareto $k \le 0.7$), in flat-posterior sd (median over datasets). Blue: maximum over the symmetric Dirichlet priors (0.2, 0.5, 2, 5); orange: concentrated wrong prior. Dashed: 0.25 sd (``prior-insensitive'').}
+\begin{center}\footnotesize
+\begin{tabular}{@{}lrrrr@{}}\toprule
+prior (reweighted from flat) & $n$ = 128 & 256 & 512 & 1024 \\\midrule
+\tabin{tables/psis.tex}
+\bottomrule
+\end{tabular}
+
+Share of runs whose PSIS reweighting is reliable (Pareto $k \le 0.7$); 203 of 540 (run, prior) pairs are not and would need a NUTS rerun.
+\end{center}
+At $n$ = 1024 the reliable reweightings still move \BA{} by 0.2--1.2 posterior sd under the symmetric priors (largest for T1, smallest for P1 and P4) and by 0.3--0.9 sd under the wrong prior; moving the concentration from 0.5 to 2 lowers the mean of \BA{} in 39/39 runs of T1--T4 (more volume at small \BA). Sparse and central priors could not be assessed by reweighting at small $n$ (reliable in 4--59\% of runs).
+
+\subsection{MLE vs posterior mean}
+\fig{mle_vs_posterior}{1.0}{Mean absolute error of the MLE (orange) and the posterior mean (blue) against $n$; solid = \BA, dotted = mean over all 12 probabilities.}
+\begin{center}\footnotesize\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}lrrrrrr@{}}\toprule
+ & \multicolumn{4}{c}{\BA: MLE / posterior mean} & \multicolumn{2}{c}{all 12: MLE / posterior mean} \\
+truth & 128 & 256 & 512 & 1024 & 128 & 1024 \\\midrule
+\tabin{tables/errors.tex}
+\bottomrule
+\end{tabular}
+
+Mean absolute error over the 3 datasets; the smaller value in bold.
+\end{center}
+The MLE wins clearly for large \BA{} (T1, T2, T4, and T3 from 512 on); the posterior mean wins for the prior draws at small $n$; the two converge as $n$ grows (T5: both $\le$ 0.015 by 256). The truth is 1.4--10.7 nats below the maximum log likelihood (median 4.4; 95\% likelihood region for 10 parameters: 9.2 nats), i.e.\ compatible with the data almost everywhere but only weakly favoured.
+
+\subsection{Mean squared error: actual vs reported error}\label{sec:mse}
+The mean squared error over the 3 datasets of each cell, $\mathrm{MSE} = \overline{(\hat\theta - \theta^\star)^2} = \text{bias}^2 + \text{variance}$, measures the \emph{actual} error of an estimator. Shown as RMSE in prior-sd units on the scale of Figs.~\ref{fig:contraction} and \ref{fig:contraction_mle}, it can be read against the \emph{reported} uncertainty: posterior sd for the posterior mean, standard error for the MLE.
+\fig{rmse_post}{1.0}{RMSE of the posterior mean over the 3 datasets, relative to the prior sd (same layout and scale as Fig.~\ref{fig:contraction}). Values: \texttt{tables/mse.csv}.}
+\fig{rmse_mle}{1.0}{RMSE of the MLE over the 3 datasets, relative to the prior sd.}
+\begin{center}\footnotesize\setlength{\tabcolsep}{2.1pt}
+\begin{tabular}{@{}lllllllrr@{}}\toprule
+ & \multicolumn{4}{c}{\BA} & \multicolumn{2}{c}{all 12: RMSE} & \multicolumn{2}{c}{RMSE / post.\ sd} \\
+ & RMSE, $n$ = 128 & bias$^2$ \% & RMSE, 1024 & bias$^2$ \% & 128 & 1024 & 128 & 1024 \\
+truth & MLE / post. & MLE / post. & MLE / post. & MLE / post. & MLE / post. & MLE / post. & post. & post. \\\midrule
+\tabin{tables/mse.tex}
+\bottomrule
+\end{tabular}
+
+RMSE over the 3 datasets (smaller value in bold); bias$^2$ \%: share of the MSE due to the bias of the mean over datasets. All 12: $\sqrt{\text{mean MSE}}$ over the 12 probabilities. RMSE / post.\ sd: $\sqrt{\text{mean MSE} / \text{mean posterior variance}}$ over the 12 probabilities; 1 = the posterior sd matches the actual error, $>1$ = overconfident. With 3 datasets per cell the MSE and especially its bias/variance split are rough.
+\end{center}
+\begin{itemize}
+\item \textbf{The posterior mean's error for B's row is mostly bias.} For \BA{} of T1, T2, T4 and T3, bias$^2$ is 62--99\% of the MSE (94--99\% at $n$ = 128); RMSE 0.33--0.45 at $n$ = 128 and 0.07--0.19 at 1024. The MLE's RMSE there is 0.06--0.31 at 128 and 0.03--0.06 at 1024.
+\item \textbf{For the prior draws the MLE has the larger error at small $n$}, mostly variance (jumps between near-equal optima, estimates at 0): RMSE over all 12 probabilities 0.12--0.16 vs 0.06--0.11 for the posterior mean at $n$ = 128. At 1024 it is mixed: still larger for P1 and P3 (0.12, 0.10 vs 0.07), slightly smaller for P2 and P4 (0.03, 0.06 vs 0.05, 0.06).
+\item \textbf{The posterior is overconfident for the curated truths}: its RMSE exceeds its sd by a factor 1.5--2.0 at $n$ = 128 and 1.3--1.6 at 1024 --- the bias is not reflected in the posterior width. For T5 and the prior draws the ratio is 0.7--1.4: the reported uncertainty matches the actual error.
+\item \textbf{Both estimators converge for T5} (all 12: RMSE 0.017--0.019 at 1024), as expected for large clones and an interior truth.
+\end{itemize}
+
+% ====================================================================== why
+\section{Why the posterior mean of \BA{} is biased}\label{sec:why}
+A dedicated analysis (\res{docs/xg2_mle_vs_posterior/README.md}; profiles of \BA{} on 13 runs, 5 of them at $n$ = 512; low-branch and sub-model fits on 37 runs) tested three explanations.
+\begin{enumerate}
+\item \textbf{Flat, two-branched likelihood --- supported.} Profiling \BA{} (fixing it, maximising over the other 9 parameters), the profile drops only 1.9 nats from \BA{} = 0.9 to 0.2 for T1 at $n$ = 128 (95\% profile interval [0.01, 0.90]) and $<$\,1 nat over 0.05--0.5 for T2 at $n$ = 128. It has two branches with a jump near 0.35--0.4: ``B switches back'' and a low branch where B is lost --- by division for T1/T3, mostly by death for T2. T3 at $n$ = 1024 still has two branches 0.65 nats apart. At $n$ = 512 (Fig.~\ref{fig:profile_panels}) the profile has sharpened around the truth where B never divides (T1, T2, T4: 95\% profile intervals [0.61, 0.88], [0.21, 0.58], [0.68, 0.86], each containing the truth and peaking within 0.01 of it), but for T3, where B does divide, it is still flat: it stays within 1.6 nats of its maximum from \BA{} = 0.01 to 0.65 (95\% interval [0.01, 0.68]).
+\item \textbf{Peak vs average (prior volume) --- supported, mechanism more general.} Under the flat prior the joint posterior peak is the MLE (draws reach within 0.4--1.4 nats of it). Going from the MLE to the mean under the profile likelihood alone, and then to the actual posterior mean, the second step --- the volume of good-fitting nuisance parameters --- always lowers \BA{} (by 0.06--0.37 in 7/7 runs at $n \le 256$ or 1024; by 0.08--0.15 for T1--T4 at $n$ = 512, not at all for P3) and matches the Beta(1,\,5) marginal of a 1-in-6 outcome. It is not specific to the three division outcomes, and not to boundary truths: T3 (interior) is as biased as T1 (mean error 0.26 for both).
+\item \textbf{Boundary truths cause it --- not supported as stated.} For the prior draws the relevant boundary is \BA{} = 0, and it hurts the MLE (11 runs with MLE \BA{} $<10^{-3}$); there the posterior mean wins because those truths sit where the prior volume points.
+\end{enumerate}
+\fig{profile_panels}{1.0}{Profile log likelihood of \BA{} (blue: \BA{} fixed at $c$, the other 9 probabilities maximised) and log marginal posterior under the flat prior (orange), dataset 0, for T1 at $n$ = 128 and five truths at $n$ = 512. Dotted: 1.92 nats below the maximum (95\% profile interval). Below each: B's division mass and B's death at the profile optimum, i.e.\ how the other parameters compensate along the ridge (``B switches back'' at high $c$, ``B is lost'' at low $c$). Where the orange curve peaks left of the blue one, the posterior is pulled down by the prior volume, not by the data. Script: \texttt{report\_exact\_gw/make\_profile\_panels.py}.}
+\fig{decomposition}{0.72}{Decomposition of the MLE--posterior-mean gap of \BA: MLE $\to$ mean under the profile likelihood (no volume) $\to$ actual posterior mean (from \texttt{docs/xg2\_mle\_vs\_posterior/}).}
+\textbf{Interval coverage.} The 95\% profile-likelihood interval covered the truth in 13/13 profiled runs, the 95\% posterior interval in 5/13: it misses T1 at 128, 512 and 1024 (upper limits 0.68, 0.79, 0.77 against 0.80), T2 at 128, 512 and 1024 (0.39, 0.48, 0.496 against 0.50) and T3 at 512 and 1024 (0.56, 0.57 against 0.60) --- every miss is on the low side. (An earlier version of this note said 5/8 for the first 8 runs; it overlooked T2 at 128 and T3 at 1024, so the correct count there is 3/8.)
+
+\textbf{Model selection fixes it where it applies.} A likelihood-ratio test of ``B never divides'' (B$\to$AA = AB = BB = 0; $\bar\chi^2_3$ at 5\%) kept the sub-model in all 19 T1/T2/T4 runs and rejected it in all 18 T3/P runs ($n$ = 128 and 256; 37/37 correct). Taking \BA{} from the sub-model when kept and from the global MLE otherwise gives errors 0.050 (T1), 0.060 (T2), 0.023 (T4) against 0.37, 0.28, 0.32 for the posterior mean. Where B really divides (T3) only more data or prior information help.
+
+\textbf{Correction to the stored MLE.} Pinning \BA{} found better optima on the low branch in 2 of 37 runs (T1 $n$ = 128 dataset 0: global MLE \BA{} = 0.21 by 0.41 nats, not 0.78; P3 $n$ = 128 dataset 0 by 0.27 nats). The MLE columns above are the multistart values; at small $n$ the MLE's advantage for T1 is partly luck of the basin.
+
+\subsection{The Bayesian fix: a prior with mass on ``B never divides''}\label{sec:spikeslab}
+At a face of the simplex the posterior is asymptotically a truncated normal (non-regular Bernstein--von Mises), so its bias stays a fixed number of posterior sd however large $n$ is --- the $z \approx -1.2$ to $-2.4$ of T1, T2, T4 at every $n$ (\S\ref{sec:fu-largen}). The standard remedy is a prior that puts mass on the face itself (``spike-and-slab''): here, probability $\tfrac12$ on M$_0$ (B's three divisions exactly 0, the rest flat) and $\tfrac12$ on the full model, and the posterior averages the two (Bayesian model averaging). Evidences were computed by bridge sampling (NUTS draws for the full model, tempered SMC for M$_0$; stable to 0.1--0.3 nats; checked against Laplace, importance sampling and NUTS on M$_0$), for the 141 runs available (all of XG2 plus 9 of the new large-$n$ runs; note \res{docs/spike_slab/README.md}).
+\fig{btoa_bma_vs_flat}{0.9}{\BA{} under the flat prior (blue) and the model-averaged posterior with P(M$_0$) = $\tfrac12$ (orange): mean and 90\% interval per dataset; crosses: MLE of the model selected by the likelihood-ratio test; dashed: truth.}
+\begin{center}\footnotesize\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}lrrrrrr@{}}\toprule
+ & \multicolumn{6}{c}{P(B never divides $\mid$ data)} \\
+truth & $n$ = 128 & 256 & 512 & 1024 & 2048 & 4096 \\\midrule
+T1 & 0.77 & 0.84 & 0.92 & 0.83 & 0.94 & 0.999 \\
+T2 & 0.38 & 0.81 & 0.97 & 0.99 & 0.97 & 0.998 \\
+T4 & 0.39 & 0.68 & 0.97 & 0.99 & 0.99 & 0.999 \\
+T3, T5, P1--P4 & \multicolumn{6}{c}{$\le$ 0.004 (87 runs)} \\\bottomrule
+\multicolumn{7}{@{}l}{\scriptsize Mean of the 3 datasets; prior probability $\tfrac12$.}\\
+\end{tabular}
+
+\medskip
+\begin{tabular}{@{}lrrr@{}}\toprule
+\BA{} for T1, T2, T4 (54 runs) & RMSE & 95\% coverage & mean $z$ \\\midrule
+flat posterior & 0.218 & 0.41 & $-1.88$ \\
+model average, P(M$_0$) = 0.5 & 0.099 & 0.89 & $-0.39$ \\
+model average, P(M$_0$) = 0.9 & 0.046 & 0.89 & $-0.21$ \\
+MLE of the LRT-selected model & 0.040 & --- & --- \\\bottomrule
+\end{tabular}
+\end{center}
+\begin{itemize}
+\item \textbf{The constant bias disappears.} Mean $z$ of \BA{} for T1, T2, T4 at $n$ = 128, 256, 512, 1024, 2048, 4096: flat $-2.78$, $-2.22$, $-1.49$, $-1.53$, $-1.60$, $-1.67$; model average $-1.01$, $-0.63$, $-0.06$, $-0.12$, $-0.19$, $-0.33$. Over all 12 probabilities the 95\% coverage rises from 0.65 to 0.97 (the flat intervals never contain B's zero divisions; the model average has an atom there).
+\item \textbf{It costs nothing where B divides}: for T3, T5 and P1--P4 the model-averaged mean is within 0.0014 of the flat mean and the \BA{} error and coverage are unchanged.
+\item \textbf{At $n$ = 128--256 the prior weight matters} (\BA{} RMSE 0.33 / 0.22 / 0.09 for P(M$_0$) = 0.1 / 0.5 / 0.9); from $n$ = 512 the three agree within 0.035. Model averaging and the likelihood-ratio test agree in 134 of 141 runs.
+\item \textbf{T3 is not helped}: its truth is interior; its bias comes from the ridge and the prior volume (\S\ref{sec:why}), which only more data or better designs (\S\ref{sec:design}) reduce.
+\item Spreading the prior mass over all 8 ``some B divisions are 0'' faces dilutes the gain and wrongly zeroes small division rates of the prior draws; mass on the single biologically motivated face works best.
+\item \textbf{The same machinery tests dedifferentiation}: with a face ``no dedifferentiation'' (\BA{} = B$\to$AA = B$\to$AB = 0) the posterior probability of dedifferentiation exceeds 0.9997 in every run (log Bayes factor $\le -8$) --- a Bayesian counterpart of the test of \S\ref{sec:dediff}, with the same caveat about typing errors.
+\end{itemize}
+
+\subsection{A second weak direction: which parent made the division (P3)}\label{sec:p3}
+\fig{p3_ridge}{0.9}{P3, $n$ = 1024: posterior draws of the mixed divisions of A and B (left) and of the symmetric BB divisions (right) for the three datasets; diamonds = MLE of each dataset; star = truth.}
+For P3 the three datasets at $n$ = 1024 give quite different individual division probabilities (e.g.\ A$\to$AB 0.16 vs 0.34, B$\to$BB 0.10 vs 0.25), yet each run is converged ($\hat R$ 1.02, chains agree) and the identifiable combinations agree closely: growth per generation 1.603 $\pm$ 0.004 vs 1.606 $\pm$ 0.004 (truth 1.609), stable A fraction 0.493 vs 0.495 (0.493), \BA{} 0.23 vs 0.21 (0.27). The posterior correlations of A$\to$AB with B$\to$AB ($-0.98$), A$\to$AA with B$\to$AA ($-0.96$) and A$\to$BB with B$\to$BB ($-0.96$) define a ridge with posterior sd 0.19: a mixed division produces one A and one B whichever cell divided, and with a population that is half A, half B the counts barely distinguish the parent. Each dataset lands at a different point of the same line through the truth (Fig.~\ref{fig:p3_ridge}); differences are $\le 1.5$ combined posterior sd, i.e.\ dataset noise along a weak direction. The MLEs spread along the line even more (A$\to$AB 0.05, 0.38, 0.30 against truth 0.21; B$\to$BB 0.02, 0.29, 0.00 against 0.08, one of them on the boundary): on a flat ridge the maximum is pushed to wherever the noise puts it, while the posterior mean averages along the ridge.
+
+
+\subsection{All weak directions: what the counts cannot tell apart}\label{sec:weakdirs}
+The two weak directions above were found by hand. To find all of them, for every truth, we computed how much information one clone carries about every possible combination of the 12 probabilities, and ranked the combinations (code \code{src/bio_sbi/inference/gw_fisher.py}, \code{scripts/weak_directions/}; note \res{docs/weak_directions/README.md}).
+
+\begin{keybox}
+\textbf{How the directions are computed (six steps).}
+\begin{enumerate}
+\item \textbf{Directions.} The parameters are two rows of six outcome probabilities, $\theta = (p_A, p_B)$. Each row sums to 1, so any small change $\delta$ has zero row sums: the changes form a 10-dimensional space. A \emph{direction} is a unit vector $v$ in it; moving $\theta \to \theta + t\,v$ changes several probabilities together (e.g.\ \BA{} up and B persists down by the same amount).
+\item \textbf{Fisher information of one clone.} A clone observed at generation $h$ shows counts $c = (a, b)$ with probability $p_\theta(c)$, and is seen only if detected (probability $q_\theta$), so the law of an observed clone is $\tilde p_\theta(c) = p_\theta(c)/q_\theta$, $c \ne (0,0)$. Its score is $s(c) = \nabla \log \tilde p_\theta(c) = \nabla p_\theta(c)/p_\theta(c) - \nabla q_\theta/q_\theta$ and its information is $I_h(\theta) = \sum_{c \ne 0} \tilde p_\theta(c)\, s(c)\, s(c)^{\!\top}$, an exact sum over the same count grid as the likelihood. One clone at each endpoint gives $I = I_4 + I_6 + I_8 + I_{10}$; $n$ clones per endpoint give $n I$. For a direction $v$, $v^\top I v$ is the expected curvature of the log likelihood along $v$: how sharply one clone distinguishes $\theta$ from $\theta + t v$.
+\item \textbf{Scaling by the prior.} Information is only meaningful relative to what is already known. The flat (uniform Dirichlet) prior has, within each row, variance $5/252$ per probability and covariance $-1/252$ between two probabilities, i.e.\ covariance $\Sigma_0 = \tfrac{1}{42}$ times the identity on the 10-dimensional space: the prior is equally uncertain in every direction (sd $0.154$). For a nearly Gaussian posterior (Bernstein--von Mises) the posterior covariance is $(\Sigma_0^{-1} + n I)^{-1}$. Why an eigenproblem: (a) precisions add, $\Sigma_{\rm post}^{-1} = \Sigma_0^{-1} + nI$; (b) along a direction $v$ the data's information per clone relative to the prior's is the ratio $\lambda(v) = v^\top I v \,/\, v^\top \Sigma_0^{-1} v$, and the weakest direction minimises it, the next minimises it among directions independent of the first, and so on --- the stationary points of this ratio of two quadratic forms solve the generalised eigenproblem $I v = \lambda\, \Sigma_0^{-1} v$; (c) its eigenvectors $v_1, \dots, v_{10}$ diagonalise both forms at once, so in the coordinates $z_k = v_k^\top(\theta - \theta_{\rm truth})$ the prior has precision 1 and the data $n\lambda_k$, with no cross terms, and the posterior is independent along the $v_k$ with precision $1 + n\lambda_k$. Scaling by $\Sigma_0$ also makes $\lambda$ independent of how the parameters are written, unlike the plain eigenvalues of $I$. Whitening the prior ($\theta - \theta_{\rm truth} = \Sigma_0^{1/2} z$) turns this into the ordinary eigenproblem of $\Sigma_0^{1/2} I\, \Sigma_0^{1/2}$, which for the flat prior is $I/42$: here $\lambda_1 \le \dots \le \lambda_{10}$ are the eigenvalues of $I/42$ (another prior, e.g.\ Dirichlet(\textonehalf), would change the directions themselves).
+\item \textbf{What $\lambda$ and $1/\lambda$ mean.} Along $v_k$ the posterior variance is $1/(1 + n\lambda_k)$ times the prior variance. $\lambda_k$ is the information of one clone per endpoint in units of the prior's information; $1/\lambda_k$ is the number of clones per endpoint at which data and prior weigh equally (variance halved, sd $\times 0.71$); $3/\lambda_k$ clones halve the sd. A direction is \emph{weak} at the planned $n$ if $n\lambda_k \lesssim 1$: there the posterior is still mostly the prior, so its location is set by the prior, not by the data.
+\item \textbf{Naming the directions.} Eigenvectors are mixtures of outcomes, so each is expressed in a named orthonormal basis: five ``parent swaps'' and five changes of the average cell (below). For a named direction $w$ that is not an eigenvector, $n_{1/2}$ is the number of clones per endpoint at which its posterior variance $w^\top(\Sigma_0^{-1} + nI)^{-1} w$, with all other directions free, is half its prior variance $w^\top \Sigma_0 w$.
+\item \textbf{From directions back to transitions.} A transition (one of the 12 probabilities) is a coordinate, not a direction; a direction changes all 12 together (e.g.\ the ``which type dies'' swap raises B dies and lowers A dies in the ratio $u_A : u_B$). Each direction has a loading $v_{kj}$ on transition $j$: with $Q$ a $12\times10$ matrix whose columns are orthonormal zero-sum contrasts within each row, $I$ is computed in that basis ($Q^\top I Q$), its eigenvectors $w_k$ are mapped back as $v_k = Q w_k$, and $v_{kj}$ is the $j$-th entry (the change of transition $j$ per unit step along $v_k$; $\sum_j v_{kj}^2 = 1$). (Fig.~\ref{fig:named_composition}: the same vectors in the named basis.) Since the posterior is approximately independent along the $v_k$, the uncertainty of transition $j$ adds up over directions:
+\[ \mathrm{Var}(p_j \mid \text{data}) \approx \frac{1}{42} \sum_k \frac{v_{kj}^2}{1 + n\lambda_k}. \] (Check: with no data, $n$ = 0, this is $\tfrac{1}{42}(1 - \tfrac16) = 5/252$, the flat prior's variance of one probability.)
+Equivalently, in terms of contraction (1 $-$ posterior/prior variance, as in Fig.~\ref{fig:contraction}): along $v_k$ it is $c_k = n\lambda_k/(1 + n\lambda_k)$ (0 without information, \textonehalf{} at $n = 1/\lambda_k$, near 1 for stiff directions), and for transition $j$ it is the weighted average $c_j = \sum_k \omega_{kj}\, c_k$ with weights $\omega_{kj} = v_{kj}^2/\sum_k v_{kj}^2 = \tfrac65 v_{kj}^2$. So $v_{kj}$ is not itself a contraction: $v_{kj}^2$ says how much direction $k$ counts for transition $j$. A transition is well determined only if it loads mostly on stiff directions; the part of it that lies along a weak direction keeps almost its prior uncertainty. Checked at $n$ = 1024 (12 transitions $\times$ 9 truths) against the contraction of the actual flat-prior posteriors, the prediction is off by a median 0.027 (correlation 0.75); it overestimates the contraction exactly where the posterior is not Gaussian --- \BA{} for T1 (0.91 predicted, 0.53 observed: the second branch, \S\ref{sec:fu-sampler}) and T3 (0.84 vs 0.57: two branches), B's near-zero divisions of P4 (boundary), the mixed divisions of P3 (curved ridge). Thus \BA{} is the hardest parameter because, for T1--T4, the two weakest directions carry 82--95\% of its posterior variance; A dies and B dies are each poorly determined (both load on the death swap), while their combination $u_A\,\mathrm{A\,dies} + u_B\,\mathrm{B\,dies}$ --- the average cell's death rate --- lies along a stiff direction and is fixed by less than one clone per endpoint (Fig.~\ref{fig:death_ridge}: a long but narrow ridge). Conversely, quantities that are themselves stiff directions (the average cell's death and division rates, the growth rate, the stable composition) are well estimated even when every transition they are made of is not --- which is why the report recommends reporting them rather than individual division types.
+\end{enumerate}
+The calculation is local (at the truth) and Gaussian. It does not see a second branch or the edges of the simplex. Against the actual posteriors it predicts the variance along the weakest directions within a median factor 0.92 (\S\ref{sec:weakdirs}, below).
+\end{keybox}
+\fig{spectra}{0.85}{Information per clone per endpoint along each of the 10 directions, relative to the flat prior, for every truth (red: the 4 weakest; diamonds: T1, T2, T4 restricted to ``B never divides''). Below the dashed line for $n$, the data at $n$ clones per endpoint carry less information than the prior along that direction.}
+\textbf{Three tiers in every truth.} Two directions are informed by less than one clone per endpoint: the average cell's growth (death vs division) and the composition of its offspring. Two to four are informed by 1--35 clones (division symmetry, persistence). Four to five are weak: $1/\lambda$ = 32--139 (T1), 67--332 (T2), 55--301 (T3), 53--152 (T4), 12--96 (T5), and 263--2996 for the prior draws (P1--P4).
+
+\textbf{The weak directions are ``parent swaps''.} 35 of the 36 weakest directions (4 per truth) lie almost entirely in one 5-dimensional block: an outcome is moved from A parents to B parents (or back) while the outcome of the average cell, weighted by the stable A/B composition, stays the same. The counts record what the population does, not which type of cell did it. The five swaps, from weakest to least weak:
+\begin{center}\footnotesize\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}llrrr@{}}\toprule
+ & & \multicolumn{3}{c}{clones per endpoint to halve the variance} \\
+swap & what the counts cannot tell & T1--T4 & P1--P4 & T5 \\\midrule
+mixed divisions & whether A or B makes the AB divisions (\S\ref{sec:p3}) & 67--155 & 109--2287 & 66 \\
+death & whether A or B cells die & 34--79 & 270--2141 & 24 \\
+switch vs persist & switching up, persisting down, both types (\BA{} ridge) & 62--107 & 63--1023 & 22 \\
+symmetric divisions & whether A or B makes the AA vs BB divisions & 33--85 & 117--542 & 3 \\
+divide & whether A or B cells divide & 30--66 & 22--120 & 8 \\\bottomrule
+\end{tabular}
+
+Variance of the named direction alone (others free); every average-cell direction is halved by $\le$ 36 clones per endpoint.
+\end{center}
+\fig{death_ridge}{0.9}{The ``which type dies'' parent swap for P4 and P2 ($n$ = 1024): posterior draws of the death probabilities of A and B cells for the three datasets, the MLE of each dataset (diamonds) and the truth (star). Dashed: the line through the truth along which the death rate of the average cell, $u_A\,\mathrm{A\,dies} + u_B\,\mathrm{B\,dies}$, stays constant ($u$ = stable composition: A fraction 0.68 for P4, 0.55 for P2).}
+\textbf{Example: which type dies.} For the prior draws P2 and P4, the death probabilities of A and B cells have posterior correlation $-0.95$ to $-0.99$ at $n$ = 1024, and the draws lie exactly on the line predicted by the swap theory below (Fig.~\ref{fig:death_ridge}): the counts fix how many cells die on average, not which type. The MLEs sit near the truth at the lower end of the ridge (P4: A dies 0.21--0.25, B dies 0.00--0.12; truth 0.22, 0.06), but the posterior means slide along it towards ``B dies'' (P4: 0.13--0.18 and 0.16--0.22; P2: B dies 0.05--0.13 against 0.03) --- the same prior-volume effect as for \BA{} (\S\ref{sec:why}), here near the boundary B dies = 0. A sampler can also get stuck at a far point of this ridge (P2 at $n$ = 4096, \S\ref{sec:fu-largen}).
+
+\fig{swap_ridges}{1.0}{All five parent swaps, each for the truth where it is weakest ($n$ = 1024): the probability of the same outcome for A parents ($x$) against B parents ($y$), posterior draws of the three datasets, MLE of each dataset (diamonds), truth (star), and the line through the truth along which the average cell's rate of that outcome, $u_A x + u_B y$, stays constant (dashed). ``Switch vs persist'' moves single-daughter outcomes between parents and is shown both ways (one A daughter: A persists vs \BA; one B daughter: A$\to$B vs B persists). Posterior correlations $-0.89$ to $-0.99$.}
+\textbf{All five ridges look alike} (Fig.~\ref{fig:swap_ridges}): the draws of every dataset lie along the constant-average line, different datasets occupy different stretches of it, and the MLEs scatter along it --- e.g.\ which parent makes AB divisions (P3: A$\to$AB 0.05--0.38 across datasets, truth 0.21), or AA divisions (P1: two of the three MLEs at A$\to$AA = 0 against 0.12). The data fix the average cell's behaviour and leave the parent to the prior and to noise.
+
+\fig{named_composition}{0.95}{Composition of the 4 weakest directions of each truth (columns, labelled by $1/\lambda$ in clones per endpoint) in a named basis: five parent swaps (top) and five changes of the average cell (bottom). Nearly all the weight is in the swaps; which swap dominates varies, so the stable object is the weak subspace, not the single eigenvector.}
+\textbf{Why parent swaps: two classical results.} Write each row's outcomes by what they produce (dies, one A daughter, one B daughter, AA, AB, BB), so that both parent types share the same offspring map. The mean offspring matrix $M$ ($M_{ij}$ = expected type-$j$ offspring of one type-$i$ cell per generation) has a growth rate $\rho$ (its Perron root), a second eigenvalue $\lambda_2$ and a stable composition $u$ ($u^\top M = \rho\, u^\top$, $u_A + u_B = 1$).
+\begin{enumerate}
+\item \textbf{A parent swap leaves the growth rate and the stable composition exactly unchanged.} A swap takes an outcome change $d$ (summing to 0) away from A parents with weight $u_B$ and gives it to B parents with weight $u_A$: $\Delta M_A = -u_B\, d^\top O$, $\Delta M_B = +u_A\, d^\top O$, with $O$ the shared offspring map. Then $u^\top \Delta M = -u_A u_B\, d^\top O + u_B u_A\, d^\top O = 0$, so $u^\top M$ and hence $\rho$ and $u$ do not change, for a swap of any size (checked numerically for every truth). Clones that have grown for several generations sit at composition $u$ and grow at rate $\rho$ (Kesten--Stigum theorem), so their counts barely depend on the swaps; the swaps change only $\lambda_2$ and the transient.
+\item \textbf{The information on the swaps per clone falls like $\rho^{-h}$.} For a supercritical multitype process the fluctuations of a clone around $W\rho^h u$ are of order $\rho^{h/2}$ when $\lambda_2^2 < \rho$ (central limit regime of Kesten and Stigum), which holds for every truth here ($|\lambda_2| \le 1.0 < \sqrt\rho$). Heuristically, a clone's composition then carries information on what happened before it reached $u$ only through relative fluctuations of order $\rho^{-h/2}$, i.e.\ information $\propto \rho^{-h}$. The computed information agrees closely; the naive expectation that the transient decays like $(\lambda_2/\rho)^h$ does not:
+\end{enumerate}
+\begin{center}\footnotesize\setlength{\tabcolsep}{3.5pt}
+\begin{tabular}{@{}lrrrrlrrr@{}}\toprule
+ & & & & \multicolumn{2}{c}{decay per generation (gen.\ 4--10)} & \multicolumn{3}{c}{decay from gen.\ 4 to 10, weakest direction} \\
+truth & $\rho$ & $\lambda_2$ & $u_A$ & observed & (range, 4 weakest) & observed & $\rho^6$ & $(\rho/|\lambda_2|)^{12}$ \\\midrule
+\tabin{tables/swap_theory.tex}
+\bottomrule
+\end{tabular}
+
+Observed: log-linear fit of the information per clone (A founder) over generations 4--10 along each of the 4 weakest directions; median and range. Script: \code{report_exact_gw/make_swap_theory.py}.
+\end{center}
+The observed decay per generation is within 11\% of $\rho$ for all nine truths. \textbf{Design rule}: on the weak directions, observing one generation later costs a factor $\rho$ (1.4--1.7) in clones, and observing at generation 10 instead of 4 costs $\rho^6 \approx$ 8--24.
+
+\begin{itemize}
+\item \textbf{The same weak subspace recurs}: the 4 weakest directions span nearly the same subspace within T1--T4 (overlap 0.78--0.97) and within P1--P4 (0.82--0.92; a random subspace gives 0.40); across the two groups 0.58--0.77. Single eigenvectors do not recur, because their eigenvalues are close and they mix 2--3 swaps.
+\item \textbf{The \BA{} ridge is one of them.} For T1--T4 the two weakest directions carry 82--95\% of \BA{}'s posterior variance, and what moves with \BA{} along them reproduces the profiles (\S\ref{sec:why}): B$\to$AA and B$\to$AB for T1 and T4, B dies for T2, B$\to$AB for T3. For P1--P4 \BA{} sits mostly in the 3rd weakest direction; their weakest are ``which parent makes AB'' and ``which type dies'', which hardly involve \BA. This is why \BA{} converges for the prior draws while other entries of B's row do not (\S\ref{sec:fu-largen}).
+\item \textbf{The posteriors agree.} Over 105 runs ($n$ = 256--4096), the 4 widest posterior directions overlap the 4 weakest information directions by 0.67--1.00 (median 0.89 at $n \ge 512$), and the posterior variance along them is 0.92$\times$ the prediction (median; quartiles 0.60--1.39). The departures are the known ones: truncation at B's zero divisions (T1, T2, T4: variance about 0.4$\times$, mean biased by about 0.8 sd, both shrinking only with the sd --- the boundary bias of \S\ref{sec:fu-largen}), T1's ``B divides'' branch, T3's two branches and P3's curved ridge.
+\item \textbf{Faces, not curvature.} Where a weak direction can be followed inside the simplex the likelihood is close to Gaussian, but the line leaves the simplex after 0.3--1.6 posterior sd (immediately for T1, T2, T4). The weak-direction posteriors are shaped by the boundaries of the probability simplex.
+\item \textbf{Knowing ``B never divides'' helps but does not remove them}: restricted to that face, the weakest direction is 1.8--2.5$\times$ better informed, still needing 60 (T1), 132 (T2) and 86 (T4) clones per endpoint.
+\end{itemize}
+\fig{generations_designs}{1.0}{Left: share of the information along the weakest direction from each endpoint. Middle: information per clone along the weakest direction against the generation of the endpoint (solid: A founder; dotted: B founder). Right: information along the weakest direction under other designs, relative to the base design at the same total number of clones. T1, T2, T4 with B founders are evaluated 0.01 inside the boundary (at the exact boundary a B clone larger than $2^{h-1}$ is impossible, so the information is infinite).}
+\textbf{Where the information comes from, and how to get more.} Generation 4 gives 57--91\% of the information along the weakest directions and generation 10 only 1--15\%. Per clone the information falls 15--3800-fold from generation 1 to 10: early on a clone is all A, so the parent of every event is known; later, A and B cells are mixed and the counts no longer say which type did what. At the same total number of clones:
+\begin{itemize}
+\item adding endpoints at generations 1, 2, 3 increases the information along the weakest direction 2--17$\times$; clones founded by single A and by single B cells, observed at generations 1--4, 4--20$\times$;
+\item B-founded clones at the usual endpoints help 2--5$\times$ for T1--T4 and not at all for the prior draws;
+\item late endpoints only (8, 10) lose 4--33$\times$.
+\end{itemize}
+Early endpoints cost information on the stiff directions (growth and composition), but those are informed by less than one clone per endpoint anyway. With A- and B-founded clones at generations 1--4, every direction is informed by about 20--40 clones per endpoint for the curated truths (300--400 for P1 and P4).
+
+% ====================================================================== follow-ups
+\section{Follow-ups: results}\label{sec:fu}
+{\sloppy All follow-up runs use the adjoint kernel and the XG2 datasets (nested, and checked against each run's stored \texttt{reference.npz}). The tables of this section are built by \code{report_exact_gw/make_followups.py}.\par}
+
+\subsection{Where each parameter converges: $n$ up to 4096, all truths}\label{sec:fu-largen}
+All nine truths were extended to $n$ = 2048 and 4096 clones per endpoint (T1--T4 first, the prior draws and T5 later; datasets nested, 162 runs in all). Three of the new runs mixed badly with the default 4 $\times$ 500 draws and were rerun with another sampler seed and the ESS/$\hat R$ stopping rule (\S\ref{sec:fu-sampler}): P2 at $n$ = 4096 (max $\hat R$ 10.6 $\to$ 1.011), P4 at 4096 (1.30 $\to$ 1.029) and P3 at 2048 (1.17 $\to$ 1.012); the originals are kept in \res{results/exact_gw/data_size_reruns/large_n/}. In the P2 run one of the four chains had settled in a different solution --- A cells almost never die (0.01 instead of 0.29) and B cells die instead (0.38 instead of 0.03) --- about 10 nats below the others: the ``which type dies'' parent swap of \S\ref{sec:weakdirs}, a local optimum NUTS cannot leave. Nine further large-$n$ runs have max $\hat R$ 1.05--1.09 (P truths and T5); their means are used as they are.
+\fig{row_B_large_n}{1.0}{B's six probabilities against $n$ = 128--4096 for every truth (columns): posterior mean $\pm$ posterior sd (mean over the 3 datasets; blue), MLE (mean over the datasets; orange), truth (dashed).}
+\begin{center}\scriptsize\setlength{\tabcolsep}{2.2pt}
+\begin{tabular}{@{}lccccccccc@{}}\toprule
+ & T1 & T2 & T3 & T4 & T5 & P1 & P2 & P3 & P4 \\\midrule
+\tabin{tables/row_convergence.tex}
+\bottomrule
+\end{tabular}
+
+Clones per endpoint from which the RMSE over the 3 datasets stays $\le$ 0.05 at every larger $n$: posterior mean / MLE; -- = not by 4096. Script: \code{report_exact_gw/make_row_large_n.py}.
+\end{center}
+\begin{itemize}
+\item \textbf{``B's row converges'' is not one number.} With the 0.05 criterion, \BA{} converges by $n$ = 512--2048 for the prior draws but needs 2048--4096 for T1, T3, T4 and does not converge for T2 by 4096. B's division types for T1--T4 reach their true value 0 slowly (B$\to$AA at 512--4096), always from above.
+\item \textbf{For the prior draws the slow parameters are not \BA}: B persists (P1, P3), B dies (P4) and B$\to$AB (P1, P4) are still off by more than 0.05 at $n$ = 4096 (e.g.\ P3 B persists 0.08 against 0.035; P4 B dies 0.16 against 0.06). These are the parent-swap directions that \S\ref{sec:weakdirs} predicts need 1\,500--3\,000 clones per endpoint for P1, P3, P4.
+\item \textbf{The MLE is faster where B never divides and slower for the prior draws}: for \BA{} it converges by 512--2048 for T1--T4, but needs 2048--4096 for P1, P3, P4 (estimates jump between faces of the simplex at small $n$).
+\item \textbf{A's row} converges by 128--2048 for the curated truths (A's death is the slowest) and from 128 for T5; for the prior draws some entries need 4096 or more (A$\to$AB for P1, P3, P4; A$\to$B for P1; A$\to$BB for P3) --- the A side of the same parent swaps.
+\item \textbf{T5 (large clones)} has every parameter within 0.05 from $n$ = 128.
+\end{itemize}
+\fig{row_A_large_n}{1.0}{The same for A's six probabilities.}
+\textbf{\BA{} for T1--T4 in detail} (the truths whose \BA{} is biased at 1024):
+\begin{center}\footnotesize\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}lrrlrrrrr@{}}\toprule
+truth & $n$ & \BA & post.\ mean (sd) & mean $z$ & 90\% cov. & RMSE post. & RMSE MLE & max $\hat R$ \\\midrule
+\tabin{tables/large_n.tex}
+\bottomrule
+\end{tabular}
+
+Means over the 3 datasets; RMSE of the posterior mean and of the MLE over the datasets.
+\end{center}
+\begin{itemize}
+\item \textbf{By absolute error} the posterior mean of \BA{} is within 0.05 of the truth at $n$ = 2048 for T4 (0.037), at 4096 for T1 (0.032) and T3 (0.040); T2 is still 0.069 off at 4096. The MLE gets there one doubling earlier (RMSE at 2048: T1 0.042, T2 0.047, T3 0.029, T4 0.017; T4 already 0.032 at 1024).
+\item \textbf{In posterior-sd units the bias does not vanish} for the truths with B divisions exactly 0 (T1, T2, T4): it shrinks at the rate of the posterior sd, so mean $z$ stays at $-1.2$ to $-2.4$ and T2's 90\% intervals miss in every dataset at every $n$. The posterior keeps 0.04--0.05 of mass on B divisions and compensates with a lower \BA{} --- a boundary effect, not a lack of data. Only T3 (interior) becomes calibrated (mean $z$ $-0.97$, 3/3 covered at 4096).
+\item Cost is small with the adjoint kernel: 0.1--0.4\,h per run at $n$ = 2048--4096. In 2 runs (T2 at 2048 and 4096, dataset 2) the multistart missed the best MLE.
+\end{itemize}
+
+\subsection{A flat prior on \BA}\label{sec:fu-flat}
+All 108 XG2 cells were repeated with \code{prior=flat_btoa}: A's row uniform Dirichlet, B's row Dirichlet with concentration 1 on \BA{} and 0.2 on B's other five outcomes, so that \BA{} $\sim$ Uniform(0,1) (prior mean 0.5 instead of 1/6) and B's other outcomes favour sparse rows (prior mean 0.1 each). Runs used the ESS/$\hat R$ stopping rule (ESS $\ge$ 400, tail ESS $\ge$ 200, $\hat R \le 1.01$, chain means within 0.5 sd; at most 1000 draws per chain). Runs: \res{results/exact_gw/data_size_flat_btoa/}.
+\fig{flat_btoa}{1.0}{\BA{} against $n$ under the uniform Dirichlet (XG2, blue) and the flat-\BA{} prior (orange): mean over datasets of the posterior mean $\pm$ mean posterior sd; dashed = truth.}
+\begin{center}\footnotesize\setlength{\tabcolsep}{2.6pt}
+\begin{tabular}{@{}lllllll@{}}\toprule
+ & \multicolumn{3}{c}{$n$ = 128} & \multicolumn{3}{c}{$n$ = 1024} \\
+truth & RMSE \BA & RMSE all 12 & 90\% coverage & RMSE \BA & RMSE all 12 & 90\% coverage \\\midrule
+\tabin{tables/flat_btoa.tex}
+\bottomrule
+\end{tabular}
+
+Each cell: uniform Dirichlet / flat-\BA{} prior (smaller RMSE in bold). RMSE of the posterior mean over the 3 datasets; coverage over parameters with truth $>0$ and datasets.
+\end{center}
+\begin{itemize}
+\item \textbf{For large \BA{} the flat prior removes most of the bias}: RMSE of \BA{} for T1, T2, T4, T3 drops from 0.33--0.45 to 0.09--0.19 at $n$ = 128 and from 0.07--0.19 to 0.03--0.06 at 1024; over all 12 probabilities the RMSE falls by 25--70\% at $n$ = 128 and roughly halves at 1024, and coverage of the 90\% intervals rises to 81--100\%.
+\item \textbf{For small \BA{} it is the other way round} (T5, P1--P4: \BA{} 0.10--0.27): at $n$ = 128 the error of \BA{} roughly doubles (P1 0.08 $\to$ 0.15, P2 0.10 $\to$ 0.17, P4 0.05 $\to$ 0.12, T5 0.03 $\to$ 0.07; P3 unchanged at 0.05); by 1024 the two priors are within 0.01--0.03. The prior moves the bias; it does not remove it --- at small $n$ the answer for \BA{} is decided by where the prior puts its mass.
+\item \textbf{Sampling caveat.} The stopping rule's targets were met in only 7 of 108 runs (median rank $\hat R$ 1.05, median min bulk / tail ESS 84 / 58, chain-mean spread $>$ 0.5 sd in about half the runs). The parameters that fail are B's small entries (death, persist, divisions): concentration 0.2 makes their prior density unbounded at 0, which the logit-stick sampler handles poorly. \BA{} itself mixes well (median rank $\hat R$ 1.014; 1.004--1.008 for T1, T2, T4; above 1.05 in 23/108 runs, mostly prior draws), so the \BA{} comparison stands, but the small B entries under this prior should not be quoted from these runs.
+\end{itemize}
+
+\subsection{Reruns of the bimodal cells}\label{sec:fu-bimodal}
+The 9 XG2 runs with $\hat R > 1.05$ were rerun with 8 chains, 1000 warmup iterations and 32 initial optimisations (results: \res{data_size_reruns/bimodal/}).
+\begin{center}\footnotesize\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}lrrrlrlll@{}}\toprule
+truth & $n$ & dataset & $\hat R$ (XG2) & \BA{} (XG2) & $\hat R$ (rerun) & \BA{} (rerun) & chain means & truth \\\midrule
+\tabin{tables/bimodal.tex}
+\bottomrule
+\end{tabular}
+\end{center}
+Six of nine now mix ($\hat R \le 1.03$) with essentially unchanged posteriors: they were slow, not bimodal. Three stay bimodal --- T1 at 256 ($\hat R$ 1.91; chain means of \BA{} 0.12--0.70), T1 at 1024 (1.11) and P2 at 1024 (1.22): more chains do not fix two branches.
+
+\subsection{Sampler noise vs dataset noise}\label{sec:fu-noise}
+For T1, T3 and P3 at $n$ = 1024, dataset 0 was rerun with sampler seeds 1 and 2 (\res{data_size_reruns/sampler_noise/}); the spread of posterior means across the three sampler seeds is compared with the spread across the three datasets.
+\begin{center}\footnotesize
+\begin{tabular}{@{}llrrrr@{}}\toprule
+truth & parameter & sd over sampler seeds & sd over datasets & mean posterior sd & sampler sd / posterior sd \\\midrule
+\tabin{tables/sampler_noise.tex}
+\bottomrule
+\end{tabular}
+\end{center}
+For unimodal posteriors (T3, P3) sampler noise is 1--16\% of the posterior sd and far below the dataset spread. For T1 it is a third of the posterior sd for \BA{} and B$\to$BB (0.059 vs dataset spread 0.108): with two branches, how much each run finds of the second branch is itself random (\S\ref{sec:fu-sampler}).
+
+\subsection{Sampler options: warm start, stopping rule, reparametrisation, SMC}\label{sec:fu-sampler}
+Four opt-in options were added to \code{inference=exact_gw} (defaults unchanged, draws bit-identical when off) and benchmarked on XG2 datasets:
+\begin{itemize}
+\item \textbf{Warm start} from the posterior at $n/2$ (chains started at k-means representatives of the previous draws, within-chain covariance scaled by $n_{\rm prev}/n$, 150 warmup iterations): 0.57$\times$ (T1) and 0.75$\times$ (T5) of the gradient evaluations of a cold start over $n$ = 256--1024, posteriors within 2.3 MC standard errors. Without the stopping rule it once produced a poorly mixed run; use the two together.
+\item \textbf{ESS/$\hat R$ stopping rule}: draws in blocks until bulk ESS $\ge$ 400, tail ESS $\ge$ 200, rank $\hat R \le 1.01$ and chain means agree, or a cap. On T1 at $n$ = 1024 it refused to stop where four cold chains looked converged ($\hat R$ 1.02) but had missed a second branch.
+\item \textbf{Reparametrisation} (\code{reparam}: \code{probit} sticks; \code{brow}: B's row broken as \BA{} first, then persist, then ``B is lost'' split into death and divisions; both exact, prior unchanged) and a \textbf{tempered SMC start}.
+\end{itemize}
+\begin{center}\scriptsize\setlength{\tabcolsep}{2.5pt}
+\begin{tabular}{@{}llrrrrrr@{}}\toprule
+cell & option & grad.\ ev. & ESS bulk/tail & ESS/1k ev. & max $\hat R$ & div. & low branch \\\midrule
+\tabin{tables/reparam.tex}
+\bottomrule
+\end{tabular}
+
+Stopping rule on (at most 1000 draws per chain). Low branch: share of draws with \BA{} $<$ 0.45 (meaningful for T1 only). Results: \res{results/exact_gw/reparam_bench/}.
+\end{center}
+\begin{itemize}
+\item \textbf{Within a branch} \code{brow+probit} is a modest, cell-dependent gain: 1.6$\times$ ESS per evaluation on P3, 1.06$\times$ on T3, 0.8$\times$ on T5. Its 3.4$\times$ on T1 (seed 0) came from staying in one branch (2\% of draws); with sampler seed 1 it reached the second branch (21\%) and mixed as badly as everything else (ESS 16).
+\item \textbf{T1 at $n$ = 1024 has a second branch} (``B divides'': \BA{} $\approx$ 0.27, B$\to$AA/AB/BB $\approx$ 0.16/0.16/0.24) whose mass, by per-branch SMC evidence, is 17\% (8--25\% across replicates; importance sampling: 16\%). Single NUTS runs put 2--28\% of their draws there, depending on the start; only the strong SMC start with \code{brow+probit} matched (16\%). The branch-weighted posterior gives \BA{} = 0.57--0.60 $\pm$ 0.15--0.16, not 0.65 $\pm$ 0.09.
+\end{itemize}
+
+\subsection{Other ``uninformative'' priors: Dirichlet(\textonehalf) and the exact Jeffreys prior}\label{sec:fu-jeffreys}
+A prior that is uniform on $[0,1]$ for every probability does not exist (each row must sum to 1; independent uniforms would have marginal means summing to 3). The uniform Dirichlet is flat over the row jointly, but each marginal is Beta(1,5) with mean 1/6. We tried two other standard ``uninformative'' choices on all 108 XG2 cells (results \res{results/exact_gw/data_size_jeffreys/}, note \res{docs/jeffreys/README.md}):
+\begin{itemize}
+\item \textbf{Dirichlet(\textonehalf)} on each row: concentration \textonehalf{} for every outcome, the Jeffreys prior of a single multinomial step. It favours sparse rows. NUTS on all 108 cells with the settings of the flat-\BA{} repeat (adjoint kernel, stopping rule, at most 1000 draws per chain), warm-started from the flat XG2 posterior of the same dataset; 3\,939 cell-minutes.
+\item \textbf{The exact Jeffreys prior} of this model, $p_J(\theta) \propto \sqrt{\det I(\theta)}$, where $I$ is the expected Fisher information of one detected clone, summed over generations 4, 6, 8, 10 (it does not depend on $n$; code \code{src/bio_sbi/inference/gw_fisher.py}, checked against the multinomial case, finite differences and Monte Carlo). It is invariant to how the probabilities are parametrised. It is proper as far as can be checked numerically: bounded on all 24 faces of the parameter space, and at every vertex probed it grows no faster than distance$^{-4}$ (integrable needs slower than distance$^{-5}$). Like the likelihood, it is set to 0 where a clone is detected with probability below $10^{-6}$ (under 1\% of its mass). The posterior is obtained by reweighting the Dirichlet(\textonehalf) draws by $p_J / p_{\rm Dir(1/2)}$ (Pareto-smoothed; median $k$ 0.36 at $n$ = 128, 0.08 at 1024). The 4 cells with $k > 0.7$ (all at $n$ = 128) and 5 checks were rerun with NUTS on a smooth surrogate of $p_J$ and corrected exactly; all end at $k \le 0.55$ and agree with the reweighting within 0.3 sd in 8 of 9 (unresolved: T1, $n$ = 128, dataset 1, \BA{} 0.50 by reweighting vs 0.67 by rerun).
+\end{itemize}
+\fig{prior_marginals}{1.0}{Prior marginals implied by the four priors (exact Jeffreys: 32 DE-MCMC chains $\times$ 6000 iterations). B.div: B's total division mass; growth: mean offspring per generation; log10\_mean\_cells10 and log10\_detect10: expected clone size and detection probability at generation 10.}
+\textbf{The Jeffreys prior is not neutral.} It puts its mass where clones carry the most information: B dividing into B+B almost always (B's division mass: median 0.97; B$\to$BB 0.96), fast growth (median 1.94 cells per cell per generation vs 1.35 under the uniform Dirichlet), and \BA{} near 0 (median 0.002, 95th percentile 0.03; uniform Dirichlet 0.13, Dirichlet(\textonehalf) 0.10). ``Uninformative'' here means invariant to reparametrisation, not flat.
+
+\begin{center}\footnotesize\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}llrrrrr@{}}\toprule
+ & $n$ & uniform Dir. & flat-\BA & Dir(\textonehalf) & exact Jeffreys & MLE \\\midrule
+RMSE \BA & 128 & 0.260 & \textbf{0.137} & 0.188 & 0.210 & 0.172 \\
+ & 256 & 0.211 & \textbf{0.122} & 0.158 & 0.190 & 0.157 \\
+ & 512 & 0.127 & 0.085 & 0.102 & 0.099 & \textbf{0.074} \\
+ & 1024 & 0.095 & \textbf{0.043} & 0.071 & 0.075 & 0.055 \\
+bias \BA & 128 & $-$0.158 & $-$0.014 & $-$0.096 & $-$0.131 & $-$0.039 \\
+ & 1024 & $-$0.053 & $-$0.003 & $-$0.035 & $-$0.044 & $-$0.026 \\
+90\% coverage \BA & 128 & 0.59 & 0.74 & 0.70 & 0.59 & 0.61 \\
+ & 1024 & 0.63 & 0.89 & 0.78 & 0.67 & 0.81 \\
+RMSE all 12 & 128 & 0.110 & \textbf{0.082} & 0.094 & 0.101 & 0.116 \\
+ & 512 & 0.065 & 0.060 & 0.064 & \textbf{0.056} & 0.091 \\
+ & 1024 & 0.055 & \textbf{0.046} & 0.055 & 0.050 & 0.060 \\\bottomrule
+\end{tabular}
+
+Over the 9 truths $\times$ 3 datasets. Posterior mean and equal-tailed 90\% interval; MLE with Wald interval (none for 9--22\% of the estimates, which sit on the boundary). Smallest RMSE in bold.
+\end{center}
+\fig{rmse_coverage_by_n}{1.0}{RMSE of \BA{} (left) and of all 12 probabilities (middle), and 90\% coverage (right; solid: all parameters, dotted: \BA) against $n$, for the five estimators (``flat (XG2)'' = uniform Dirichlet).}
+\begin{itemize}
+\item \textbf{The exact Jeffreys prior does not remove the pull on \BA.} Its bias ($-$0.131 at $n$ = 128, $-$0.044 at 1024) lies between those of the uniform Dirichlet and of Dirichlet(\textonehalf), and its \BA{} intervals cover as poorly as the uniform Dirichlet's (59--70\% for nominal 90\%). The pull comes from the flat ridge of the likelihood (\S\ref{sec:why}); every symmetric prior fills that ridge with its own volume, and the Jeffreys volume sits at \BA{} $\approx$ 0.
+\item \textbf{Dirichlet(\textonehalf) is the best of the symmetric priors for \BA} (RMSE 0.188 $\to$ 0.071; coverage 70--78\%), because it favours sparse rows like those of T1--T4, where B never divides. Over all 12 probabilities the three symmetric priors are within 0.01--0.02 RMSE of each other.
+\item \textbf{By truth.} For the large-\BA{} truths every symmetric prior pulls \BA{} down (T1 at $n$ = 128: 0.36 uniform Dirichlet, 0.60 Dirichlet(\textonehalf), 0.59 Jeffreys, 0.75 flat-\BA; truth 0.80). For the small-\BA{} truths Jeffreys pulls down and flat-\BA{} up (P1 at $n$ = 128: 0.05 and 0.21; truth 0.11). T5 (large clones) is within 0.03 of the truth under every prior from $n$ = 256.
+\item \textbf{The priors still disagree at $n$ = 1024.} The median shift of the \BA{} posterior mean is 0.18 posterior sd between Dirichlet(\textonehalf) and Jeffreys, 0.29 between uniform Dirichlet and Dirichlet(\textonehalf), 0.67 between flat-\BA{} and Jeffreys and 1.08 between uniform Dirichlet and flat-\BA. For any pair of priors at most 15\% of cells have all 12 posterior means within 0.25 sd (11\% at $n$ = 1024). The differences shrink with $n$ in absolute terms but not relative to the posterior sd.
+\item \textbf{Sampling.} Dirichlet(\textonehalf) has the same unbounded density at 0 as the flat-\BA{} prior's 0.2 concentrations but mixed much better: max rank $\hat R > 1.05$ in 13 of 108 cells (flat-\BA: 50), median 37 divergences (142), median min bulk ESS 265 (102). The full stopping rule was met in 16 of 108; the parameters that miss $\hat R \le 1.01$ most often are A.persist, A.death and B.death (43--48\% of cells).
+\end{itemize}
+\textbf{Bottom line.} At $n \le 1024$ no ``uninformative'' prior is neutral about \BA: the estimate depends on which one is chosen, by more than its posterior sd. The flat-\BA{} prior is the most accurate for \BA{} (and for all parameters at $n$ = 128, 256 and 1024) on these truths, but only because the large-\BA{} truths dominate the RMSE; the MLE is competitive from $n$ = 512. Quantities that do not depend on a prior (MLE, profile likelihood, the likelihood-ratio test of \S\ref{sec:dediff}) or a stated range over priors should be reported for \BA.
+
+\subsection{Profile-likelihood intervals for every run}\label{sec:fu-profile}
+Profile-likelihood intervals need no posterior: each point is a constrained maximum-likelihood fit on the stored dataset (the parameter fixed, the other nine maximised). They were computed for all 132 XG2 runs of $n$ = 128--4096 (\res{runs_index.csv}) and 14 quantities each (the 12 probabilities, B's division mass and $m_{BA}$): 1\,848 profiles, 92\,500 profile points, about 170 CPU-hours (note \res{docs/profile_intervals/README.md}; results \res{results/exact_gw/profile_intervals/}). Each profile starts at the MLE and steps outward until it drops 3.5 nats; its 90\% and 95\% intervals are where it crosses 1.35 and 1.92 nats below the maximum (open at 0 or 1 if it never does; a union if it dips and recovers). Every profile was cross-checked against the other 13 of the same run (any point of one is a feasible start for another) and polished; the final checks changed no interval endpoint by more than 0.017.
+\fig{gallery_btoa}{0.95}{Profile log likelihood of \BA{} relative to its maximum, per truth, for $n$ = 128 (light) to 4096 (dark); dataset 0 bold, datasets 1--2 faint. Dotted and dashed: the 90\% and 95\% cut-offs; orange: truth.}
+\fig{forest_btoa}{0.95}{95\% intervals for \BA, dataset 0: profile likelihood (black; gaps = union), posteriors under the flat, flat-\BA, Dirichlet(\textonehalf) and exact Jeffreys priors (\S\ref{sec:fu-flat}, \S\ref{sec:fu-jeffreys}; $n \le 1024$), and Wald interval around the MLE (grey); dashed: truth.}
+\begin{center}\footnotesize\setlength{\tabcolsep}{3.5pt}
+\begin{tabular}{@{}lrrrrrr@{}}\toprule
+coverage (90\% / 95\%) & profile & flat & flat-\BA & Dir(\textonehalf) & Jeffreys & Wald \\\midrule
+\BA, $n$ = 128 & .78 / .93 & .59 / .59 & .74 / .81 & .70 / .81 & .59 / .74 & .61 / .65 \\
+\BA, $n$ = 1024 & .93 / .96 & .63 / .74 & .89 / .89 & .78 / .89 & .67 / .81 & .81 / 1.00 \\
+\BA, all $n$ & \textbf{.88 / .95} & .58 / .67 & .81 / .85 & .75 / .88 & .66 / .80 & .77 / .85 \\
+all 12, all $n$ & .87 / .94 & .86 / .92 & .88 / .93 & .91 / .96 & .87 / .93 & .78 / .83 \\\bottomrule
+\end{tabular}
+
+Share of (run, parameter) cells with truth $>0$ whose interval contains the truth. Flat-\BA, Dirichlet(\textonehalf) and Jeffreys exist for $n \le 1024$; Wald intervals do not exist for 6--38\% of the estimates (MLE on the boundary or flat direction), which are left out.
+\end{center}
+\fig{coverage_vs_n}{0.85}{Coverage against $n$ of the 90\% (left) and 95\% (right) intervals, for \BA{} (top) and all 12 probabilities (bottom). Dashed: nominal.}
+\begin{itemize}
+\item \textbf{For \BA{} the profile interval is the only one that is calibrated}: 95\% intervals cover the truth in 95\% of the cells, against 67\% for the flat posterior and 80--88\% for the other priors, at nearly the same width (0.44 at $n$ = 128, 0.21 at 1024, 0.10 at 4096; flat posterior 0.40, 0.20, 0.10). Where the profile and a posterior disagree on whether the truth is inside, the profile is right in 37 of 38 cases against the flat posterior and 17 of 17 against Jeffreys. For T1, T3, T4 its \BA{} coverage is 0.94--1.00 against 0.44--0.61 for the flat posterior.
+\item \textbf{Over all 12 probabilities} profile and posterior intervals are equally good (94\% vs 92--96\% at 95\%, similar widths: 0.29 vs 0.26--0.28 at $n$ = 128, 0.05 at 4096); Dirichlet(\textonehalf) intervals do best on the weakly identified small entries at small $n$. Wald intervals are too short where they exist (83\%).
+\item \textbf{T2 is the weak spot} (\BA{} coverage 0.72): its profile maximum lies below 0.5 in 17 of 18 runs and the misses sit just below the truth (e.g.\ [0.37, 0.49] at $n$ = 4096) --- the data of this truth, since every posterior does worse (flat 0.06, Jeffreys 0.17).
+\item \textbf{Shape}: 46\% of the 95\% intervals are open at 0 (65\% at $n$ = 128, 23\% at 4096: entries whose MLE is 0); 4.5\% are unions of two or three segments (8--10\% at $n \le 256$, none from 2048), e.g.\ T1, $n$ = 256, dataset 0. T5 has a genuine second optimum about 1 nat down (a near swap of which type divides into BB and AA), visible as unions at $n \le 256$.
+\item \textbf{Better maxima found}: profiling found a higher maximum than the stored MLE in 19 of 132 runs (by more than 0.1 nats in 8): 13 were the same optimum stopped early by the default optimiser tolerances, 5 a different optimum (e.g.\ P3, $n$ = 256, dataset 2: +1.5 nats, \BA{} 0.14 $\to$ 0.24). Profiling is therefore also the most reliable way to find the MLE on these ridges.
+\end{itemize}
+
+% ====================================================================== composition convergence
+\section{When does the A/B composition converge?}\label{sec:convergence}
+\begin{keybox}
+\textbf{In short.} Two clocks. The \emph{pooled} composition (all clones together) reaches its stable value geometrically, shrinking the gap by $|\lambda_2|/\rho$ per generation: within 0.01 by generation 1--4 for eight of the nine truths (8 for T5). The composition of \emph{single clones} keeps varying much longer: its spread shrinks only by $\sqrt\rho \approx$ 1.2--1.3 per generation and is still 0.06--0.11 (sd of the A fraction) at generation 10. Slow pooled convergence is possible (e.g.\ 12--27 generations) when A and B rarely make each other and self-renew alike, but it is rare among plausible parameters (0.5\% beyond generation 10). Where it happens, it makes inference \emph{easier}: the transient still remembers which type the cells came from.
+\end{keybox}
+Code \code{scripts/convergence/}; note \res{docs/convergence/README.md}; results \res{results/exact_gw/convergence/}.
+
+\subsection{Theory}
+With the mean offspring matrix $M = \begin{pmatrix} a & b\\ c & d\end{pmatrix}$ ($a$, $b$: A and B daughters of an A cell; $c$, $d$: of a B cell), growth rate $\rho$, second eigenvalue $\lambda_2$ and stable composition $u$ (\S\ref{sec:weakdirs}):
+\begin{enumerate}
+\item \textbf{Pooled composition} (total A / total cells over many clones from an A founder). $\mathrm E[Z_h] = c_1 \rho^h u + c_2 \lambda_2^h w_2$, so the pooled A fraction satisfies exactly $f_h - u_A = C\sigma^h r^h/(1 + D\sigma^h r^h)$ with $r = |\lambda_2|/\rho$ and $\sigma = \mathrm{sign}\,\lambda_2$ (detection cancels in the ratio of means): the gap shrinks by $r$ per generation and oscillates if $\lambda_2 < 0$. The number of generations to come within $\varepsilon$ is $N_\varepsilon \approx \log(|C|/\varepsilon)/\log(1/r)$ (within one generation of the exact value). Since $\rho - \lambda_2 = \sqrt{(a-d)^2 + 4bc}$, convergence is slow ($r \to 1$) in two cases: \emph{weak coupling with similar self-renewal} ($bc$ small, $a \approx d$: two nearly independent lineages), or $\lambda_2 \to -\rho$ (little self-renewal, the types alternate). Without dedifferentiation ($c = 0$) and $a = d$ the convergence is only polynomial ($\approx a/(\varepsilon b)$ generations). It requires $M$ primitive (each type can eventually produce the other, not strictly periodically).
+\item \textbf{Single clones} (Kesten--Stigum). On survival, a clone's A fraction converges to $u_A$; when $\lambda_2^2 < \rho$ (true for every truth and for all 2000 plausible prior draws checked) its fluctuations are of order $\rho^{-h/2}$, i.e.\ the spread between clones shrinks by $\sqrt\rho$ per generation, like $1/\sqrt{\text{clone size}}$. This spread is what carries the ``which parent'' information, whose variance falls like $\rho^{-h}$ (\S\ref{sec:weakdirs}).
+\end{enumerate}
+
+\subsection{The nine truths}
+\fig{truths_composition}{1.0}{A fraction of detected A-founded clones against generation (exact law) for the nine truths and four constructed parameter sets (S0, S1, S3 slow; F1 fast): pooled fraction (red: theory; squares: exact), mean of per-clone fractions (blue), per-clone 10--90\% range (band) and $\pm$ sd (dotted); dashed: stable fraction $u_A$; vertical line: generation from which the pooled fraction stays within 0.01 of $u_A$.}
+\begin{itemize}
+\item \textbf{Pooled}: within 0.01 / 0.001 of $u_A$ by generation 2/4 (T1), 1/2 (T2, T3), 3/5 (T4), 8/13 (T5), 3/5 (P1), 2/3 (P2), 4/6 (P3), 2/3 (P4). The exact curves follow the theory to $2\times10^{-16}$.
+\item \textbf{Single clones}: the sd of the A fraction shrinks by 1.18--1.30 per generation, within 0.2--1.5\% of $\sqrt\rho$; it drops below 0.10 at generation 8--11 and below 0.05 at 11--15 (T1: 0.34, 0.26, 0.18, 0.12, 0.08 at generations 2--10). Clones that are all A become rarer than 1\% at generation 6--11, all-B clones at 5--9. So within the observation window 4--10 the pooled composition has converged but single clones have not.
+\end{itemize}
+
+\subsection{How often is convergence slow?}
+\fig{prior_map}{1.0}{Left: generations to convergence over 2000 plausible flat-prior draws (pooled within 0.01 or 0.001; single-clone sd below 0.1 or 0.05). Middle: pooled convergence against the spectral gap $(\rho - \lambda_2)/\rho$, with the theory curves. Right: pooled convergence generation over coupling $bc$ and self-renewal difference $a - d$ at $\rho$ = 1.5, with the prior draws, the truths and the constructed sets.}
+Over 2000 plausible prior draws (the XG2 filter: 30--300 cells per clone at generation 10) the median $r$ is 0.17: the pooled composition converges within 0.01 by generation 3 (median; 12\% after generation 4, 0.5\% after 10, none after 20), single clones (sd $<$ 0.05) by generation 13 (85\% after 10). Pooled convergence depends only on $r$ (rank correlation 0.93), single-clone convergence on $\rho$ ($-0.89$). Of the 15 draws converging after generation 10, ten are of the alternating kind ($\lambda_2 \approx -\rho$). Setting dedifferentiation to zero ($c = 0$) makes slow convergence common (median 8 generations, 35\% beyond 10): in 77\% of such draws B outgrows A and the composition drifts to all B.
+
+\subsection{Slow mixing makes the coupling easier to infer}
+\fig{slow_vs_fast}{1.0}{Slow (S0, S1, S3: \BA{} 0.01--0.05, pooled convergence at generation 27, 19, 12) vs fast mixing (F1: \BA{} 0.3, generation 3) at similar growth. (a) Information per clone on the weak directions vs generation; (b) clones per endpoint needed along the weakest direction and (c) asymptotic sd of \BA{} at $n$ = 512, against the pooled convergence generation (prior draws grey, truths black; green: path from S1 to F1); (d) share of the complete-data information on \BA{} that the counts keep; (e) exact-GW NUTS and MLE for \BA{} at $n$ = 512 (3 datasets each; XG2 truths for comparison); (f) mean absolute error over the 12 probabilities, with 90\% coverage.}
+\begin{itemize}
+\item \textbf{The weakest direction is far better informed when mixing is slow}: 48--55 clones per endpoint match the prior along it for the slow sets, against 2\,317 for the fast set F1 (96--2\,996 for the XG2 truths); along a path from S1 to F1 it rises monotonically. The A output of B cells, $c$ = \BA{} + 2\,B$\to$AA + B$\to$AB, has relative sd 10--13\% (slow) against 29\% (fast) at $n$ = 512. Late endpoints carry more: generations 8 and 10 give 21--24\% of the weak-direction information for the slow sets, 6--15\% otherwise.
+\item \textbf{In the posteriors} (NUTS, $n$ = 512, 3 datasets each): for the slow sets \BA{} is covered in 9/9 runs with sd 0.005--0.021 and error $\le$ 0.010; the error over all 12 probabilities is 0.008--0.013, against 0.040 for F1 and 0.018--0.067 for the XG2 truths, and none shows the downward \BA{} bias of T1--T4. Caveat: \BA{} relative to its own size is not better determined (relative sd 0.43--1.06 vs 0.74), and for \BA{} = 0.01--0.02 the MLE sits at 0 (Wald coverage 1--2 of 3).
+\end{itemize}
+
+\subsection{Reading it from data}
+At $n$ = 512 per endpoint the pooled A fraction is measured to 0.002--0.006. Its drift from generation 8 to 10 is 2.7--4.1 standard errors for the slow sets (from 4 to 10: 10--13), 1.3 (6.4) for T5 and below 0.5 for every other truth: \textbf{a pooled composition still changing between the late endpoints is a direct, model-free sign of slow LGR5$^+$/KRT20$^+$ interconversion with similar self-renewal}. A second sign is persistent all-B clones (3--12\% at generation 8--10 for S0, S1 against $\le$ 1\% otherwise), the most direct trace of rare KRT20$^+\to$LGR5$^+$ conversion. A converged composition does not prove interconversion: very different growth rates of the two types also converge fast, even without dedifferentiation.
+
+% ====================================================================== optimal design
+\section{Which experiment to run next: optimal design}\label{sec:design}
+\begin{keybox}
+\textbf{In short.} The current design (clones founded by one LGR5$^+$ cell, counted at generations 4, 6, 8, 10) is 1--12\% efficient for \BA{} compared with the best possible design for each truth. Observing clones after 1--2 divisions, half of them founded by a single sorted KRT20$^+$ cell, measures \BA{} as precisely with \textbf{6--90$\times$ fewer clones} (median 21$\times$): a few hundred clones in total instead of several thousand. This assumes that early clones can be scored at a known number of divisions, without typing errors.
+\end{keybox}
+Code and note: \code{scripts/optimal_design/}, \res{docs/optimal_design/README.md}; results \res{results/exact_gw/optimal_design/}.
+
+\subsection{Method}
+A design is the share of clones observed at each generation $h$ = 1--12 and founded by a single A or a single B cell. Its information per clone is the weighted sum of the exact Fisher informations of \S\ref{sec:weakdirs} (per detected clone; B founders added to the same code). For a fixed total number of detected clones $N$ we maximise either the information along the weakest direction ($\lambda_{\min}$, ``E-optimal'') or the precision of \BA{} (``c-optimal''); both are convex problems in the shares and are solved exactly. Because the truth is unknown, the robust design maximises the worst efficiency over the 9 truths. It was also checked on 60 parameter sets drawn from the prior (not used to build it). T1, T2 and T4 are evaluated 0.01 inside the ``B never divides'' boundary, where B-founded information is otherwise infinite (\S\ref{sec:weakdirs}).
+\fig{optimal_weights}{1.0}{Optimal shares of detected clones per founder (A left, B right of each panel) and observation generation, for each truth and for the robust designs (bottom rows), under three criteria: weakest direction (E), precision of \BA{} (c) and overall volume (D).}
+\textbf{What the optima look like.} For every truth the E- and c-optimal designs put 88--99\% of the clones at generations 1--3, about 5\% at a late generation (which pins the growth rate), and use both founder types; the \BA-optimal design relies on B founders at generations 1--2 (13--34\% of the clones for T1--T4, 42--94\% for T5 and the prior draws). This is the theory of \S\ref{sec:weakdirs} in practice: early, the parent of every event is still known, and a B-founded clone observes B's fate directly.
+
+\subsection{Practical protocols}
+The robust optimum is about 0.30 A2, 0.27 B3, 0.20 B1, 0.14 B2, 0.04 each A1 and A12 (worst-case efficiency 0.61 for both criteria). Rounded to four time points with shares in eighths:
+\begin{center}\scriptsize\setlength{\tabcolsep}{1.5pt}
+\begin{tabular}{@{}lllllll@{}}\toprule
+protocol & gain, $\lambda_{\min}$ & gain, var(\BA) & gain, all 12 & efficiency & sd(\BA), & clones for \\
+ & median (range) & median (range) & median (range) & E / c (worst) & $N$ = 512 & sd $\le$ 0.05 \\\midrule
+current: A at 4/6/8/10 & 1 & 1 & 1 & 0.02 / 0.01 & 0.058--0.33 & 700--21\,700 \\
+A at 1/2/3/4 & 5.7 (1.1--15) & 6.6 (2.3--30) & 6.6 (3.0--22) & 0.07 / 0.09 & 0.039--0.084 & 300--1\,430 \\
+A+B at 1/2/3/4 (50/50) & 7.9 (3.7--20) & 16 (5.9--64) & 14 (5.6--30) & 0.34 / 0.39 & 0.016--0.053 & 54--580 \\
+A at 4/6/8/10 + B at 2/4 & 3.5 (2.3--9.6) & 7.8 (2.5--12) & 4.9 (2.3--8.4) & 0.09 / 0.06 & 0.020--0.12 & 86--2\,790 \\
+A+B at 4/6/8/10 & 1.2 (1.1--5.0) & 2.4 (1.0--5.2) & 1.1 (1.1--3.7) & 0.02 / 0.01 & 0.035--0.31 & 260--19\,400 \\
+\textbf{R1}: $\tfrac38$ A2 + $\tfrac14$ B1 + $\tfrac14$ B2 + $\tfrac18$ A10 & \textbf{8.1} (6.4--32) & \textbf{21} (6.5--89) & \textbf{15} (7.0--42) & \textbf{0.56 / 0.53} & \textbf{0.016--0.046} & \textbf{51--440} \\
+R2 (no gen.\ 1): $\tfrac14$ A2 + $\tfrac58$ B2 + $\tfrac18$ A10 & 8.2 (5.4--21) & 15 (5.0--37) & 11 (6.5--27) & 0.35 / 0.23 & 0.013--0.064 & 35--850 \\
+R3 (no B sort): $\tfrac18$ A1 + $\tfrac38$ A3 + $\tfrac38$ A4 + $\tfrac18$ A6 & 3.6 (2.0--6.1) & 4.5 (2.8--26) & 4.3 (3.5--9.5) & 0.11 / 0.11 & 0.035--0.10 & 250--2\,100 \\\bottomrule
+\end{tabular}
+
+Over the 9 truths; A2 = A-founded clones observed at generation 2, etc. Gains relative to the current design at the same number of detected clones (``all 12'': total variance of the 12 probabilities); efficiency relative to each truth's own optimum (worst truth). Prior-free asymptotic sd. Detected clones per founder seeded: 0.75--0.93 for R1 (0.60--0.95 for the current design).
+\end{center}
+\fig{btoa_sd_vs_N}{0.95}{Predicted sd of \BA{} against the total number of detected clones for the practical protocols, per truth (no prior). Dashed: sd = 0.05.}
+\begin{itemize}
+\item \textbf{R1 is the recommended protocol}: 8$\times$ more information on the weakest direction and 21$\times$ smaller variance of \BA{} (medians), and 51--440 detected clones (55--540 founders seeded) for a \BA{} sd of 0.05, against 700--21\,700 for the current design. On the 60 prior draws its median efficiency is 0.65 / 0.69 and its median gain over the current design $\times$19 / $\div$59.
+\item \textbf{If generation 1 cannot be scored} (R2) or \textbf{B cells cannot be sorted} (R3), most of the gain remains with B founders (R2), and a factor 2--6 remains with early A-founded clones only (R3). Whatever the founders, \textbf{delaying the first observation costs a factor of about 2--4 per generation}; the best design with nothing before generation 4 is only 3--5\% efficient in the worst case.
+\item \textbf{Checks.} For the current design the XG2 posterior variance of \BA{} is 0.89$\times$ the prediction (median). For the new designs, simulated MLEs (50 datasets per case, B founders simulated directly) have sd 0.95--0.98 of the prediction at 1024 clones (T3 and P2 with R1, T3 with A+B 1--4), whereas the current design at 4096 clones is 1.43$\times$ worse than predicted (half the MLEs on a face): early designs are already in the large-sample regime, the current one is not, so its real deficit is larger than the table shows.
+\item \textbf{Cost models} (per founder seeded, or adding culture time) barely change the optimum.
+\end{itemize}
+\textbf{If the founder type is not perfectly known.} The gains above assume that the type of every founder is recorded (sorted single LGR5$^+$ and KRT20$^+$ cells). Otherwise each clone's law is the mixture over its hidden founder, $w\,p_A(c) + (1-w)\,p_B(c)$, with $w$ = P(founder is A) in that cohort. We recomputed the information with the founder weight either known or estimated from the same data (a nuisance parameter; script \code{scripts/optimal_design/founder_uncertainty.py}; check: with $w$ = 1 or 0 it reproduces the cached information to $10^{-13}$):
+\begin{center}\footnotesize\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}llll@{}}\toprule
+design, founder information & gain on var(\BA) vs current & gain, all 12 & \BA{} sd at $N$ = 512 \\
+ & median (range) & median (range) & \\\midrule
+R1, founders recorded & 21 (6.5--89) & 15 (7.0--42) & 0.016--0.046 \\
+R1, sorted, purity 95\% / 80\%, purity known & 19 / 16 & 14 / 11 & 0.017--0.049 \\
+R1, sorted, purity 90\% / 80\%, purity estimated & 10 (3.3--57) / 8 (2.5--46) & 6.7 / 5.5 & 0.018--0.085 \\
+R1 time points, unsorted ($p_A$ = 0.7 estimated) & 5.6 (2.0--17) & 4.6 (3.3--14) & 0.038--0.126 \\
+current design, unsorted ($p_A$ = 0.7 estimated) & 0.77 (0.37--1.2) & 0.81 (0.71--0.95) & 0.054--0.42 \\\bottomrule
+\end{tabular}
+
+Same total number of detected clones; ``current'' = A-founded clones at generations 4/6/8/10 with known founders; R1 = $\tfrac38$ A2 + $\tfrac14$ B1 + $\tfrac14$ B2 + $\tfrac18$ A10; unsorted R1 = the same time points (1/4 at generation 1, 5/8 at 2, 1/8 at 10) without founder labels.
+\end{center}
+\begin{itemize}
+\item \textbf{Over all 12 probabilities} (total variance) the gains are a little smaller but the ranking is the same: R1 15$\times$ (7--42) with recorded founders, 11--14$\times$ with measured purity, 5.5--6.7$\times$ with estimated purity, 4.6$\times$ unsorted; the current time points with unsorted founders keep 0.81 of today's precision.
+\item \textbf{Imperfect sorting costs little if the purity is measured}: at 80\% purity R1 still gives a 16-fold smaller \BA{} variance than the current design. \textbf{An unmeasured purity costs about half the gain} (8--10-fold), because the impurity trades off against B's own fate along the parent-swap direction.
+\item \textbf{Without any founder information, early observation still helps}: the R1 time points with unsorted founders give a 5.6-fold (2--17) smaller \BA{} variance than the current design with known A founders; the current time points with unsorted founders are worse than now (0.77). Early endpoints carry the information; sorted founders multiply it by another 2--4.
+\item These are asymptotic (Fisher) numbers. With unsorted founders the posterior can have two branches along the parent-swap ridge (\S\ref{sec:freefounder}), so the real precision at a few hundred clones is lower than predicted. \textbf{Recommendation:} sort founders and measure the sort purity on the same day (e.g.\ re-stain a sample of sorted cells); if sorting is impossible, still observe early.
+\end{itemize}
+\textbf{Caveats.} (i) The model has synchronous generations; a real early time point mixes clones that have divided 0, 1 or 2 times, so the time point must be matched to the cell cycle or divisions counted (e.g.\ live imaging). (ii) Typing errors are not modelled (impure sorts: above); early clones have few cells, so a single misread cell weighs more (\S\ref{sec:dediff-ratio}) --- the next study before committing to generation 1. (iii) Detection is survival only (plating efficiency not modelled). (iv) For T1, T2, T4 the B-founded gains are evaluated just inside the boundary; with ``B never divides'' known, R1 still gives a \BA{} sd of 0.044--0.046 at $N$ = 512 against 0.069--0.087 for the current design.
+
+% ====================================================================== dedifferentiation test
+\section{Testing for dedifferentiation: can B give rise to A?}\label{sec:dediff}
+\begin{keybox}
+\textbf{In short.} Instead of estimating how often KRT20$^+$ cells (B) switch back to LGR5$^+$ (A) --- which the previous sections show is hard --- we ask the yes/no question: \emph{do B cells ever give rise to A cells, by any route?} A likelihood-ratio test on organoid endpoint counts answers it. In simulation it is well calibrated and extremely sensitive: with correct cell typing it detects a few dozen dedifferentiation events among thousands of B cells. But a mis-scoring rate of KRT20$^+$ cells as LGR5$^+$ of only 0.5\% produces a signal of the same size, so \textbf{the cell-typing error must be measured and put into the model before the test can be trusted}.
+\end{keybox}
+Code: \code{src/bio_sbi/inference/dediff_lrt.py}; scripts \code{scripts/dediff_test/}; note \res{docs/dediff_test/README.md}; results \res{results/exact_gw/dediff_test/}.
+
+\subsection{The question and the idea}
+In the model a B cell can produce an A cell in three ways:
+\begin{center}\footnotesize
+\begin{tabular}{@{}lll@{}}\toprule
+route & what happens to one B cell in a generation & A cells produced \\\midrule
+switch (\BA) & the B cell becomes an A cell & 1 \\
+asymmetric division (B$\to$AB) & it divides into one A and one B cell & 1 \\
+symmetric division (B$\to$AA) & it divides into two A cells & 2 \\\bottomrule
+\end{tabular}
+\end{center}
+``Dedifferentiation'' here means any of the three. Its size is measured by
+\[ m_{BA} = \text{B}{\to}\text{A} + 2\,\text{B}{\to}\text{AA} + \text{B}{\to}\text{AB}, \]
+the average number of A cells one B cell produces per generation. $m_{BA} = 0.003$ means three A cells per thousand B-cell generations.
+
+The test compares two explanations of the same organoids:
+\begin{itemize}
+\item \textbf{H0, no dedifferentiation}: B cells can die, stay, or divide into B+B, but never produce A. Every A cell in a clone descends from A cells.
+\item \textbf{H1, dedifferentiation}: the same, plus at least one of the three routes.
+\end{itemize}
+Each explanation is fitted to the data by maximum likelihood (exact likelihood of the A and B counts of every organoid, all other probabilities free). If B never produces A, some combinations of A and B counts become nearly impossible: in the simulations, for example, a clone with a single A cell and no B cell at generation 8 has probability about $e^{-15} \approx 3\times10^{-7}$ under H0, while with dedifferentiation it is merely rare. The test asks whether the data contain more such clones than H0 can account for.
+
+\subsection{How the test decides}
+The statistic is the likelihood ratio
+\[ \Lambda = 2\,[\ell(\text{best H1 fit}) - \ell(\text{best H0 fit})] \ge 0 . \]
+H0 is H1 with three probabilities set to zero, so the best H1 fit is always at least as good: $\Lambda$ is never negative. Even without any dedifferentiation, letting three extra probabilities move lets H1 fit chance features of the data a little better. The question is therefore whether $\Lambda$ is \emph{larger than chance alone produces}. That threshold (the critical value) is the 95th percentile of $\Lambda$ over datasets in which H0 is true: above it, a false positive happens in only 5\% of experiments without dedifferentiation.
+
+The textbook rule for likelihood ratios ($\chi^2$ with 3 degrees of freedom, threshold 7.8) does not apply here, because the three tested probabilities cannot go below zero. When the data happen to favour ``less than zero'', the best H1 fit simply sits at zero and $\Lambda = 0$ exactly --- which in our simulations happened in 25--77\% of datasets without dedifferentiation. The correct reference is a mixture of $\chi^2$ distributions (``$\bar\chi^2$'') whose weights depend on the dataset. We obtain the threshold in three ways and compare them:
+\begin{itemize}
+\item \textbf{Monte Carlo}: simulate many datasets from a known truth without dedifferentiation and take the 95th percentile of $\Lambda$ (possible only in simulation).
+\item \textbf{Parametric bootstrap}: the same, but simulating from the H0 fit of the dataset at hand (what one does with real data).
+\item \textbf{$\bar\chi^2$ from the fit}: the boundary mixture with weights computed from the curvature of the likelihood at the H0 fit (fast; no simulation).
+\end{itemize}
+\fig{null_distributions}{0.82}{Distribution of $\Lambda$ when there is no dedifferentiation (probability that $\Lambda$ exceeds $x$, log scale), for four null truths (rows) and four sizes (columns). Black: Monte Carlo over 200 datasets; orange: $\bar\chi^2$ with weights from the fit; purple dashed: textbook $\bar\chi^2$ weights; green dotted: $\chi^2_3$; pink: parametric bootstrap pooled over 15 datasets. A threshold is where a curve crosses 0.05 (thin horizontal line); curves further right give higher thresholds and fewer false positives.}
+
+\subsection{How the test was checked}
+Simulated organoids, generations \{4, 6, 8, 10\}, $n$ = 128--1024 clones per endpoint, each clone from one A cell; A's row as in the reference truth. Four null truths without dedifferentiation, covering how B cells behave: N1 (B dies 20\%, stays 80\%), N2 (dies 10\%, stays 50\%, divides B+B 40\%), N3 (dies 50\%, stays 50\%), N4 (dies 20\%, stays 30\%, divides B+B 50\%). Dedifferentiation was added to N1 and N2 with $m_{BA}$ from 0.0025 to 0.4 by each route alone and mixed. 200 datasets per null cell, 50 per alternative (10 for $m_{BA} \ge 0.1$), 100 per mis-typing setting.
+
+\subsection{Is the threshold right?}
+\begin{center}\footnotesize\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}lllllll@{}}\toprule
+null & \multicolumn{2}{c}{95\% threshold} & \multicolumn{3}{c}{false-positive rate at nominal 5\% using} & $\Lambda = 0$ \\
+ & Monte Carlo & $\bar\chi^2$ from fit & $\bar\chi^2$ from fit & textbook $\bar\chi^2$ (5.43) & $\chi^2_3$ (7.81) & \\\midrule
+N1 & 1.9--3.4 & 3.3--3.5 & 1.0--5.5\% & 0--3.5\% & 0--2.5\% & 65--77\% \\
+N2 & 3.0--4.1 & 3.7--3.9 & 3.5--6.0\% & 1.0--3.0\% & 0.5--1.0\% & 48--59\% \\
+N3 & 4.1--4.8 & 3.8--4.2 & 5.0--6.5\% & 1.0--3.5\% & 0--1.5\% & 25--36\% \\
+N4 & 2.3--3.6 & 3.6--3.9 & 2.5--5.5\% & 1.5--2.5\% & 0.5--1.5\% & 44--52\% \\\bottomrule
+\end{tabular}
+
+Ranges over $n$ = 128--1024 (200 datasets each). A good calibration gives about 5\%; lower is safe but wastes power, higher means too many false alarms.
+\end{center}
+\begin{itemize}
+\item \textbf{The $\bar\chi^2$ threshold from the fit works}: 1--6.5\% false positives. The textbook thresholds are safe but too strict.
+\item \textbf{The right threshold depends on how B cells behave} (1.9 for N1 vs 4.8 for N3). Using the threshold of another null gives up to 16\% false positives: the threshold must come from the dataset's own fit (bootstrap or $\bar\chi^2$), not from a table.
+\item \textbf{The bootstrap} reproduces the Monte-Carlo thresholds roughly (5--11\% false positives; a little permissive at small $n$).
+\item The fits are reliable: in 3200 null analyses no better optimum was ever missed.
+\end{itemize}
+
+\subsection{How small an effect can it see?}
+\fig{power_mc}{0.98}{Probability of detecting dedifferentiation (power, at 5\% false positives) against its size $m_{BA}$, for each route (columns) and two null backgrounds (rows), at 128--1024 clones per endpoint. Bands: 90\% intervals over the simulated datasets (wider at $m_{BA} \ge 0.1$, where only 10 datasets were run).}
+\textbf{Very small effects are detected.} With correct typing the smallest $m_{BA}$ found in 80\% of experiments is 0.0025--0.004 at 128 clones per endpoint and below 0.0025 from 256 on, for every route. In cells: with 128 clones per endpoint at generations 4, 6, 8, 10, the experiment observes about 2\,900 B cells (N1; 11\,600 for N2), which together have lived about 8\,800 B-cell generations (23\,000 for N2). At $m_{BA} = 0.003$ that is only \textbf{about 26 dedifferentiation events in the whole experiment} (69 for N2) --- yet each leaves a recognisable footprint, an A cell in a clone where H0 can hardly put one, so a few dozen events are enough.
+
+\subsection{Why cell-typing errors dominate}
+\fig{mistyping}{0.80}{False-positive rate when there is \emph{no} dedifferentiation but some cells are mis-scored (bA: KRT20$^+$ read as LGR5$^+$; sym: both directions; 0.5--5\% of cells). Top: errors ignored in the analysis; middle: the analysis assumes half the true error rate; bottom: the true error rate is in the model. Dotted line: the intended 5\%.}
+\begin{center}\footnotesize
+\begin{tabular}{@{}ll@{}}\toprule
+how typing errors enter the analysis & false-positive rate (errors 0.5--5\%, $n$ = 128--1024) \\\midrule
+ignored & \textbf{75--100\%} (already at 0.5\% KRT20$^+$ read as LGR5$^+$) \\
+modelled with half the true rate & \textbf{21--100\%} \\
+modelled with the true rate & 1--13\% (3--11\% from $n$ = 256) \\\bottomrule
+\end{tabular}
+\end{center}
+A B cell scored as A looks exactly like a B cell that turned into A. With 0.5\% of B cells mis-scored, the experiment above contains \textbf{about 15 misread cells} (128 clones per endpoint, N1; 58 for N2) --- the same order as the 26 true events the test can detect. Ignored, these errors are read as dedifferentiation in nearly every experiment; even assuming half the true rate leaves most of them unexplained. Only with the correct error rate in the model does the test behave. \textbf{The sensitivity that makes the test powerful also makes it fragile: it is only as good as the model of cell typing.}
+
+\subsection{How precisely must the typing error be known?}\label{sec:dediff-ratio}
+The previous subsection compared three extremes (errors ignored, half the true rate, the true rate). In practice the rate is measured with some uncertainty, so we asked what happens when the analysis assumes $r$ times the true rate, for $r$ from 0.5 to 2. Data: KRT20$^+$ cells read as LGR5$^+$ at 1\% or 2\% (and both directions at 2\%), null rows N1 and N2 (100 datasets per setting) and dedifferentiation $m_{BA}$ = 0.005--0.1 on N1 and N2 by the mixed and switch-only routes (50 datasets per setting); generations \{4,6,8,10\}, $n$ = 128--1024 (81\,600 tests; results \res{results/exact_gw/dediff_test/typing_ratio/}).
+
+\fig{ratio_fpr}{1.0}{False-positive rate (no dedifferentiation, data mis-typed) against the assumed / true error rate $r$, for $n$ = 128--1024 (columns), with the Monte-Carlo threshold of the perfectly typed null (top) and the per-dataset $\bar\chi^2$ threshold (bottom). Solid: N1 (B cells die or stay); dashed: N2 (B cells also divide into B+B). Dotted 5\%, dashed 7\%.}
+\begin{center}\footnotesize\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}lrrrrrrrrrr@{}}\toprule
+assumed / true rate $r$ & 0 & 0.5 & 0.75 & 0.8 & 0.9 & \textbf{1} & 1.1 & 1.25 & 1.5 & 2 \\\midrule
+N1 (B dies or stays) & 92--100 & 8--53 & 3--11 & 2--7 & 2--6 & \textbf{1--5} & 1--4 & 1--4 & 1--3 & 1--4 \\
+N2 (B also self-renews) & 100 & 69--100 & 18--99 & 13--93 & 9--42 & \textbf{6--10} & 1--6 & 0--4 & 0--3 & 0--2 \\\bottomrule
+\end{tabular}
+
+False-positive rate (\%) at nominal 5\%, $\bar\chi^2$ threshold; range over the three error settings and $n$ = 128--1024. $r = 0$: errors ignored.
+\end{center}
+\textbf{Under-estimating the rate is dangerous.} When B cells self-renew (N2) the misread cells sit in large B clones and are counted as dedifferentiation: a rate assumed 10\% too low already gives 9--42\% false positives, 20\% too low up to 93\%. Even the exact rate is slightly permissive there (6--10\%); assuming 10\% more brings it back to 1--6\%.
+
+\fig{ratio_power_bA0.02_chibar}{0.70}{Power to detect dedifferentiation (rows: $m_{BA}$ = 0.005, 0.01, 0.05, 0.1) against $r$, when 2\% of KRT20$^+$ cells are read as LGR5$^+$; columns $n$ = 128--1024; $\bar\chi^2$ threshold; dashed: 80\%.}
+\textbf{Over-estimating the rate is cheap.} Assuming too many typing errors makes the test explain some real dedifferentiation away, but slowly: at 1\% error and $m_{BA} = 0.005$, power is 76/92/96/100\% at $n$ = 128/256/512/1024 with the exact rate and 66/88/96/100\% at twice the rate. Only the smallest effect at 2\% error suffers at $r = 2$ (30/36/70/82\%). For $m_{BA} \ge 0.05$ power is 100\% at every $r$ and $n$.
+
+\textbf{Tolerance window.} False positives $\le$ 7\% and power $\ge$ 80\%, worst case over N1/N2 and routes: the assumed rate may be at most about \textbf{0--10\% too low} but \textbf{50--100\% too high} ($m_{BA} \ge 0.01$, $n \ge 256$). No window exists for $m_{BA}$ = 0.005 at $n$ = 128 (power only 70--76\% even at the exact rate).
+
+\textbf{A robust version} (\code{--confusion-interval lo hi}): given a measured interval for the rate, the test is run across it and rejects only if it rejects at every rate. It makes the same decision as the plain test at the upper end of the interval in $\ge$ 99.9\% of datasets.
+\begin{center}\footnotesize
+\begin{tabular}{@{}lll@{}}\toprule
+measured interval & worst false-positive rate ($n$ = 128/256/512/1024) & power, $m_{BA}$ = 0.005 at 2\% error \\\midrule
+exact rate & 7 / 10 / 8 / 8\% & 70 / 92 / 96 / 100\% \\
+$\pm$10\% & 5 / 5 / 6 / 3\% & 70 / 90 / 96 / 100\% \\
+$\pm$25\% & 4 / 3 / 4 / 3\% & 68 / 84 / 96 / 100\% \\
+$\pm$50\% & 3 / 2 / 2 / 2\% & 48 / 80 / 96 / 100\% \\
+factor 2 (0.5--2) & 2 / 2 / 1 / 1\% & 30 / 36 / 70 / 82\% \\\bottomrule
+\end{tabular}
+
+$\bar\chi^2$ threshold. For $m_{BA} \ge 0.05$ power is 100\% for every interval.
+\end{center}
+\textbf{What the calibration experiment needs.} An upper confidence limit for the KRT20$^+$$\to$LGR5$^+$ mis-scoring rate, to about $\pm$25\%: then false positives stay $\le$ 4\% and, with 256 clones per endpoint, $m_{BA}$ = 0.005 is detected with $\ge$ 84\% power and $m_{BA} \ge 0.01$ with $\ge$ 96\%. A relative precision of $\pm$25\% needs about 60 mis-scored cells observed --- about 3\,000 scored KRT20$^+$ cells of known identity at a 2\% error rate (6\,000 at 1\%); $\pm$50\% needs about 15. This assumes the error has the modelled form (a fixed per-cell probability) and only its rate is uncertain; errors that depend on clone size or density are untested.
+
+\subsection{The real organoids}
+On the CRC0322 2D counts (days 6 and 10 taken as generations 6 and 10; 165 and 101 organoids) the test gives $\Lambda = 45.1$ with bootstrap $p = 0.005$ (the smallest possible with 200 bootstrap samples), and an implausible fitted dedifferentiation ($\hat m_{BA} = 1.35$). \textbf{This is not evidence of dedifferentiation}: typing errors are not modelled, and these organoids differ from each other in fate and slow their growth as they get larger --- features the homogeneous model lacks and which, like typing errors, could produce ``impossible'' clones.
+
+\subsection{What this means for the lab}
+\begin{enumerate}
+\item \textbf{Measure the cell-typing error on the same assay}, above all the probability that a KRT20$^+$ cell is scored LGR5$^+$ (e.g.\ on sorted pure populations or with double staining). What matters is an \emph{upper} limit: aim for $\pm$25\% relative precision (about 3\,000 KRT20$^+$ cells of known identity at a 2\% error rate) and run the test at the upper end of the interval (\S\ref{sec:dediff-ratio}). Under-estimating the rate by 10--20\% can make most experiments look positive; over-estimating it by 50\% costs little.
+\item \textbf{Organoid numbers are not the bottleneck}: with correct typing, a few hundred organoids per time point detect $m_{BA}$ of a few per thousand.
+\item \textbf{The most direct experiment}: grow organoids from single sorted KRT20$^+$ cells and look early; any validated LGR5$^+$ cell in them is direct evidence. Sized with the exact likelihood (\S\ref{sec:design}), mixing such B-founded clones (half of the clones, at generations 1--2) with A-founded clones at generation 2 and a few at generation 10 estimates \BA{} with 6--90$\times$ fewer clones than the current design.
+\item \textbf{Before using the test on real data}, check that organoid-to-organoid differences in fate do not create false positives (not yet tested).
+\end{enumerate}
+
+\subsection{How to run it}
+\code{uv run python scripts/dediff_test/run.py data counts.csv --reps 200} with columns \code{horizon,A,B} (horizon in generations); add \code{--confusion 0.02 --typing-kind b_as_a} to include a typing error. It prints $\Lambda$, the fitted $m_{BA}$, and $p$-values from the $\bar\chi^2$ mixture (from the fit), the textbook mixture, $\chi^2_3$, and the parametric bootstrap. Use the bootstrap or the $\bar\chi^2$-from-fit $p$-value.
+
+% ====================================================================== misspecification
+\section{What if the model is wrong? Misspecified biology and assay}\label{sec:misspec}
+\begin{keybox}
+\textbf{In short.} Every result above assumes that the organoids follow the model exactly. We simulated data that break one assumption at a time and fitted the standard model (n = 512 clones per endpoint, all 9 truths). \textbf{Cell-typing errors are invisible in the data but turn the dedifferentiation test into a false alarm} (98--100\% false positives from 0.5\% mis-scoring). \textbf{Unmodelled founders and doublets, organoid heterogeneity and asynchronous divisions} push \BA{} down along the known weak direction --- by 0.4--0.8 for the large-\BA{} truths --- and the posterior can be confidently wrong. Growth rate and stable composition stay robust to assay problems. Modelling the founders, the typing error or the cell loss restores the estimates; heterogeneity, asynchrony and density dependence are detectable but not yet modelled.
+\end{keybox}
+Code \code{scripts/misspecification/}; note \res{docs/misspecification/README.md}; results \res{results/exact_gw/misspecification/}. For each scenario and truth: MLE on 10 datasets, profile intervals on 3, goodness of fit, the extended model where one exists, the dedifferentiation test on 100 datasets without dedifferentiation (null rows N1, N2 of \S\ref{sec:dediff}), NUTS on one dataset per truth for three scenarios. The custom simulator reproduces the pipeline's law where they overlap. About 6\,h on 16 local workers.
+
+\begin{center}\scriptsize\setlength{\tabcolsep}{2.4pt}
+\begin{tabular}{@{}lrrrrrrrr@{}}\toprule
+ & \multicolumn{2}{c}{\BA{} bias} & all 12 & $\rho$ & \BA{} 95\% & dediff test & \multicolumn{2}{c}{detected} \\
+what is wrong in the data & mean & max & MAE & bias & coverage & false pos. & GOF & ext.\ LRT \\\midrule
+nothing (correctly specified) & $-0.04$ & 0.14 & .059 & $-0.1\%$ & 0.78 & 3--4\% & 6\% & --- \\
+founders 70\% A / 30\% B & $-0.18$ & 0.65 & .091 & $-0.4\%$ & 0.63 & 3--5\% & 11\% & 58\% \\
+15\% doublets (two founders) & $-0.28$ & 0.75 & .106 & $+1.8\%$ & 0.26 & 17--19\% & 51\% & 100\% \\
+15\% doublets, founders 70/30 & $-0.30$ & 0.79 & .114 & $+1.5\%$ & 0.15 & 5--16\% & 57\% & 100\% \\
+KRT20$^+$ read as LGR5$^+$, 0.5\% & $-0.03$ & 0.09 & .060 & $-0.1\%$ & 0.78 & \textbf{98--100\%} & 6\% & 9\% \\
+KRT20$^+$ read as LGR5$^+$, 2\% / 5\% & $-0.03$ & 0.10 & .059 / .066 & $-0.1\%$ & 0.89--0.96 & \textbf{100\%} & 4--7\% & 9--10\% \\
+symmetric mis-typing 2\% & $-0.04$ & 0.17 & .063 & $-0.2\%$ & 0.81 & \textbf{100\%} & 8\% & 9\% \\
+organoid heterogeneity, $\kappa$ = 50 & $-0.29$ & 0.76 & .121 & $+1.7\%$ & 0.22 & 28--45\% & 82\% & --- \\
+organoid heterogeneity, $\kappa$ = 10 & $-0.30$ & 0.65 & .150 & $+7.5\%$ & 0.00 & \textbf{100\%} & 100\% & --- \\
+asynchronous divisions ($\pm$1 generation) & $-0.34$ & 0.78 & .136 & $+1.9\%$ & 0.07 & 11--12\% & 69\% & --- \\
+density dependence & $+0.10$ & 0.25 & .118 & $-7.2\%$ & 0.15 & 0--5\% & 100\% & --- \\
+10\% / 20\% of cells not counted & $-0.06$ & 0.30 / 0.45 & .084 / .115 & $-0.2$ / $-0.5\%$ & 0.81 & 0--4\% & 9\% & 14 / 52\% \\
+\BA{} doubles after generation 5 & $+0.01$ & 0.13 & .074 & $-0.6\%$ & 0.96 & 2--5\% & 27\% & --- \\
+growth slows after generation 5 & $-0.08$ & 0.37 & .102 & $-6.7\%$ & 0.52 & 14--19\% & 78\% & --- \\\bottomrule
+\end{tabular}
+
+Standard model fitted. Bias: MLE minus truth, mean and largest mean bias over the 9 truths. All-12 MAE: $|$MLE $-$ truth$|$ averaged over the 12 probabilities, the datasets and the truths (the correctly specified row is the sampling-noise floor at $n$ = 512). Dediff false positives: rejection rate of the $\bar\chi^2$ test at nominal 5\% on data without dedifferentiation (N1--N2). Detected: binned goodness-of-fit test calibrated on correctly specified data (size 6\%), and likelihood-ratio test of the standard against the extended model (founder mixture and size, confusion matrix, capture; size 0--7\%). Heterogeneity: each clone draws its own probabilities from Dirichlet($\kappa\theta$).
+\end{center}
+\fig{bias_heatmap}{1.0}{Mean error of the MLE of \BA, $m_{BA}$ and the growth rate $\rho$, and mean absolute error over all 12 probabilities (right), per scenario (rows) and truth (columns). In the right panel the ``base'' row (correctly specified) is the sampling noise at $n$ = 512, largest for the prior draws P1--P4.}
+\fig{dediff_fpr}{0.9}{False-positive rate of the dedifferentiation test on data without dedifferentiation: standard model (red, orange) and the model with the true founders, typing error or capture (hatched). Dashed: nominal 5\%.}
+\begin{itemize}
+\item \textbf{Typing errors: invisible, harmless for the estimates, fatal for the test.} A KRT20$^+$ cell scored LGR5$^+$ looks exactly like a B cell that switched back. The transition estimates barely move, and neither goodness of fit nor the extended model detects the error (4--10\%), but the dedifferentiation test rejects in 98--100\% of experiments without dedifferentiation, even at 0.5\% mis-scoring. With the true error rate in the model the false-positive rate returns to 0--9\%. Only an independently measured error rate can protect a dedifferentiation claim (\S\ref{sec:dediff-ratio}).
+\item \textbf{Unknown founders and doublets bias \BA{} confidently.} B-founded clones and two-cell clones look like ``B divides'' to a model that assumes one A founder, so the fit trades \BA{} for B divisions (the weak direction of \S\ref{sec:weakdirs}): \BA{} drops by 0.4--0.8 for T1, T3, T4. With 30\% B founders NUTS gives T1 \BA{} = 0.02 $\pm$ 0.02 against 0.80. A 70/30 founder mix is hard to see (goodness of fit 11\%, extended LRT 58\%); doublets are seen (51--100\%). Estimating the founder mixture and doublet fraction removes the bias (largest \BA{} bias 0.06--0.13; coverage 0.89--0.93) even though the founder fraction itself is poorly determined (estimates 0.24--0.81 for 0.7).
+\item \textbf{Organoid heterogeneity is the most damaging biology}: with $\kappa$ = 10 no \BA{} interval covers the truth, $\rho$ is 7.5\% too high and the dedifferentiation test always fires; even mild heterogeneity ($\kappa$ = 50) gives 28--45\% false positives. It is easily detected (82--100\%), but the model has no fix yet.
+\item \textbf{Asynchrony, density dependence and time-varying growth} bias \BA{} or $m_{BA}$ and $\rho$ (by up to 7\%) and are detected in 69--100\% of datasets; asynchrony and slowing growth also inflate the dedifferentiation test (11--19\%).
+\item \textbf{Cell loss} inflates the \BA{} error 1.5--1.9$\times$, is nearly undetectable, and leaves the test intact.
+\item \textbf{Over all 12 probabilities} the error (mean absolute, 0.059 when correctly specified) is unchanged by typing errors (0.059--0.066), rises by 40--55\% with unknown founders or 10\% cell loss (0.084--0.091), and 1.8--2.5-fold with doublets, heterogeneity, asynchrony, density dependence or 20\% cell loss (0.106--0.150; worst truth 0.16--0.22).
+\item \textbf{The identifiable summaries are robust to assay problems}: $\rho$ moves by less than 2\% on average (at most 5\%, doublets on T5) and the stable A fraction by less than 0.03 under founders, doublets, typing errors and cell loss; under biology $\rho$ moves more (heterogeneity, density, slowing growth: up to 8--14\% for some truths).
+\item Even correctly specified, the 95\% profile interval of \BA{} covers in 78\% of the 27 checked cases at $n$ = 512 here (95\% over all of \S\ref{sec:fu-profile}); the misses were checked with 20 extra optimiser starts and are genuine.
+\end{itemize}
+\fig{detection_power}{0.9}{Can the misspecification be seen in the data? Detection rate of the goodness-of-fit test (grey) and of the likelihood-ratio test against the extended model (blue, where one exists), $n$ = 512. ``base'': false-alarm rate.}
+\subsection{Unknown progenitors in the posterior}\label{sec:freefounder}
+In real organoids the progenitor of a clone is not observed; only its endpoint counts are. The exact likelihood already sums over the hidden progenitor of each clone, $G = \sum_m \pi_m \big(p_A F_A + (1-p_A) F_B\big)^m$ (and the same for the detection probability), so we made the progenitor distribution free in the NUTS pipeline: $p_A$ = P(founder is A) and the doublet fraction $\pi_2$, both with Uniform(0,\,1) priors (opt-in \code{'~law.fixed.founder'}, \code{law.founder_sizes=[1,2]}; exact gradients for both kernels, about 1.4$\times$ the cost; \code{ExactLikelihood.progenitor_posterior} gives P(founder $\mid$ counts) per clone; note \res{docs/free_founder/README.md}). Runs: $n$ = 512, dataset 0, all 9 truths, for the founder scenarios above (41 runs; controls reduced for time: no doublet-free control, the ``no doublets but $\pi_2$ free'' check on T1 and T2 only).
+\fig{founder_posteriors}{0.82}{Posterior mean and 90\% interval of $p_A$ (left) and of the doublet fraction $\pi_2$ (right) per scenario and truth; dashed: truth.}
+\fig{b_to_a}{1.0}{\BA{} under the free-progenitor model (blue: $p_A$ free; green: $p_A$ and $\pi_2$ free) and under the all-A model (orange, NUTS of the misspecification study), with the MLEs of the all-A ($\times$) and extended (+) models; bars: posterior mean and 90\% interval; black: truth.}
+\begin{center}\footnotesize\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}lrrrrrrl@{}}\toprule
+ & \multicolumn{3}{c}{\BA} & \multicolumn{3}{c}{90\% coverage (of 9 truths)} & all 12: MAE \\
+data, model & mean bias & max $|$bias$|$ & max $|z|$ & \BA & $m_{BA}$ & $\rho$ & (covered) \\\midrule
+founders 70/30, all-A model & $-0.24$ & 0.78 & 38.6 & 5 & 6 & 5 & 0.085 (66\%) \\
+founders 70/30, $p_A$ free & $-0.09$ & 0.28 & 2.8 & 5 & 9 & 7 & 0.046 (79\%) \\
+doublets + 70/30, $p_A$ and $\pi_2$ free & $-0.08$ & 0.26 & 2.4 & 7 & 9 & 9 & 0.063 (82\%) \\
+doublets (A founders), $p_A$ and $\pi_2$ free & $-0.17$ & 0.61 & 3.5 & 4 & 9 & 8 & 0.065 (82\%) \\
+all-A data, $p_A$ free & $-0.17$ & 0.54 & 3.2 & 6 & 6 & 9 & 0.074 (69\%) \\\bottomrule
+\end{tabular}
+\end{center}
+\begin{itemize}
+\item \textbf{Over all 12 probabilities} (last column: mean absolute error of the posterior mean, share of the 12 covered by the 90\% interval) a free $p_A$ also helps: 0.046 (79\%) against 0.085 (66\%) for the all-A model on 70/30 data; with doublets 0.063--0.065 (82\%); on all-A data a free $p_A$ costs a little (0.074, 69\%; the all-A MLE on these data: 0.059).
+\item \textbf{The confidently wrong answer disappears.} With 30\% B founders, \BA{} for T1 moves from 0.02 ($z = -39$, all-A model) to 0.52 [0.36, 0.69]; T3 from 0.06 to 0.38, T4 from 0.04 to 0.57; the worst $|z|$ drops from 39 to 2.4--3.5, and $m_{BA}$ is covered in every truth.
+\item \textbf{But the progenitor fraction is hardly learnable from endpoint counts}, as expected from the parent-swap theory (\S\ref{sec:weakdirs}): for the prior draws the posterior of $p_A$ is close to its prior (90\% intervals about [0.05, 0.95]); for T1--T4 it settles at 0.2--0.4 against 0.7. The doublet fraction, in contrast, is identified (covered in 5--7 of 9 truths) and the model does not invent doublets where there are none ($\pi_2$ = 0.005 [0, 0.014] for T1).
+\item \textbf{Freedom has a price.} \BA{} of T1--T4 stays 0.15--0.35 below the truth (two branches along the parent-swap ridge: $p_A \approx$ 0.2--0.6 with \BA{} near the truth, and $p_A \approx$ 0.9 with \BA{} $\approx$ 0, 3--12 nats lower), and on correctly specified all-A data a free $p_A$ widens and lowers \BA{} (T1: 0.26 [0.03, 0.62] against 0.80) where the all-A model was nearly unbiased. Growth rate and stable composition stay robust (bias $\le$ 0.02 and 0.005).
+\item \textbf{Per-clone progenitor probabilities are weak for type, useful for doublets}: ranking clones by P(founder = A $\mid$ counts) gives AUC $\approx$ 0.6 (0.68--0.75 for T1--T4, $\approx$ 0.5 for the prior draws), slightly better at early endpoints (0.64 at generation 4 vs 0.60 at 10), and is miscalibrated where $p_A$ is underestimated; doublets are recognised with AUC 0.78.
+\item Mixing is harder with free progenitors (20 of 41 runs flagged: $\hat R > 1.05$ or chains on different branches), so individual runs are indicative; the pattern is consistent across truths and with the MLE study.
+\end{itemize}
+\textbf{Consequence.} Treating the progenitor as unknown is the honest model when founders are not recorded, and it removes the confident bias, but the endpoint counts cannot tell an A-founded clone from a B-founded one well enough to estimate \BA{} precisely. Recording the founder type at seeding (or sorting founders) is what makes \BA{} identifiable --- the design of \S\ref{sec:design}.
+
+\textbf{For the lab.} (i) Sort single cells and record each founder's type --- doublets and unknown founders bias \BA{} confidently and are only partly visible, and modelling unknown founders removes the bias but not the uncertainty (\S\ref{sec:freefounder}). (ii) Measure the KRT20$^+$$\to$LGR5$^+$ mis-scoring rate independently before any claim of dedifferentiation; the data cannot reveal it. (iii) Check organoid-to-organoid heterogeneity (replicate wells, overdispersion of clone sizes) and size- or time-dependent growth before fitting; if present, the current model's \BA{} and dedifferentiation test are not reliable. (iv) Match time points to division counts.
+
+% ====================================================================== founder distribution
+\section{Seeding with unknown founders: number and type of founding cells}\label{sec:founders}
+\begin{keybox}
+\textbf{In short.} If clones are seeded by 1--5 cells of unknown type and only endpoint counts are observed, the founder distribution must be estimated with the transitions. Compared with the standard setting (one A cell per clone, known), at the same number of clones: \textbf{single cells of unknown type} cost 12--27\% of the information on the weakest direction; \textbf{seeding mostly single cells} (70\% single) costs 54--65\%, \textbf{1--3 cells} 74--76\%, \textbf{1--5 cells} 85--87\%. \BA{} and $m_{BA}$ lose most; growth rate and stable composition little. \textbf{Over all 12 probabilities} (total variance) the losses are 5--20\% for single cells, about 50\% for mostly single cells, about 70\% for 1--3 and 78--84\% for 1--5 cells (XG2, founders estimated); in simulation (maximum likelihood, 1--5 founder cells) the mean absolute error over the 12 is 0.076 / 0.100 / 0.141 (T1 / T3 / P3) with the founder distribution estimated against 0.035 / 0.062 / 0.128 with it known. Knowing the founder distribution recovers about half of the loss, and a known mixture of single A and B founders can even \emph{beat} single A founders for \BA{} (up to 3$\times$ smaller variance with B founders). The number of founder cells is learnable from endpoint counts; their types are not, except for some truths or with early time points. \textbf{Lab knowledge of the seeding} used as a prior ($p_A$ known to $\pm$0.05--0.10) recovers half to most of the loss on the XG2 endpoints: in simulation the error over all 12 probabilities falls to about the known-founder level for T1 and T3 with multi-cell seeding (T1, 1--5 cells: 0.076 flat, 0.037 with the prior, 0.035 known); on early time points the counts already pin the founders and only a much sharper measurement helps. A confidently wrong prior is not detected by the data. Several seeding conditions help only modestly. \textbf{Seed single cells.}
+\end{keybox}
+Code \code{scripts/founder_distribution/}; note \res{docs/founder_distribution/README.md}; results \res{results/exact_gw/founder_distribution/}. Local machine only.
+
+\subsection{Setting and method}
+Each clone is founded by $m$ cells with probability $\pi_m$ ($m$ = 1--5), each founder cell independently A with probability $p_A$; only the (A, B) counts at the endpoints are observed. The exact likelihood sums over the hidden founders, $G = \sum_m \pi_m\,(p_A F_A + (1-p_A) F_B)^m$ (likewise for detection), and the NUTS pipeline can estimate $p_A$ and the $\pi_m$ (\S\ref{sec:freefounder}). Founder distributions studied: size distributions S1 all single, S2 mostly single ($\pi$ = 0.70, 0.20, 0.07, 0.02, 0.01), S3 uniform over 1--3, S4 uniform over 1--5, crossed with $p_A$ from 1 to 0. Two designs: the XG2 endpoints 4/6/8/10 and the early R1 time points (generations 1, 2, 10 with shares 1/4, 5/8, 1/8, no founder labels).
+
+\textbf{Information.} The Fisher information was extended to founders of size 1--5 (the $m$-founder law is $S^m$ on the FFT grid, $S = p_A F_A + (1-p_A)F_B$), in 15 coordinates: the 10 transition directions, $p_A$ and four size coordinates. ``Known'' uses only the transition block; ``estimated'' removes the founder parameters as nuisances (Schur complement). Validation: single A founders reproduce the earlier information to $3\times10^{-13}$, single mixed founders the computation of \S\ref{sec:design} to $3\times10^{-13}$, and the score matches the exact log-likelihood gradient ($7\times10^{-14}$) and finite differences ($10^{-8}$). The whole grid (9 truths $\times$ 32 founder distributions $\times$ 2 designs $\times$ known/estimated) takes two minutes.
+
+\textbf{Prior on the founder parameters.} In the NUTS runs the founder parameters are two more probability rows of the model, treated exactly like the transition rows: \code{founder} = ($p_A$, $1-p_A$) and \code{founder\_size} = ($\pi_1, \dots, \pi_K$), each with a Dirichlet prior whose concentration comes from \code{law.concentration} (default 1). All runs of this section and of \S\ref{sec:freefounder} use the default, i.e.\ \textbf{flat priors}: $p_A \sim$ Uniform(0, 1) and $\pi \sim$ flat Dirichlet over the allowed founder sizes. As for the transitions, each row is sampled through stick-breaking Betas, Beta($\alpha_i$, $\alpha_{i+1} + \dots + \alpha_K$) (for five sizes: Beta(1, 4), Beta(1, 3), Beta(1, 2), Beta(1, 1)), on the logit scale and jointly with the 12 transition probabilities. The founders of each clone are never sampled: the likelihood sums over them exactly through $G$, and the per-clone founder probabilities are computed afterwards by Bayes' rule, $P(\text{founders} \mid \text{counts}, \theta)$, averaged over posterior draws. The maximum-likelihood fits put \emph{no} prior on the founder parameters (prior draws only choose the starting points), and the Fisher ``estimated'' setting treats them as unknown nuisances without a prior. Two assumptions are built in: the range of founder sizes is known (the fits are given the true support, $\{1\}$, $\{1, 2, 3\}$ or $\{1, \dots, 5\}$, and estimate only the probabilities within it), and every founder cell's type is drawn independently with the same $p_A$. Lab knowledge of the seeding (a measured sort purity, the dilution statistics) can replace the flat prior by an informative one, between ``estimated'' and ``known''; \S\ref{sec:labprior} quantifies what it is worth.
+
+\subsection{How the founder distribution changes the information}
+\begin{center}\scriptsize\setlength{\tabcolsep}{2pt}
+\begin{tabular}{@{}llrrrrrrrrll@{}}\toprule
+ & & \multicolumn{3}{c}{known} & \multicolumn{5}{c}{estimated} & \multicolumn{2}{c}{founder param.\ (sd, T / P)} \\
+design & founders & $\lambda_{\min}$ & var(\BA) & all 12 & $\lambda_{\min}$ & var(\BA) & var($m_{BA}$) & var($\rho$) & all 12 & $p_A$ & mean size \\\midrule
+XG2 & single, $p_A$ 1.0 (reference) & 1 & 1 & 1 & 0.86 & 0.94 & 0.82 & 0.92 & 0.90 & 0.09 / 1.15 & --- \\
+ & single, $p_A$ 0.7 & 1.05 & 1.03 & 0.62 & 0.76 & 0.77 & 0.77 & 0.90 & 0.46 & 0.12 / 0.86 & --- \\
+ & single, $p_A$ 0.5 & 1.04 & 1.35 & 1.03 & 0.73 & 0.72 & 0.82 & 0.90 & 0.87 & 0.14 / 0.91 & --- \\
+ & single, $p_A$ 0 (all B) & 1.07 & 3.00 & 1.03 & 0.88 & 1.27 & 1.01 & 0.86 & 0.95 & 0.08 / 1.72 & --- \\
+ & mostly single, $p_A$ 1.0 & 0.79 & 0.72 & 0.83 & 0.46 & 0.55 & 0.34 & 0.53 & 0.51 & 0.12 / 1.69 & 0.06 / 0.23 \\
+ & mostly single, $p_A$ 0.7 & 0.67 & 0.68 & 0.68 & 0.35 & 0.40 & 0.34 & 0.52 & 0.47 & 0.18 / 1.34 & 0.07 / 0.14 \\
+ & 1--3 cells, $p_A$ 0.9 & 0.52 & 0.41 & 0.56 & 0.24 & 0.32 & 0.24 & 0.77 & 0.32 & 0.17 / 2.22 & 0.15 / 0.47 \\
+ & 1--5 cells, $p_A$ 0.9 & 0.34 & 0.28 & 0.40 & 0.14 & 0.18 & 0.12 & 0.78 & 0.17 & 0.22 / 3.17 & 0.37 / 1.22 \\
+ & 1--5 cells, $p_A$ 0.5 & 0.29 & 0.26 & 0.18 & 0.15 & 0.15 & 0.13 & 0.76 & 0.10 & 0.38 / 2.53 & 0.49 / 0.63 \\\midrule
+R1 & single, $p_A$ 1.0 (reference) & 1 & 1 & 1 & 0.94 & 0.84 & 0.77 & 0.98 & 0.88 & 0.02 / 0.16 & --- \\
+ & single, $p_A$ 0.7 & 0.82 & 0.70 & 0.62 & 0.53 & 0.46 & 0.49 & 0.84 & 0.46 & 0.03 / 0.09 & --- \\
+ & mostly single, $p_A$ 0.9 & 0.94 & 0.64 & 0.76 & 0.52 & 0.52 & 0.49 & 0.60 & 0.47 & 0.03 / 0.14 & 0.02 / 0.04 \\
+ & 1--5 cells, $p_A$ 0.5 & 0.21 & 0.24 & 0.18 & 0.08 & 0.09 & 0.10 & 0.93 & 0.10 & 0.07 / 0.08 & 0.13 / 0.08 \\\bottomrule
+\end{tabular}
+
+Median over the 9 truths of the information relative to single, known A founders on the same design and the same total number of clones: $\lambda_{\min}$ = weakest prior-whitened eigenvalue; var($\cdot$) columns give reference variance / variance, so 1 = as precise as the reference, below 1 = worse; ``all 12'' = total variance of the 12 probabilities (reference / setting). Founder-parameter sd at $n$ = 512 clones per endpoint (sd $\gg$ 0.3 means not identified). Full grid: \res{docs/founder_distribution/tables/fisher_key.md}.
+\end{center}
+\fig{info_btoa}{1.0}{Information on \BA{} (1/variance, median over truths) relative to single known A founders, over founder size distribution (rows) and share of A founders $p_A$ (columns), for the XG2 design (top) and the early R1 time points (bottom), founders known (left) or estimated (right). Blue: more information than the reference; red: less.}
+\fig{info_all12}{1.0}{The same for all 12 probabilities: total asymptotic variance of the 12 transition probabilities, reference / setting (median over the truths). 1 = as precise as single known A founders on the same design; below 1 = less precise.}
+\begin{itemize}
+\item \textbf{Number of founders matters most.} Even when known, seeding several cells dilutes the information: mostly single cells keep 67--80\% of the weakest-direction information, 1--3 cells about half, 1--5 cells about a third. A clone founded by several cells mixes their lineages, which is exactly the ``which parent'' ambiguity of \S\ref{sec:weakdirs}.
+\item \textbf{Estimating the founder distribution costs about as much again}: the weakest direction drops to 0.73--0.88 of the reference with single cells of unknown type, 0.35--0.46 with mostly single cells, 0.24--0.26 with 1--3 and 0.13--0.15 with 1--5 cells. \BA{} and $m_{BA}$ lose most; the growth rate and the stable composition lose little (0.5--0.9). \textbf{Over all 12 probabilities} (total variance) the picture is milder but the same: for $p_A \ge 0.5$, single cells of unknown type keep 0.80--0.90 of the reference precision, mostly single cells 0.46--0.51, 1--3 cells 0.30--0.32 and 1--5 cells 0.16--0.18 (known: 1.0, 0.66--0.83, 0.42--0.63, 0.28--0.45).
+\item \textbf{A known mixture of single A and B founders can be more informative than A founders alone}: on the XG2 endpoints, \BA{} is up to 3$\times$ better determined with single B founders (4.5$\times$ for T1--T4, no gain for the prior draws), because a B-founded clone shows B's fate directly. On the early time points, where A founders are already very informative, a mixture is worse (0.58--0.96).
+\item \textbf{What can be learnt about the founders from endpoint counts}: the mean number of founder cells, for mostly-single seeding (sd 0.06--0.23 clones); the type proportion $p_A$ only for T1--T5 on the XG2 endpoints (sd 0.08--0.14; for P1--P4 the posterior stays at the prior), but for all truths with the early time points (sd 0.02--0.16).
+\end{itemize}
+
+\subsection{Several seeding conditions}
+\fig{multi_conditions}{1.0}{Several seeding conditions that share the transitions but each have their own unknown founder distribution, against single conditions with the same total number of clones: ratio of the weakest-direction information (combined / single), per truth (points) and median (bar), for the XG2 endpoints (left) and the early time points (right).}
+Combining an A-enriched ($p_A$ = 0.9) and an A-depleted condition (0.3), each with its founder distribution estimated, beats one condition at the average $p_A$ (weakest direction $\times$1.21 on XG2, $\times$1.75 on the early time points; \BA{} variance $\times$1.28 and $\times$2.15), but is about as good as the enriched condition alone ($\times$0.84--1.09). Sorted-A plus sorted-B conditions of unknown purity are the most useful combination on the early time points ($\times$3.6 against one 50/50 condition). Mixing seeding sizes across conditions (single cells + 1--5 cells) is worse than single cells alone ($\times$0.62). \textbf{Over all 12 probabilities} the picture is the same: the enriched + depleted pair reduces the total variance $\times$1.20 (XG2) and $\times$1.93 (early time points) against one condition at the average $p_A$, but only $\times$1.03--1.08 against the enriched condition alone; sorted A + sorted B conditions of unknown purity give $\times$3.1 on the early time points; mixed seeding sizes $\times$0.63. In a joint maximum-likelihood fit of two conditions (12 datasets) the \BA{} error fell from 0.15 to 0.08--0.10 (T1, P3) against one condition at the average $p_A$, and the mean absolute error over all 12 probabilities from 0.033 to 0.026 (T1) and from 0.116 to 0.092 (P3). The NUTS pipeline cannot yet fit several conditions jointly (one founder distribution per likelihood); a wrapper is proposed in the note.
+
+\subsection{Lab knowledge as a prior on the founders}\label{sec:labprior}
+Between ``estimated'' (flat prior) and ``known'' (fixed) lies the realistic case: the lab has measured the seeding, approximately. We encode this as an informative prior with its mode at the true value and strength $\kappa$: $p_A \sim$ Beta($1 + \kappa p_A$, $1 + \kappa (1 - p_A)$) and $\pi \sim$ Dirichlet($1 + \kappa \pi$) on the true support. $\kappa$ = 20 means $p_A$ known to about $\pm$0.10 (one sd, at $p_A$ = 0.7), $\kappa$ = 100 to $\pm$0.045, $\kappa$ = 1000 to $\pm$0.015. In the information calculation the prior precision (Gaussian approximation of the Beta / Dirichlet) is added to the founder block before the founder parameters are removed as nuisances. Code \code{scripts/founder\_distribution/lab\_prior\_fisher.py}; table \res{docs/founder_distribution/tables/lab_prior_fisher_summary.csv}.
+\fig{lab_prior}{1.0}{Information relative to single known A founders (same design, same number of clones; median over the 9 truths) as the prior on the founder distribution sharpens from flat (E, estimated) to the truth (K, known). Second tick line: prior sd of $p_A$ at $p_A$ = 0.7. Colours: founder size distribution; solid $p_A$ = 0.7, dashed 0.5. Left: \BA{}; right: total variance of the 12 probabilities.}
+\begin{center}\footnotesize\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}llllll@{}}\toprule
+design & seeding & \multicolumn{4}{c}{share of the estimated $\to$ known loss recovered, \BA{} / all 12} \\
+ & & $\kappa$ = 10 ($\pm$0.13) & 20 ($\pm$0.10) & 100 ($\pm$0.045) & 1000 ($\pm$0.015) \\\midrule
+XG2 & single, $p_A$ 1.0 & 0.64 / 0.68 & 0.84 / 0.87 & 0.99 / 0.99 & 1 / 1 \\
+ & mostly single, $p_A$ 0.7 & 0.40 / 0.47 & 0.51 / 0.58 & 0.74 / 0.75 & 0.93 / 0.94 \\
+ & 1--3 cells, $p_A$ 0.7 & 0.61 / 0.59 & 0.68 / 0.68 & 0.87 / 0.86 & 0.98 / 0.98 \\
+ & 1--5 cells, $p_A$ 0.5 & 0.51 / 0.52 & 0.63 / 0.61 & 0.83 / 0.81 & 0.96 / 0.96 \\
+R1 times & single, $p_A$ 1.0 & 0.59 / 0.16 & 0.82 / 0.37 & 0.99 / 0.92 & 1 / 1 \\
+ & mostly single, $p_A$ 0.7 & 0.04 / 0.06 & 0.07 / 0.10 & 0.26 / 0.33 & 0.77 / 0.78 \\
+ & 1--3 cells, $p_A$ 0.7 & 0.07 / 0.09 & 0.12 / 0.15 & 0.37 / 0.37 & 0.84 / 0.80 \\
+ & 1--5 cells, $p_A$ 0.5 & 0.08 / 0.07 & 0.12 / 0.11 & 0.32 / 0.30 & 0.76 / 0.76 \\\bottomrule
+\end{tabular}
+
+$(\text{gain}_\kappa - \text{gain}_E) / (\text{gain}_K - \text{gain}_E)$: 0 = no better than a flat prior, 1 = as good as known; median over the 9 truths; in brackets the prior sd of $p_A$ at $p_A$ = 0.7.
+\end{center}
+\begin{itemize}
+\item \textbf{On the XG2 endpoints a rough measurement already pays.} There the endpoint counts hardly determine the founder parameters (sd of $p_A$ 0.26--0.80 for multi-cell seeding, Fisher, 512 clones per endpoint), so even a prior to $\pm$0.10 ($\kappa$ = 20) recovers about half or more (0.5--0.7) of the estimated $\to$ known loss, for \BA{} and for all 12 probabilities alike; $\pm$0.045 recovers three quarters or more, $\pm$0.015 almost all. Single cells of unknown type need only $\pm$0.10 to be nearly as good as known (0.84--0.87).
+\item \textbf{On the early time points only a precise measurement helps.} With generations 1--2 the counts themselves pin the founders (sd of $p_A$ 0.03--0.07), so a prior adds information only if it is sharper than that: $\pm$0.10 recovers about a tenth of the loss, $\pm$0.045 about a third, $\pm$0.015 three quarters (multi-cell seeding).
+\item \textbf{Lab knowledge cannot undo multi-cell seeding}: even known, 1--5 founder cells keep only about a quarter of the \BA{} information of single A founders; the prior moves along the estimated $\to$ known segment, not beyond it.
+\end{itemize}
+
+\subsection{Checks by simulation ($n$ = 512 per endpoint)}
+Same datasets for every model: truths T1, T3, P3; 512 detected clones per XG2 endpoint. Models: founder distribution \emph{estimated} with a flat prior (maximum likelihood, or NUTS), estimated with \emph{lab knowledge} (MAP: the likelihood times the informative founder prior of \S\ref{sec:labprior}, $\kappa$ = 20 or 100), with a \emph{wrong} confident prior ($\kappa$ = 100, $p_A$ centred 0.15 below the truth), or \emph{known} (fixed at the truth). The transitions keep their flat prior in every model, so the MAP differs from the MLE only through the founder prior.
+\fig{founder_sim_heatmap}{1.0}{Errors of the simulation check as heatmaps (the numbers of the two tables below). Rows: truth and seeding; columns: founder model. Left: point estimates (MLE with flat founder prior, MAP with lab knowledge $\kappa$ = 20 / 100, MAP with a wrong confident prior, MLE with known founders), 12 datasets per cell; right: NUTS posterior means, dataset 0. Top: \BA{}; bottom: mean absolute error over the 12 probabilities. One colour scale per measure, shared by left and right; lighter = smaller error. $\ast$: the 90\% interval of \BA{} misses the truth; grey: not run.}
+
+\textbf{Point estimates} (12 datasets per case): \BA{} RMSE and mean absolute error over the 12 probabilities.
+\begin{center}\scriptsize\setlength{\tabcolsep}{2.2pt}
+\begin{tabular}{@{}llccccc|ccccc@{}}\toprule
+ & & \multicolumn{5}{c|}{\BA{} RMSE} & \multicolumn{5}{c}{all 12: mean $|$estimate $-$ truth$|$} \\
+truth & seeding & MLE & MAP & MAP & MAP & known & MLE & MAP & MAP & MAP & known \\
+ & & flat & $\kappa$ 20 & $\kappa$ 100 & wrong & & flat & $\kappa$ 20 & $\kappa$ 100 & wrong & \\\midrule
+\tabinput{tables/founder_sim_point.tex}\bottomrule
+\end{tabular}
+
+Known = MLE with the founder distribution fixed at the truth. Tables: \res{docs/founder_distribution/tables/lab_prior_map_summary.md}.
+\end{center}
+
+\textbf{Posterior means} (NUTS, dataset 0, one run per case): $|$posterior mean $-$ truth$|$ for \BA{} and averaged over the 12 probabilities.
+\begin{center}\scriptsize\setlength{\tabcolsep}{2.5pt}
+\begin{tabular}{@{}llcccc|cccc@{}}\toprule
+ & & \multicolumn{4}{c|}{\BA{}: $|$posterior mean $-$ truth$|$} & \multicolumn{4}{c}{all 12: mean $|$posterior mean $-$ truth$|$} \\
+truth & seeding & flat & $\kappa$ 100 & wrong & known & flat & $\kappa$ 100 & wrong & known \\\midrule
+\tabinput{tables/founder_sim_nuts.tex}\bottomrule
+\end{tabular}
+
+$^*$ the 90\% posterior interval of \BA{} misses the truth; --- = not run. Table: \res{docs/founder_distribution/tables/lab_prior_nuts.csv}.
+\end{center}
+\begin{itemize}
+\item \textbf{Maximum likelihood, flat founder prior}: with the founder distribution estimated, the \BA{} error grows from 0.08--0.12 (known) to 0.26 / 0.29 / 0.37 for T1 with mostly single / 1--3 / 1--5 cells, because 25--58\% of the T1 and T3 fits with multi-cell seeding land on the other branch of the parent-swap ridge; P3 is barely affected (0.12--0.19 either way). Over all 12 probabilities the mean absolute error with the founder distribution estimated vs known is 0.025--0.076 vs 0.027--0.035 for T1, 0.052--0.100 vs 0.039--0.071 for T3 and 0.10--0.14 vs 0.08--0.13 for P3 (same order of seedings; single cells cost little, multi-cell seeding up to twice the error). The mean founder size is recovered (error 0.03--0.33 cells); $p_A$ is not (error 0.16--0.50), except for T1 and T3 with single cells (0.03, 0.09). The \BA{} RMSE is dominated by the 1--7 fits out of 12 that land on the far branch, so differences below about 0.1 between columns are noise.
+\item \textbf{Lab knowledge (MAP)}: the founders are then pinned ($p_A$ error 0.00--0.05 with $\kappa$ = 20, $\le$ 0.013 with $\kappa$ = 100; mean founder size error $\le$ 0.08 and $\le$ 0.05 cells), and for T1 and T3 with mostly single or 1--5 cells the transitions reach about the known-founder error: all 12 probabilities 0.048 / 0.076 $\to$ 0.032 / 0.037 for T1 (known 0.029 / 0.035) and 0.060 / 0.100 $\to$ 0.042 / 0.064 for T3 (known 0.039 / 0.062); \BA{} RMSE 0.26 / 0.37 $\to$ 0.12 / 0.12 for T1 (known 0.12 / 0.12) and 0.20 / 0.30 $\to$ 0.08 / 0.15 for T3 (known 0.07 / 0.15). $\kappa$ = 20 ($\pm$0.10) already gets most of it. With 1--3 cells at $p_A$ = 0.9 the prior does not reduce the \BA{} error (T1 0.24 against 0.08 known; T3 0.26--0.31, as poor as known), and for P3 nothing changes (all 12: 0.09--0.14 in every column): there the error comes from the truth's own weak directions, not from the founders. With single founders the prior only brings the fit to the known-founder one.
+\item \textbf{A wrong confident prior} ($p_A$ centred 0.15 too low, $\pm$0.045) is not corrected by the data: the estimated $p_A$ stays 0.13--0.15 off, so the counts do not reveal the mistake. With multi-cell seeding it is still better than the flat prior (T1 all 12: 0.046 / 0.035 / 0.051 against 0.048 / 0.059 / 0.076; \BA{} RMSE 0.19 / 0.11 / 0.18 against 0.26 / 0.29 / 0.37), but with single founders, where the flat fit loses little, it costs (T1 all 12: 0.047 against 0.025; 25\% of the fits on the far \BA{} branch against 8\%).
+\item \textbf{NUTS} (20 runs, dataset 0; reduced to fit on one machine): with flat founder priors the \BA{} 90\% interval covers the truth in 6 of 8 runs with the founders known and 3 of 8 with them estimated (all 12 probabilities: mean absolute error of the posterior mean 0.060 vs 0.075, 74\% vs 75\% of them covered); the misses are T1 and T3, biased low, as with unknown single founders (\S\ref{sec:freefounder}). With lab knowledge ($\kappa$ = 100) the posterior means move toward the known-founder ones: T1 mostly single \BA{} error 0.26 $\to$ 0.13 (known 0.15), all 12 0.071 $\to$ 0.047 (0.052); T1 1--5 cells 0.47 $\to$ 0.24 (wrong prior 0.30, known 0.19), all 12 0.097 $\to$ 0.060 (0.073, 0.052); P3 unchanged (0.08; 0.064 $\to$ 0.060). The posterior sd of $p_A$ is then 0.04--0.05, the prior's (flat: 0.18--0.28), and the T1 intervals for \BA{} still miss low, as they do with known 1--5 founders: the prior removes the founder part of the error, not the ridge. Where the posterior has one mode (P3, and the growth rate everywhere) its sd matches the Fisher prediction; for T1 and T3 it is 1.1--3$\times$ wider. None of the 20 runs met all stopping targets within 400 draws per chain (rank $\hat R$ 1.01--1.26), so single runs are indicative.
+\item \textbf{Per-clone founders}: the number of founder cells of a clone is recognisable from its counts (AUC 0.86--0.94); its founder types are not (AUC 0.53--0.73), and with $p_A$ estimated those probabilities are poorly calibrated.
+\end{itemize}
+
+\textbf{For the lab.} (i) Seed single cells: every extra founder cell costs more information than not knowing the founder type. (ii) Record the founder type or measure the sort purity when possible (\S\ref{sec:design}); a known share of B-founded clones is an asset, an unknown one a cost. (iii) If founders cannot be recorded, add early time points (generations 1--2): they make the type proportion learnable from the counts. (iv) Several seeding conditions are worth it only instead of one mixed population; a single A-enriched, single-cell condition does as well with the same number of clones. (v) If several cells or unsorted cells must be seeded, measure the seeding (share of A cells in the suspension to $\pm$0.05--0.10, cells per well) and use it as a prior on the founder distribution: with late endpoints it brings the error close to that of known founders. Check the measurement independently --- a wrong one is not revealed by the counts.
+
+% ====================================================================== structured truths
+\section{Structured truths: no death, no switching, mirror roles}\label{sec:structured}
+\begin{keybox}
+\textbf{In short.} Three structured versions of the nine truths test how the weak directions depend on the biology. \textbf{No death (D0)}: inference finds death $\approx$ 0 by itself and the ``B switches back vs B dies'' ridge disappears; for the reference biology (T1--T4) the error over all 12 probabilities halves and the \BA{} error falls from 0.07--0.27 to 0.04--0.07 (MLE), to 0.03--0.05 if death is fixed at 0; no fit lands on the far ridge branch. \textbf{No switching (S0)}: where B never divides (T1, T2, T4) B becomes terminal and everything is easy (weakest direction 20--54 instead of 139--332 clones per endpoint); where B divides, the ``which parent'' swaps get harder (P1: weakest direction 1.8k $\to$ 8.2k). \textbf{Mirror roles (M)}: two types with the same rules (labels swapped) are the hardest case for the standard model (P1: weakest direction 57k clones per endpoint, 70\% of the \BA{} fits on the far branch), because which parent did what is then almost invisible; building the symmetry into the model (B tied to A) halves the error over all 12. Growth rate and stable composition stay easy in every case. \textbf{The weak directions are the parent swaps; any structure that makes A and B behave differently, or that is known and built into the model, removes them.}
+\end{keybox}
+Code \code{scripts/death\_free/}; results \res{results/exact_gw/death_free/}; tables \res{docs/death_free/tables/}. Local machine only.
+
+\subsection{Setting}
+Each structured dataset is built from the nine XG2 truths:
+\begin{itemize}
+\item \textbf{D0, no death}: $A_\dagger = B_\dagger = 0$, the other outcomes of each row rescaled proportionally. No clone goes extinct, so every clone is detected; growth rises (generation-10 mean clone size 1.6--7$\times$, at most $\approx$420 cells) while the stable composition is unchanged.
+\item \textbf{S0, no switching}: $A\to B = B\to A = 0$, rows rescaled. B gives rise to A only by dividing; for T1, T2, T4 (B never divides) B becomes terminal (dies or persists).
+\item \textbf{M, mirror roles}: B follows A's rules with the labels swapped ($B_\dagger = A_\dagger$, $B\to B = A\to A$, $B\to A = A\to B$, $B\to AA = A\to BB$, $B\to AB = A\to AB$, $B\to BB = A\to AA$); stable composition 50/50. T1--T3 share A's row, so their mirrors coincide (T1 stands for all three): seven truths.
+\end{itemize}
+Note that \BA{} itself changes: it is 0 in S0 and equals A's switch probability (0.05--0.10) in M, so the error over all 12 probabilities is the fairer comparison across datasets. Each dataset is fitted with the standard model (12 probabilities, flat prior) and with the true structure built in: death fixed at 0 (D0), switching fixed at 0 (S0), or B's row tied to the mirror of A's (M, 5 free probabilities). Information: Fisher, prior-whitened, A-founded clones at generations 4/6/8/10 (\S\ref{sec:weakdirs}); for a constrained model, on its own directions. Simulation: the misspecification study's simulator, 512 detected clones per endpoint, 10 datasets per truth, each on the same random stream as the corresponding original-truth dataset (paired; the original fits are those of \S\ref{sec:misspec}); multistart maximum likelihood as in \S\ref{sec:misspec}, and NUTS on dataset 0 (flat priors; the tied model has no NUTS run, since the model configuration cannot tie two rows).
+
+\begin{center}\footnotesize\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}llllllll@{}}\toprule
+ & & \multicolumn{2}{c}{weakest direction (1/$\lambda_{\min}$)} & \multicolumn{2}{c}{all 12: mean $|$MLE $-$ truth$|$} & far-branch \\
+dataset & model & T1--T5 & P1--P4 & T1--T5 & P1--P4 & \BA{} fits \\\midrule
+original & standard & 96--332 & 366--3000 & 0.027--0.041 & 0.054--0.117 & 6 / 90 \\
+D0 (no death) & standard & 74--232 & 2300--5100 & 0.013--0.020 & 0.049--0.074 & 1 / 90 \\
+ & death fixed 0 & 57--172 & 1050--5100 & 0.008--0.018 & 0.046--0.082 & 1 / 90 \\
+S0 (no switching) & standard & 20--66 & 300--8200 & 0.006--0.015 & 0.078--0.109 & 0 / 90 \\
+ & switching fixed 0 & 20--36 & 107--6500 & 0.005--0.013 & 0.025--0.082 & 0 / 90 \\
+M (mirror roles) & standard & 213--7500 & 450--57000 & 0.070--0.129 & 0.081--0.128 & 7 / 70 \\
+ & B tied to A & 138--5500 & 250--1800 & 0.039--0.044 & 0.038--0.099 & 4 / 70 \\\bottomrule
+\end{tabular}
+
+Weakest direction: clones per endpoint at which the data weigh as much as the flat prior along it (Fisher). MLE: 10 datasets per truth, 512 clones per endpoint. Far branch: fits with $|$\BA{} error$|$ $>$ 0.2. M has seven truths (original row: the same seven). Tables \res{docs/death_free/tables/fisher_summary_*.csv}, \res{docs/death_free/tables/mle_summary_*.csv}.
+\end{center}
+
+\subsection{No death (D0)}
+\fig{fisher_D0}{1.0}{D0: information on every direction (a), \BA{} precision (b) and clones per endpoint needed to halve the prior variance along the five parent swaps, the five average-cell changes and some B-row contrasts (c), for the original truth (grey), the death-free truth fitted with the standard model (blue) and with death fixed at 0 (orange). ---: direction absent from the constrained model.}
+\fig{sim_D0}{1.0}{D0 in simulation: \BA{} RMSE, error over all 12 probabilities and share of far-branch fits (maximum likelihood, 10 datasets), and the posterior-mean errors (NUTS, dataset 0), for the original truths, the death-free truths with the standard model, and with death fixed at 0. $\ast$: 90\% interval of \BA{} misses the truth.}
+\begin{itemize}
+\item \textbf{Inference finds death = 0 by itself}: with the standard model the fitted deaths average 0.000--0.017 (A) and 0.000--0.009 (B), exactly 0 in 20--80\% of the datasets; the NUTS posterior means are 0.004--0.04 (except T2, below).
+\item \textbf{The death ridge disappears.} For T1 the weakest direction was ``B switches back vs B dies/divides''; without death it is ``B switches back vs mixed division / persistence'' and is 2.4$\times$ better determined with death fixed (139 $\to$ 57 clones per endpoint). ``B switches back vs B dies'' for T2 needs 29 instead of 203 clones per endpoint. In simulation the \BA{} error for T1--T4 falls from 0.27 / 0.09 / 0.10 / 0.07 to 0.05 / 0.07 / 0.04 / 0.05 (death estimated) and 0.03 / 0.05 / 0.03 / 0.03 (death fixed); T1's 20\% far-branch fits vanish. Over all 12 probabilities the error halves (T: 0.027--0.041 $\to$ 0.013--0.020).
+\item \textbf{The prior draws gain less, and some swaps get harder.} P1--P4 had large deaths (P2: A dies with 0.29); removing them raises the growth rate most (P2 1.46 $\to$ 1.77), and information on the parent swaps decays like $\rho^{-h}$ (\S\ref{sec:weakdirs}): P2's ``which parent makes mixed divisions'' needs 1177 instead of 109 clones per endpoint. Yet in simulation every truth improves over all 12 probabilities (P: 0.054--0.117 $\to$ 0.049--0.074) and P2's \BA{} error halves (0.14 $\to$ 0.07): its original error came from the global ``which type dies'' ridge, which local information does not see.
+\item \textbf{NUTS} (dataset 0) agrees except for T2 with death estimated, whose chains stayed on the death branch of the ridge ($\hat R$ 1.38, B death 0.19): fixing death at 0 removes the problem. With death estimated the 90\% intervals over all 12 cover less (33--83\%) partly because a truth exactly at 0 cannot lie inside a central interval.
+\end{itemize}
+
+\subsection{No switching (S0)}
+\fig{fisher_S0}{1.0}{S0, as Figure~\ref{fig:fisher_D0}: original truth (grey), switch-free truth with the standard model (blue) and with switching fixed at 0 (orange). \BA{} is fixed (sd 0) in the constrained model.}
+\fig{sim_S0}{1.0}{S0 in simulation, as Figure~\ref{fig:sim_D0}. \BA{} = 0 in truth: its 90\% interval excludes 0 whenever the posterior's 5\% quantile is above 0, hence the stars.}
+\begin{itemize}
+\item \textbf{The standard model finds switching = 0}: \BA{} RMSE 0.0002--0.008 for T1--T5, 0.03--0.08 for P1--P4.
+\item \textbf{Where B never divides, everything becomes easy}: B is terminal (dies or persists), the weakest direction needs 20--54 clones per endpoint (instead of 139--332 for T1, T2, T4) and the error over all 12 falls to 0.006--0.015.
+\item \textbf{Where B divides, the ``which parent'' swaps get harder} without the switches that distinguished the types' fates: P1's weakest direction 1.8k $\to$ 8.2k clones per endpoint, \BA{} sd 0.11 $\to$ 0.24, and with the standard model the error over all 12 is no better than for the original truths (P: 0.078--0.109 vs 0.054--0.117). Fixing switching at 0 helps those truths most (P2: 0.078 $\to$ 0.025).
+\end{itemize}
+
+\subsection{Mirror roles (M)}
+\fig{fisher_M}{1.0}{M, as Figure~\ref{fig:fisher_D0}: original truth (grey), mirror truth with the standard model (blue) and with B's row tied to the mirror of A's (orange, 5 directions; the swaps of mixed divisions, death and divisions do not exist in it).}
+\fig{sim_M}{1.0}{M in simulation, as Figure~\ref{fig:sim_D0}; the tied model has maximum likelihood only (no NUTS run).}
+\begin{itemize}
+\item \textbf{Two types with the same rules are the hardest case for the standard model.} The swaps move outcome mass between the parents with the population average fixed; when the two parents behave alike nothing in the counts tells them apart. Mirrored T4 and P1 need 7.5k and 57k clones per endpoint along their weakest direction, and 70\% of P1's \BA{} fits land on the far branch. The error over all 12 probabilities is \emph{larger} than for the original truths (0.070--0.129 vs 0.027--0.117).
+\item \textbf{Building the symmetry in removes most of it}: with B tied to A the swaps of mixed divisions, death and divisions vanish; the error over all 12 roughly halves (T: 0.039--0.044, P: 0.038--0.099) and far-branch fits drop from 7 to 4 of 70. The swaps that remain (switch vs persist, AA vs BB divisions) are the weakest directions of the tied model.
+\item The posterior means (NUTS, standard model) are close for most truths (\BA{} error 0.00--0.09, all 90\% intervals cover), but two of seven runs mixed poorly ($\hat R$ 1.5--1.7).
+\end{itemize}
+
+\textbf{What this means.} The difficult directions of \S\ref{sec:weakdirs} are not a fixed property of the method: they are the parent swaps, whose size depends on how differently A and B behave and on how fast clones grow. Biology that separates the types (B terminal, no death) makes them small; biology that makes the types alike (mirror roles) makes them huge. Structural knowledge that can be built into the model --- cells do not die, cells do not switch, both types follow the same rules --- removes the corresponding directions and is worth as much as several-fold more clones.
+
+% ====================================================================== conclusions
+\section{Conclusions}\label{sec:conclusions}
+\begin{enumerate}
+\item The exact GW likelihood is fast enough to map convergence systematically (108 posteriors, 0.3--4\,h each with the old kernel, 4--5$\times$ less with the adjoint kernel), and its sampler is reliable except on bimodal B-row posteriors.
+\item With all transitions free, 1024 clones per endpoint on generations 4--10 are \emph{not} enough for B's row when \BA{} is large: the posterior is biased toward ``B is lost'' by 1--2 sd and prior-sensitive. A's row and the growth/composition summaries converge from 256--512 clones per endpoint.
+\item The answer depends on the truth: large clones (T5) and truths near the prior's bulk converge fast; the reference biology (B switches back, never divides) converges slowest.
+\item The limiting factor is information along two directions --- switch back vs loss of B, and which parent made a mixed division --- combined, for the first, with the flat prior's volume. More NUTS budget cannot change it (Monte Carlo error $\approx$\,0.05 sd).
+\item \textbf{Follow-ups} (\S\ref{sec:fu}): B's switch back reaches an absolute error below 0.05 at 2048--4096 clones per endpoint for T1, T3, T4 (T2 not by 4096) and at 512--2048 for the prior draws, whose slow parameters are instead B's death, persistence and mixed divisions (not converged by 4096 for P1, P3, P4), but where B never divides the posterior stays 1--2 sd low at every $n$. A flat prior on \BA{} removes most of that bias for large \BA{} and adds some for small \BA: at small $n$ the prior decides. Some B-row posteriors have two branches whose weights NUTS cannot be trusted to get right (T1: 17\% on ``B divides'' by SMC evidence); report branch masses, not just converged-looking chains. No ``uninformative'' prior is neutral about \BA{} at these $n$: under Dirichlet(\textonehalf) and the exact Jeffreys prior the bias remains (\S\ref{sec:fu-jeffreys}), so report prior-free quantities or a range over priors.
+\item \textbf{The next experiment should observe early and found some clones with B cells} (\S\ref{sec:design}): the robust optimal protocol ($\tfrac38$ A at generation 2, $\tfrac14$ B at 1, $\tfrac14$ B at 2, $\tfrac18$ A at 10) needs 51--440 detected clones for a \BA{} sd of 0.05, against 700--21\,700 for generations 4--10 with A founders, provided early clones can be scored at a known number of divisions and typing errors are controlled.
+\item \textbf{Whether B gives rise to A at all} is testable from endpoint counts with very small effects (\S\ref{sec:dediff}), but the test is dominated by cell-typing errors: the KRT20$\to$LGR5 mis-scoring rate must be measured and modelled, or the question settled directly with organoids founded by KRT20$^+$ cells.
+\item \textbf{The weak directions depend on the biology} (\S\ref{sec:structured}): they are the parent swaps, small when A and B behave differently (no death, or B terminal without switching: \BA{} and all 12 probabilities recovered 2--4$\times$ better) and huge when the two types follow the same rules (mirror roles). Known structure built into the model (no death, no switching, shared rules) removes the corresponding directions.
+\end{enumerate}
+
+\subsection{Follow-ups}\label{sec:followups}
+\textbf{Done} (\S\ref{sec:fu}): $n$ = 2048--4096 for T1--T4; all 108 cells with a flat prior on \BA; 8-chain reruns of the bimodal cells; sampler vs dataset noise; profile-likelihood intervals for all 132 runs; warm start and ESS/$\hat R$ stopping; reparametrisation and SMC start; all 108 cells under Dirichlet(\textonehalf) and the exact Jeffreys prior. \textbf{Open}:
+\begin{itemize}
+\item A branch-weighted posterior in the pipeline: per-branch SMC evidence for the branch masses, chains seeded in both branches, combined by mass; rerun the bimodal cells (T1 at 256 and 1024, P2 at 1024) with it.
+\item A model-comparison step (``does B divide?'') in the default analysis: it removes the boundary bias of T1, T2, T4 where it applies (\S\ref{sec:why}).
+\item A prior for B's other outcomes that keeps \BA{} flat without unbounded densities (e.g.\ concentration 1 for every B outcome except a flat \BA), and a rerun of the flat-\BA{} cells with it: the 0.2 concentrations made B's small entries unsampleable.
+\item The one unresolved Jeffreys cell (T1, $n$ = 128, dataset 1): an exact sampler for $p_J$ times the likelihood that converges.
+\item Prior sensitivity by NUTS where reweighting is unreliable (203 (run, prior) pairs; at least the wrong prior at $n \ge 512$).
+\item Models for organoid heterogeneity (random effects per clone), asynchronous divisions (continuous time) and density dependence: these misspecifications are detectable and damaging (\S\ref{sec:misspec}) but cannot be corrected yet.
+\item Dedifferentiation test (\S\ref{sec:dediff}): typing errors that depend on clone size; sizing the B-founder design.
+\end{itemize}
+
+% ====================================================================== appendix
+\appendix
+\section{Reproducibility}\label{sec:repro}
+\begin{itemize}
+\item \textbf{Code}: branch \code{worktree-exact-gw-data-size} (XG2 preset, analysis, MLE, report), merged \code{gw-speedup} (adjoint kernel; via \code{sgd-mle} and the PSO branch) and \code{xg2-mle-vs-posterior} (identifiability analysis).
+\item \textbf{XG2}: \code{bio-sbi -m +experiment=exact_gw_data_size} (preset \code{src/bio_sbi/conf/experiment/exact_gw_data_size.yaml}; T5 added on the command line as \code{+truths.T5_C7={...}}); launchers \code{scripts/run_xg2.sh}, \code{scripts/run_xg2_adjoint.sh}; analysis \code{uv run python scripts/analyse_exact_gw_data_size.py results/exact_gw/data_size}; MLE \code{uv run python scripts/exact_gw_mle.py results/exact_gw/data_size --workers 16}.
+\item \textbf{This report}: \code{uv run python report_exact_gw/make_figures.py --results <repo>/results} and \code{report_exact_gw/make_followups.py --results <repo>/results}, then \code{tectonic report.tex} inside \code{report_exact_gw/}.
+\item \textbf{Follow-ups}: scheduler \code{scripts/run_exact_gw_cells.sh} with job lists in \code{scripts/jobs/}; results in \res{results/exact_gw/data_size_flat_btoa/}, \res{data_size_reruns/}, \res{reparam_bench/}; sampler options on branches \code{exact-gw-warmstart-ess-stop} (merged) and \code{reparam-exact-gw} (not merged).
+\item \textbf{Dirichlet(\textonehalf) / Jeffreys}: branch \code{jeffreys-prior} (merged); job list \code{scripts/jobs/xg2_jeffreys.txt} with \code{prior=jeffreys} and \code{WARM_ROOT}; prior sampling, reweighting, reruns and analysis in \code{scripts/jeffreys/} (see \res{docs/jeffreys/README.md}); results \res{results/exact_gw/data_size_jeffreys/}.
+\item \textbf{Layout}: \res{results/exact_gw/data_size/<truth>/n<n>_s<dataset>/} (one folder per run; \res{runs_index.csv} lists kernel and original sweep folder); sweep logs in \res{_sweeps/}.
+\end{itemize}
+
+\section{Glossary}\label{sec:glossary}
+\begin{description}[style=nextline,leftmargin=1.3em]
+\item[Contraction] $1 - \mathrm{var}_{\rm post}/\mathrm{var}_{\rm prior}$ per parameter; 1 = fully determined, 0 = prior-like, $<0$ = wider than the prior marginal.
+\item[ESS, $\hat R$] effective sample size and rank-normalised split R-hat of the MCMC draws.
+\item[MLE] maximum-likelihood estimate (likelihood only, no prior).
+\item[Nat] unit of a log likelihood with natural logarithms. Only differences matter (the log likelihoods themselves are around $-10^4$ here): two fits $\Delta$ nats apart differ by a likelihood ratio $e^{\Delta}$, i.e.\ the data are $e^{\Delta}$ times more probable under the better one. 0.1 nat $\approx$ 1.1$\times$ (negligible), 1 nat $\approx$ 2.7$\times$, 1.35 nats $\approx$ 3.9$\times$ (90\% profile interval), 1.92 nats $\approx$ 6.8$\times$ (95\% profile interval), 5 nats $\approx$ 150$\times$.
+\item[Profile likelihood] for one parameter: the likelihood maximised over all others at each fixed value; its 95\% interval drops 1.92 nats from the maximum.
+\item[PSIS] Pareto-smoothed importance sampling; reweights posterior draws to another prior; reliable if Pareto $k \le 0.7$.
+\item[Nested datasets] at fixed truth and dataset seed, the first $n$ clones of each endpoint are the same for every $n$.
+\end{description}
+
+\end{document}

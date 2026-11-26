@@ -2,8 +2,9 @@
 # exact law of the raw endpoint counts (2-D FFT of the iterated pgf), same theta
 # coordinates and prior as NPE. No training: budget.simulations / max_epochs are unused.
 # Supports simulator=galton_watson(_hours), two types (two_type, reversible_ab, any fixed
-# entries), fixed founder rows, homogeneous law, two labels (any capture / 2x2 confusion),
-# selection detected or all; anything else raises ValueError.
+# entries), fixed founder rows or free ones (opt-in, e.g. '~law.fixed.founder' infers founder.A,
+# 'law.founder_sizes=[1,2]' also the doublet fraction; reparam none only), homogeneous law, two
+# labels (any capture / 2x2 confusion), selection detected or all; anything else raises ValueError.
 #   bio-sbi inference=exact_gw law=reversible_ab design=real_like
 name: exact_gw
 # SBC cases for this method (one full MCMC run each, ~1-5 min): overrides
@@ -24,12 +25,140 @@ method:
   log_every: 50                # chain progress in the log every N iterations (0 = silent)
   floor: 1.0e-15               # probability floor of the likelihood
   min_detection: 1.0e-6        # floor of P(detected) in the conditioning (see gw_exact.log_likelihood)
+  kernel: loop                 # loop (forward-mode gradient) | adjoint (reverse mode, same values,
+                               #   gradients equal up to round-off; ~3.5-5x faster; draws differ at round-off)
+  # ---- warm start (opt-in): initialise from a previous exact_gw posterior of the same model
+  # on a dataset this one extends (e.g. nested n -> 2n). Path = previous run directory
+  # (posterior.pt, else posterior_samples.csv.gz + metrics.json) or one of those files.
+  # Chains start at well-separated previous draws (k-means in whitened logit space: separate
+  # modes get their own chains); initial inverse mass matrix = previous within-chain
+  # covariance x n_prev / n (sd ~ n^-1/2); previous median step size; short warmup with one
+  # mass-matrix window shrunk towards that covariance. No L-BFGS initialisation. SBC cases
+  # are never warm-started. Diagnostics in metrics.json exact_gw.warm_start.
+  #   inference.method.warm_start=results/.../n128_s0
+  warm_start: null
+  warm_start_options:
+    scale: null                # covariance multiplier; null = n_prev / n (total clones)
+    n_prev: null               # previous total clones; null = from its diagnostics (grids)
+    warmup: 150                # warmup iterations per chain (replaces warmup above)
+    init_buffer: 25            # step size only, then one mass-matrix window up to
+    term_buffer: 50            #   warmup - term_buffer, then step size only
+    mass_prior: 50             # pseudo-draws of the scaled previous covariance in the window
+    select: kmeans             # kmeans (spread over the previous posterior) | chains (one per previous chain)
+    step_size: previous        # previous (median adapted step) | heuristic
+    check_starts: 0            # >0: also run this many L-BFGS starts; warn if an optimum lies
+    check_tolerance: 2.0       #   > tolerance nats above every draw (mode the previous run lacked)
+  # ---- adaptive run length (opt-in): draw `block` iterations per chain at a time (chains in
+  # lockstep) and stop when, on every stick coordinate and free physical probability, the
+  # rank-normalised split R-hat (bulk + folded; also on the log density) <= rhat, bulk ESS
+  # >= ess, tail ESS >= tail_ess and the chain means (rank-normalised) agree within
+  # max_mean_spread posterior sd (chains in different modes) - or at max_draws per chain
+  # (exact_gw.stop.reason = max_draws, with the failed criteria). `draws` is then unused.
+  # Trajectory of the diagnostics in metrics.json exact_gw.stop. Reference fit only.
+  stop:
+    enabled: false
+    ess: 400
+    tail_ess: 200
+    rhat: 1.01
+    max_mean_spread: 0.5
+    block: 50                  # draws per chain between checks
+    min_draws: 100             # per chain, before the first check
+    max_draws: 1000            # per chain
+    confirm: 1                 # consecutive passing checks
+    monitor_logp: true
+  # ---- sampler coordinates (opt-in; gw_reparam.py). Exact reparametrisations: same prior and
+  # posterior, draws returned in theta. none = u = logit(theta) (default, original code path) |
+  # probit (stick = Phi(v): Gaussian tails at the simplex boundary) | brow (B's row broken as
+  # to_A, persist, death, div_AA, div_AB, div_BB: one stick for "B switches back", the rest
+  # "B is lost" split hierarchically) | brow+probit. stick_order: {row: [entries]} overrides.
+  reparam: none
+  stick_order: {}
+  # ---- tempered SMC from the prior (opt-in; reference fit only, not with warm_start).
+  # Likelihood-only evaluations (~1/3 of a gradient evaluation). mode=start: the beta = 1
+  # population (all branches, with their mass) replaces the L-BFGS initialisation; NUTS chains
+  # start at population members (select: resample = in proportion to mass | kmeans = spread),
+  # population covariance as initial / prior inverse mass, short warmup. mode=final: the SMC
+  # chains (adaptive RW + independence MH, nested R-hat / ESS stopping rule) are the draws.
+  # Population and evidence in metrics.json exact_gw.smc; population in posterior.pt.
+  smc:
+    enabled: false
+    mode: start                # start | final
+    chains: 64                 # MH chains; population = chains x steps
+    steps: 8
+    ess_fraction: 0.5          # next temperature keeps this Kish ESS fraction of the population
+    rw_acceptance: 0.3
+    imh_prob: 0.5              # independence (t mixture fitted to the population) proposals
+    imh_components: 2          # BIC-selected mixture components (separate branches)
+    df: 5
+    de_prob: 0.0
+    rw_scale_sd: 0.0
+    max_evals: 60000           # likelihood evaluations incl. the final stage
+    final_steps: 16            # mode=start: MH steps at beta = 1 before the hand-over
+    select: resample           # mode=start: chain starts
+    warmup: 200                # mode=start: NUTS warmup per chain (replaces warmup)
+    init_buffer: 25
+    term_buffer: 50
+    mass_prior: 50             # pseudo-draws of the population covariance in the mass window
+    target_ess: 400            # mode=final: stopping rule (bulk ESS, nested R-hat, tail ESS)
+    max_rhat: 1.01
+    tail_fraction: 0.5
+    superchains: 4
+    min_final_steps: 16
+    max_final_steps: 3000
+    final_burn: 0.25
+    check_every: 8
+    local_k: 0
+    keep_population: true
   grid:                        # FFT grid per horizon, from the dataset's largest counts
     factor: 1.25               # L = next_fast_len(max(min_size, factor * max_count + margin))
     margin: 16
     min_size: 32
     damping: 1.0e+4            # evaluation radius: round-off amplification <= damping; aliasing <~3e-3
     max_points: 4.0e+6         # Lx * Ly cap per horizon (memory) for the reference data
+  optimise:                    # point estimate (gw_optimise.py) -> optimisation.json, never draws;
+    enabled: false             #   true: also run after NUTS (or scripts/exact_gw_optimise.py alone)
+    objective: mle             # mle | map (Dirichlet log prior on the normalised free probabilities)
+    method: pso                # pso (+ L-BFGS-B refinement of refine_top) | multistart (L-BFGS-B) | sgd
+    boundary_eps: 0.0          # stick box [eps, 1-eps]; map with any alpha < 1 needs eps > 0
+    init: prior                # prior | uniform starting particles / starts
+    restarts: 2                # independent swarms (seeded from seed)
+    swarm: 24
+    max_iter: 100
+    max_evals: null            # per swarm (objective-only evaluations); null = swarm*(max_iter+1)
+    inertia: 0.7298            # constriction coefficients (Clerc-Kennedy)
+    inertia_end: null          # linear inertia schedule (null = constant)
+    cognitive: 1.49618
+    social: 1.49618
+    velocity_max: 0.25         # fraction of the box width per coordinate
+    boundary: reflect          # reflect (mirror + reverse velocity) | clamp (absorbing)
+    patience: 20               # stop if the best improved < tol nats over patience iterations
+    tol: 1.0e-4
+    xtol: 1.0e-6               # ... or the swarm collapsed
+    refine_top: 4              # distinct PSO candidates refined (0 = PSO alone)
+    refine_maxiter: 500
+    starts: 8                  # method=multistart / sgd (same prior draws for both)
+    dedup_tol: 1.0e-2          # max |dp| below which candidates are duplicates
+    sgd_optimizer: adam        # method=sgd: adam | momentum (heavy ball); gradient / total clones
+    sgd_coords: box            # box (projected, sticks; reaches boundary faces) | logit (clipped)
+    sgd_lr: 0.02               # step size in sgd_coords
+    sgd_schedule: cosine       # constant | cosine | exp (to sgd_lr * sgd_lr_final)
+    sgd_lr_final: 0.01
+    sgd_momentum: 0.9          # momentum / Adam beta1
+    sgd_beta2: 0.999
+    sgd_iter: 500              # steps per start
+    sgd_max_evals: null        # gradient evaluations per start (null = sgd_iter)
+    sgd_batch: null            # null = full batch; fraction of clones per horizon (minibatch)
+    sgd_eval_every: 10         # minibatch: full objective-only check every N steps
+    sgd_patience: 100          # stop if the best improved < sgd_tol nats over this many steps
+    sgd_tol: 1.0e-3
+    sgd_logit_bound: 15.0      # sgd_coords=logit: |logit(theta)| <= bound
+    sgd_polish: true           # L-BFGS-B on the refine_top best distinct SGD endpoints
+    workers: null              # threads for evaluations (null = threads)
+    log_every: 10
+    validate: true             # larger grids, floors, eps, constraints (validation section)
+    near_tol: 1.0e-6
+    validation_grids: [2, 4]
+    validation_max_points: 4.0e+6
   sbc:                         # MCMC settings of each SBC case (cheaper than the reference fit;
     chains: 2                  #   threads // chains cases run at a time)
     warmup: 100

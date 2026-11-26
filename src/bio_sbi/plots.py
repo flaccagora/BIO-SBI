@@ -27,19 +27,29 @@ def posterior_marginals(
     truth: np.ndarray | None,
     names: Sequence[str],
     path: str | Path,
+    markers: dict[str, np.ndarray] | None = None,
 ) -> None:
-    """Histogram of each posterior marginal over the prior, with the true value."""
+    """Histogram of each posterior marginal over the prior, with the true value.
+
+    ``markers`` optionally adds point estimates as dashed lines, ``{label: values}`` with
+    one value per name (e.g. ``{"MLE": theta_hat}``); they are not posterior summaries.
+    """
+    markers = markers or {}
+    styles = [("C1", "--"), ("C2", ":"), ("C4", "-.")]
     fig, axes = _grid(len(names))
     for i, (ax, name) in enumerate(zip(axes, names, strict=False)):
+        extra = [float(v[i]) for v in markers.values() if np.isfinite(v[i])]
         bins = np.linspace(
-            min(prior_samples[:, i].min(), samples[:, i].min()),
-            max(prior_samples[:, i].max(), samples[:, i].max()),
+            min(prior_samples[:, i].min(), samples[:, i].min(), *extra),
+            max(prior_samples[:, i].max(), samples[:, i].max(), *extra),
             40,
         )
         ax.hist(prior_samples[:, i], bins=bins, density=True, color="0.8", label="prior")
         ax.hist(samples[:, i], bins=bins, density=True, alpha=0.75, color="C0", label="posterior")
         if truth is not None:
             ax.axvline(truth[i], color="C3", lw=1.5, label="truth")
+        for (label, values), (color, ls) in zip(markers.items(), styles, strict=False):
+            ax.axvline(values[i], color=color, lw=1.5, ls=ls, label=label)
         ax.set_title(name, fontsize=9)
         ax.set_yticks([])
     axes[0].legend(fontsize=7, frameon=False)
