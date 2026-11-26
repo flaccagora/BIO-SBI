@@ -48,7 +48,7 @@
   left=5pt,right=5pt,top=3pt,bottom=3pt,fontupper=\small}
 \newtcolorbox{caveat}{colback=pendbg,colframe=corange,boxrule=0.6pt,arc=2pt,
   left=5pt,right=5pt,top=3pt,bottom=3pt,fontupper=\small}
-\graphicspath{{figures/}{../docs/dediff_test/figures/}{../docs/jeffreys/figures/}{../docs/weak_directions/figures/}{../docs/optimal_design/figures/}{../docs/spike_slab/figures/}{../docs/profile_intervals/figures/}{../docs/misspecification/figures/}{../docs/free_founder/figures/}{../docs/convergence/figures/}{../docs/founder_distribution/figures/}}
+\graphicspath{{figures/}{../docs/dediff_test/figures/}{../docs/jeffreys/figures/}{../docs/weak_directions/figures/}{../docs/optimal_design/figures/}{../docs/spike_slab/figures/}{../docs/profile_intervals/figures/}{../docs/misspecification/figures/}{../docs/free_founder/figures/}{../docs/convergence/figures/}{../docs/founder_distribution/figures/}{../docs/death_free/figures/}}
 \makeatletter\newcommand{\tabin}[1]{\@@input #1 }\makeatother  % expandable \input for table rows
 \newcommand{\fig}[3]{\begin{figure}[H]\centering\includegraphics[width=#2\linewidth]{#1}\caption{#3}\label{fig:#1}\end{figure}}
 \hypersetup{pdftitle={BIO-SBI: exact likelihood for Galton-Watson and the XG2 experiment},pdfauthor={BIO-SBI}}
@@ -1049,6 +1049,68 @@ $^*$ the 90\% posterior interval of \BA{} misses the truth; --- = not run. Table
 
 \textbf{For the lab.} (i) Seed single cells: every extra founder cell costs more information than not knowing the founder type. (ii) Record the founder type or measure the sort purity when possible (\S\ref{sec:design}); a known share of B-founded clones is an asset, an unknown one a cost. (iii) If founders cannot be recorded, add early time points (generations 1--2): they make the type proportion learnable from the counts. (iv) Several seeding conditions are worth it only instead of one mixed population; a single A-enriched, single-cell condition does as well with the same number of clones. (v) If several cells or unsorted cells must be seeded, measure the seeding (share of A cells in the suspension to $\pm$0.05--0.10, cells per well) and use it as a prior on the founder distribution: with late endpoints it brings the error close to that of known founders. Check the measurement independently --- a wrong one is not revealed by the counts.
 
+% ====================================================================== structured truths
+\section{Structured truths: no death, no switching, mirror roles}\label{sec:structured}
+\begin{keybox}
+\textbf{In short.} Three structured versions of the nine truths test how the weak directions depend on the biology. \textbf{No death (D0)}: inference finds death $\approx$ 0 by itself and the ``B switches back vs B dies'' ridge disappears; for the reference biology (T1--T4) the error over all 12 probabilities halves and the \BA{} error falls from 0.07--0.27 to 0.04--0.07 (MLE), to 0.03--0.05 if death is fixed at 0; no fit lands on the far ridge branch. \textbf{No switching (S0)}: where B never divides (T1, T2, T4) B becomes terminal and everything is easy (weakest direction 20--54 instead of 139--332 clones per endpoint); where B divides, the ``which parent'' swaps get harder (P1: weakest direction 1.8k $\to$ 8.2k). \textbf{Mirror roles (M)}: two types with the same rules (labels swapped) are the hardest case for the standard model (P1: weakest direction 57k clones per endpoint, 70\% of the \BA{} fits on the far branch), because which parent did what is then almost invisible; building the symmetry into the model (B tied to A) halves the error over all 12. Growth rate and stable composition stay easy in every case. \textbf{The weak directions are the parent swaps; any structure that makes A and B behave differently, or that is known and built into the model, removes them.}
+\end{keybox}
+Code \code{scripts/death\_free/}; results \res{results/exact_gw/death_free/}; tables \res{docs/death_free/tables/}. Local machine only.
+
+\subsection{Setting}
+Each structured dataset is built from the nine XG2 truths:
+\begin{itemize}
+\item \textbf{D0, no death}: $A_\dagger = B_\dagger = 0$, the other outcomes of each row rescaled proportionally. No clone goes extinct, so every clone is detected; growth rises (generation-10 mean clone size 1.6--7$\times$, at most $\approx$420 cells) while the stable composition is unchanged.
+\item \textbf{S0, no switching}: $A\to B = B\to A = 0$, rows rescaled. B gives rise to A only by dividing; for T1, T2, T4 (B never divides) B becomes terminal (dies or persists).
+\item \textbf{M, mirror roles}: B follows A's rules with the labels swapped ($B_\dagger = A_\dagger$, $B\to B = A\to A$, $B\to A = A\to B$, $B\to AA = A\to BB$, $B\to AB = A\to AB$, $B\to BB = A\to AA$); stable composition 50/50. T1--T3 share A's row, so their mirrors coincide (T1 stands for all three): seven truths.
+\end{itemize}
+Note that \BA{} itself changes: it is 0 in S0 and equals A's switch probability (0.05--0.10) in M, so the error over all 12 probabilities is the fairer comparison across datasets. Each dataset is fitted with the standard model (12 probabilities, flat prior) and with the true structure built in: death fixed at 0 (D0), switching fixed at 0 (S0), or B's row tied to the mirror of A's (M, 5 free probabilities). Information: Fisher, prior-whitened, A-founded clones at generations 4/6/8/10 (\S\ref{sec:weakdirs}); for a constrained model, on its own directions. Simulation: the misspecification study's simulator, 512 detected clones per endpoint, 10 datasets per truth, each on the same random stream as the corresponding original-truth dataset (paired; the original fits are those of \S\ref{sec:misspec}); multistart maximum likelihood as in \S\ref{sec:misspec}, and NUTS on dataset 0 (flat priors; the tied model has no NUTS run, since the model configuration cannot tie two rows).
+
+\begin{center}\footnotesize\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}llllllll@{}}\toprule
+ & & \multicolumn{2}{c}{weakest direction (1/$\lambda_{\min}$)} & \multicolumn{2}{c}{all 12: mean $|$MLE $-$ truth$|$} & far-branch \\
+dataset & model & T1--T5 & P1--P4 & T1--T5 & P1--P4 & \BA{} fits \\\midrule
+original & standard & 96--332 & 366--3000 & 0.027--0.041 & 0.054--0.117 & 6 / 90 \\
+D0 (no death) & standard & 74--232 & 2300--5100 & 0.013--0.020 & 0.049--0.074 & 1 / 90 \\
+ & death fixed 0 & 57--172 & 1050--5100 & 0.008--0.018 & 0.046--0.082 & 1 / 90 \\
+S0 (no switching) & standard & 20--66 & 300--8200 & 0.006--0.015 & 0.078--0.109 & 0 / 90 \\
+ & switching fixed 0 & 20--36 & 107--6500 & 0.005--0.013 & 0.025--0.082 & 0 / 90 \\
+M (mirror roles) & standard & 213--7500 & 450--57000 & 0.070--0.129 & 0.081--0.128 & 7 / 70 \\
+ & B tied to A & 138--5500 & 250--1800 & 0.039--0.044 & 0.038--0.099 & 4 / 70 \\\bottomrule
+\end{tabular}
+
+Weakest direction: clones per endpoint at which the data weigh as much as the flat prior along it (Fisher). MLE: 10 datasets per truth, 512 clones per endpoint. Far branch: fits with $|$\BA{} error$|$ $>$ 0.2. M has seven truths (original row: the same seven). Tables \res{docs/death_free/tables/fisher_summary_*.csv}, \res{docs/death_free/tables/mle_summary_*.csv}.
+\end{center}
+
+\subsection{No death (D0)}
+\fig{fisher_D0}{1.0}{D0: information on every direction (a), \BA{} precision (b) and clones per endpoint needed to halve the prior variance along the five parent swaps, the five average-cell changes and some B-row contrasts (c), for the original truth (grey), the death-free truth fitted with the standard model (blue) and with death fixed at 0 (orange). ---: direction absent from the constrained model.}
+\fig{sim_D0}{1.0}{D0 in simulation: \BA{} RMSE, error over all 12 probabilities and share of far-branch fits (maximum likelihood, 10 datasets), and the posterior-mean errors (NUTS, dataset 0), for the original truths, the death-free truths with the standard model, and with death fixed at 0. $\ast$: 90\% interval of \BA{} misses the truth.}
+\begin{itemize}
+\item \textbf{Inference finds death = 0 by itself}: with the standard model the fitted deaths average 0.000--0.017 (A) and 0.000--0.009 (B), exactly 0 in 20--80\% of the datasets; the NUTS posterior means are 0.004--0.04 (except T2, below).
+\item \textbf{The death ridge disappears.} For T1 the weakest direction was ``B switches back vs B dies/divides''; without death it is ``B switches back vs mixed division / persistence'' and is 2.4$\times$ better determined with death fixed (139 $\to$ 57 clones per endpoint). ``B switches back vs B dies'' for T2 needs 29 instead of 203 clones per endpoint. In simulation the \BA{} error for T1--T4 falls from 0.27 / 0.09 / 0.10 / 0.07 to 0.05 / 0.07 / 0.04 / 0.05 (death estimated) and 0.03 / 0.05 / 0.03 / 0.03 (death fixed); T1's 20\% far-branch fits vanish. Over all 12 probabilities the error halves (T: 0.027--0.041 $\to$ 0.013--0.020).
+\item \textbf{The prior draws gain less, and some swaps get harder.} P1--P4 had large deaths (P2: A dies with 0.29); removing them raises the growth rate most (P2 1.46 $\to$ 1.77), and information on the parent swaps decays like $\rho^{-h}$ (\S\ref{sec:weakdirs}): P2's ``which parent makes mixed divisions'' needs 1177 instead of 109 clones per endpoint. Yet in simulation every truth improves over all 12 probabilities (P: 0.054--0.117 $\to$ 0.049--0.074) and P2's \BA{} error halves (0.14 $\to$ 0.07): its original error came from the global ``which type dies'' ridge, which local information does not see.
+\item \textbf{NUTS} (dataset 0) agrees except for T2 with death estimated, whose chains stayed on the death branch of the ridge ($\hat R$ 1.38, B death 0.19): fixing death at 0 removes the problem. With death estimated the 90\% intervals over all 12 cover less (33--83\%) partly because a truth exactly at 0 cannot lie inside a central interval.
+\end{itemize}
+
+\subsection{No switching (S0)}
+\fig{fisher_S0}{1.0}{S0, as Figure~\ref{fig:fisher_D0}: original truth (grey), switch-free truth with the standard model (blue) and with switching fixed at 0 (orange). \BA{} is fixed (sd 0) in the constrained model.}
+\fig{sim_S0}{1.0}{S0 in simulation, as Figure~\ref{fig:sim_D0}. \BA{} = 0 in truth: its 90\% interval excludes 0 whenever the posterior's 5\% quantile is above 0, hence the stars.}
+\begin{itemize}
+\item \textbf{The standard model finds switching = 0}: \BA{} RMSE 0.0002--0.008 for T1--T5, 0.03--0.08 for P1--P4.
+\item \textbf{Where B never divides, everything becomes easy}: B is terminal (dies or persists), the weakest direction needs 20--54 clones per endpoint (instead of 139--332 for T1, T2, T4) and the error over all 12 falls to 0.006--0.015.
+\item \textbf{Where B divides, the ``which parent'' swaps get harder} without the switches that distinguished the types' fates: P1's weakest direction 1.8k $\to$ 8.2k clones per endpoint, \BA{} sd 0.11 $\to$ 0.24, and with the standard model the error over all 12 is no better than for the original truths (P: 0.078--0.109 vs 0.054--0.117). Fixing switching at 0 helps those truths most (P2: 0.078 $\to$ 0.025).
+\end{itemize}
+
+\subsection{Mirror roles (M)}
+\fig{fisher_M}{1.0}{M, as Figure~\ref{fig:fisher_D0}: original truth (grey), mirror truth with the standard model (blue) and with B's row tied to the mirror of A's (orange, 5 directions; the swaps of mixed divisions, death and divisions do not exist in it).}
+\fig{sim_M}{1.0}{M in simulation, as Figure~\ref{fig:sim_D0}; the tied model has maximum likelihood only (no NUTS run).}
+\begin{itemize}
+\item \textbf{Two types with the same rules are the hardest case for the standard model.} The swaps move outcome mass between the parents with the population average fixed; when the two parents behave alike nothing in the counts tells them apart. Mirrored T4 and P1 need 7.5k and 57k clones per endpoint along their weakest direction, and 70\% of P1's \BA{} fits land on the far branch. The error over all 12 probabilities is \emph{larger} than for the original truths (0.070--0.129 vs 0.027--0.117).
+\item \textbf{Building the symmetry in removes most of it}: with B tied to A the swaps of mixed divisions, death and divisions vanish; the error over all 12 roughly halves (T: 0.039--0.044, P: 0.038--0.099) and far-branch fits drop from 7 to 4 of 70. The swaps that remain (switch vs persist, AA vs BB divisions) are the weakest directions of the tied model.
+\item The posterior means (NUTS, standard model) are close for most truths (\BA{} error 0.00--0.09, all 90\% intervals cover), but two of seven runs mixed poorly ($\hat R$ 1.5--1.7).
+\end{itemize}
+
+\textbf{What this means.} The difficult directions of \S\ref{sec:weakdirs} are not a fixed property of the method: they are the parent swaps, whose size depends on how differently A and B behave and on how fast clones grow. Biology that separates the types (B terminal, no death) makes them small; biology that makes the types alike (mirror roles) makes them huge. Structural knowledge that can be built into the model --- cells do not die, cells do not switch, both types follow the same rules --- removes the corresponding directions and is worth as much as several-fold more clones.
+
 % ====================================================================== conclusions
 \section{Conclusions}\label{sec:conclusions}
 \begin{enumerate}
@@ -1059,6 +1121,7 @@ $^*$ the 90\% posterior interval of \BA{} misses the truth; --- = not run. Table
 \item \textbf{Follow-ups} (\S\ref{sec:fu}): B's switch back reaches an absolute error below 0.05 at 2048--4096 clones per endpoint for T1, T3, T4 (T2 not by 4096) and at 512--2048 for the prior draws, whose slow parameters are instead B's death, persistence and mixed divisions (not converged by 4096 for P1, P3, P4), but where B never divides the posterior stays 1--2 sd low at every $n$. A flat prior on \BA{} removes most of that bias for large \BA{} and adds some for small \BA: at small $n$ the prior decides. Some B-row posteriors have two branches whose weights NUTS cannot be trusted to get right (T1: 17\% on ``B divides'' by SMC evidence); report branch masses, not just converged-looking chains. No ``uninformative'' prior is neutral about \BA{} at these $n$: under Dirichlet(\textonehalf) and the exact Jeffreys prior the bias remains (\S\ref{sec:fu-jeffreys}), so report prior-free quantities or a range over priors.
 \item \textbf{The next experiment should observe early and found some clones with B cells} (\S\ref{sec:design}): the robust optimal protocol ($\tfrac38$ A at generation 2, $\tfrac14$ B at 1, $\tfrac14$ B at 2, $\tfrac18$ A at 10) needs 51--440 detected clones for a \BA{} sd of 0.05, against 700--21\,700 for generations 4--10 with A founders, provided early clones can be scored at a known number of divisions and typing errors are controlled.
 \item \textbf{Whether B gives rise to A at all} is testable from endpoint counts with very small effects (\S\ref{sec:dediff}), but the test is dominated by cell-typing errors: the KRT20$\to$LGR5 mis-scoring rate must be measured and modelled, or the question settled directly with organoids founded by KRT20$^+$ cells.
+\item \textbf{The weak directions depend on the biology} (\S\ref{sec:structured}): they are the parent swaps, small when A and B behave differently (no death, or B terminal without switching: \BA{} and all 12 probabilities recovered 2--4$\times$ better) and huge when the two types follow the same rules (mirror roles). Known structure built into the model (no death, no switching, shared rules) removes the corresponding directions.
 \end{enumerate}
 
 \subsection{Follow-ups}\label{sec:followups}
